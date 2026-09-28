@@ -1,0 +1,533 @@
+{
+ "papers": [
+  {
+   "title": "Image Quality Assessment: From Error Visibility to Structural Similarity",
+   "authors": "Zhou Wang et al. (NYU / UT Austin)",
+   "year": 2004,
+   "venue": "IEEE Transactions on Image Processing 13(4), 2004",
+   "url": "https://doi.org/10.1109/TIP.2003.819861",
+   "citations": 60008,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "它把图像质量评价的关注点从逐像素误差的大小（MSE/PSNR）转到局部结构有没有被保留。此后二十年，图像复原、压缩、渲染和 NVS 论文都把它当作默认的第二指标，几乎所有 NVS 结果表都是 PSNR/SSIM/LPIPS 三列。SSIM 可微，所以 1−SSIM（D-SSIM）也成了常用训练损失，例如 3DGS 用 0.8·L1 + 0.2·D-SSIM。",
+   "contributions_zh": "直觉：人眼对整体亮度偏移不敏感，对纹理和边缘结构被破坏很敏感。SSIM 在每个局部窗口（原文用 11×11、σ=1.5 的高斯窗）分别比较亮度（均值 μ）、对比度（标准差 σ）和结构（协方差 σ_xy），公式为 \\( \\mathrm{SSIM}(x,y)=\\frac{(2\\mu_x\\mu_y+C_1)(2\\sigma_{xy}+C_2)}{(\\mu_x^2+\\mu_y^2+C_1)(\\sigma_x^2+\\sigma_y^2+C_2)} \\)。其中 C1=(0.01L)²、C2=(0.03L)² 用来防止分母接近 0，L 是像素动态范围（8 位图像为 255）。对所有窗口取平均得到 MSSIM。数值例：给整幅图加 +10 的亮度偏移，MSE=100，PSNR 降到约 28.1 dB；SSIM 只有亮度项略降（均值 128 对 138 时约 0.997），对比度项和结构项仍为 1，所以总值约 0.997。反过来，轻微模糊会明显拉低结构项。",
+   "anchor_link_zh": "Ha et al. 的训练损失是 0.8·L1 + 0.2·L_SSIM，和 3DGS 的配比相同。它的时间一致性指标 TCC（式 8）直接定义为“渲染帧差图与真值帧差图之间的 SSIM”。两篇锚点的保真度表都报告 SSIM（Quark 在 RFF 上 0.850，Ha 在 DyNeRF 上 0.936）。如果不理解 SSIM 衡量的是局部结构，就看不懂 TCC 在比什么：它比的是“变化的结构”是否一致，而不是像素值本身。",
+   "concept_ids": [
+    "v-metrics",
+    "f-image",
+    "l-loss"
+   ],
+   "difficulty": "入门",
+   "must_read": true
+  },
+  {
+   "title": "The Unreasonable Effectiveness of Deep Features as a Perceptual Metric",
+   "authors": "Richard Zhang et al. (UC Berkeley / Adobe Research)",
+   "year": 2018,
+   "venue": "CVPR 2018",
+   "url": "https://arxiv.org/abs/1801.03924",
+   "citations": 20037,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "论文证明，预训练 CNN 中间特征之间的距离比 PSNR/SSIM 更贴近人类感知，并用人类判断数据标定出 LPIPS。此后神经渲染和 NVS 基本统一用 PSNR/SSIM/LPIPS 报告结果。LPIPS 本身也被大量用作训练损失（感知损失），主要作用是抑制纯 L1/L2 训练带来的模糊。",
+   "contributions_zh": "作者构建了 BAPPS 数据集：约 161k 个 64×64 图块，共 484k 条人类 2AFC（两选一）判断，失真既包括传统失真，也包括真实算法的输出。度量的计算方式：把两张图送入 AlexNet/VGG/SqueezeNet，取 L 层特征，沿通道做单位归一化得到 \\( \\hat y^l \\)；每个通道乘一个可学习权重 \\( w_l \\) 后求 L2 距离，再对空间位置和各层求平均：\\( d(x,x_0)=\\sum_l \\frac{1}{H_lW_l}\\sum_{h,w}\\| w_l\\odot(\\hat y^l_{hw}-\\hat y^l_{0,hw})\\|_2^2 \\)。骨干网络冻结，w 只做线性标定，即“lin”版本。直觉：对纹理区域做 1 像素平移，PSNR 会大幅下降，但人眼几乎看不出；LPIPS 对这种微小错位相对宽容，对模糊和细节丢失更敏感。",
+   "anchor_link_zh": "Quark 的训练损失就是 10·L1 + LPIPS，其中 LPIPS 负责保住锐利纹理。两篇锚点都报告 LPIPS。一个典型现象：Ha et al. 在 ENeRF-Outdoor 上 PSNR 24.01 输给 ENeRF 的 25.79，LPIPS 却是 0.155，好于对方的 0.167。只有分清 PSNR 偏好均值准确（哪怕模糊）、LPIPS 偏好锐利（哪怕略有错位），才能正确解读这种指标互相矛盾的结果。另外，Quark 在 Shiny 上把分辨率从 1024×768 提到 2048×1536 时，LPIPS 从 0.108 恶化到 0.174，说明 LPIPS 对高分辨率下的细节缺失很敏感。",
+   "concept_ids": [
+    "v-metrics",
+    "l-loss",
+    "l-cnn"
+   ],
+   "difficulty": "入门",
+   "must_read": true
+  },
+  {
+   "title": "FLIP: A Difference Evaluator for Alternating Images",
+   "authors": "Pontus Andersson et al. (NVIDIA / Lund University)",
+   "year": 2020,
+   "venue": "Proc. ACM on Computer Graphics and Interactive Techniques 3(2) (HPG 2020)",
+   "url": "https://doi.org/10.1145/3406183",
+   "citations": 195,
+   "citations_source": "OpenAlex",
+   "theme": "t-generative-ff",
+   "influence_zh": "这是一个面向渲染的误差评估工具。它模拟人在参考图和测试图之间来回切换（flip）时看到的差异，输出逐像素误差图，而不只是一个分数。实时渲染、降噪和路径追踪社区常用它，官方提供 C++/CUDA/Python 实现，后来还扩展出 HDR-FLIP。",
+   "contributions_zh": "FLIP 由两条通路组成。颜色通路：先在对立色空间里用对比敏感度函数（CSF）做空间滤波，滤掉在给定观看距离（像素/度）下人眼看不到的高频，再在感知均匀的颜色空间中计算色差。特征通路：检测边缘和点状特征上的差异，因为这类差异在来回切换时最显眼。两路合成为 [0,1] 范围的误差图。作者后来建议，如果只报告一个数，就取误差图的均值。直觉例子：MSE 相同时，平坦墙面上几个孤立亮点（萤火虫噪声）在 FLIP 图上的误差远高于均匀分布的轻微噪声，这与切换对比时的实际观感一致。",
+   "anchor_link_zh": "两篇锚点都没有使用 FLIP。它与临场场景的关联在于：用户转头时新视角不断替换旧视角，边缘跳变和飞点（Ha et al. Fig. 4 中的 flying pixels）会像 flip 对比一样被放大。把 FLIP 误差图和 Ha 的 SDV（跨视角误差标准差）一起看，可以更细地诊断视角一致性问题。这是一个可能的评测扩展，锚点本身没有做。",
+   "concept_ids": [
+    "v-metrics",
+    "f-image"
+   ],
+   "difficulty": "进阶",
+   "must_read": false
+  },
+  {
+   "title": "Video Quality Assessment by Reduced Reference Spatio-Temporal Entropic Differencing",
+   "authors": "Rajiv Soundararajan & Alan C. Bovik (UT Austin)",
+   "year": 2013,
+   "venue": "IEEE Transactions on Circuits and Systems for Video Technology 23(4), 2013（2012 年在线发表）",
+   "url": "https://doi.org/10.1109/TCSVT.2012.2214933",
+   "citations": 374,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "论文提出 ST-RRED 系列视频质量指标。它是“部分参考”（reduced reference）指标：接收端只需要参考视频的少量统计量，就能评估失真视频的质量，而且同时考虑空间信息和时间信息（帧差）。它是 LIVE 视频质量库上的经典强基线，后来被 NVS 和视频生成论文借来量化时间一致性，也就是 STED（spatio-temporal entropic difference）。",
+   "contributions_zh": "直觉：自然视频的小波系数近似服从 Gaussian Scale Mixture 统计，失真会改变局部系数所携带的信息量（熵）。做法是在各子带的局部块上计算按局部方差加权的条件熵，再求参考与失真之间的平均差异。空间项 SRRED 对单帧计算；时间项 TRRED 对相邻帧的差分图做同样计算；两者相乘得到 STRRED，数值越小越好。“部分参考”的含义是可以只传输每个子带少量的熵值统计，不需要完整参考视频。",
+   "anchor_link_zh": "Ha et al. 的 STED 就是这个指标（§4.3 引用 [59]），也是其时间一致性主表 Table 1 的核心列。在 DyNeRF 上，Ha 为 68.76，ENeRF 为 76.14，IBRNet 为 737.7，GPS-Gaussian 为 693.0。消融中去掉 TSDF 引导后，STED 从 68.8 升到 95.4，而 PSNR 只差 0.01 dB，说明 Ha 的主要贡献几乎只体现在这一个指标上。在 ENeRF-Outdoor 上，Ha 的 STED 为 44.49，反而差于 ENeRF 的 32.31。STED 衡量的是时空信息量的差异，不是基于光流的 warping 误差，所以它对缓慢漂移和高频闪烁的敏感度与 Lai et al. 的指标不同。Quark 没有报告任何时间指标。",
+   "concept_ids": [
+    "v-metrics",
+    "v-temporal"
+   ],
+   "difficulty": "专家",
+   "must_read": false
+  },
+  {
+   "title": "Learning Blind Video Temporal Consistency",
+   "authors": "Wei-Sheng Lai et al. (UC Merced / Adobe Research)",
+   "year": 2018,
+   "venue": "ECCV 2018",
+   "url": "https://arxiv.org/abs/1808.00449",
+   "citations": 507,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "论文把“逐帧处理导致闪烁”抽象成一个与具体任务无关（blind）的后处理问题：同一个循环网络可以稳定风格迁移、上色、增强、本征分解等各种逐帧算法的输出。它提出的光流 warping error 成为衡量视频时间一致性的事实标准指标。它还确立了“短期 + 长期时间损失 + 感知损失”这一训练配方。",
+   "contributions_zh": "输入是原始视频 {I_t} 和逐帧处理的结果 {P_t}。ConvLSTM 网络输出 O_t，要求它在内容上贴近 P_t，在时间上跟随 I_t 的运动。训练时用 FlowNet2 光流把 O_{t−1}（短期）和 O_1（长期）warp 到第 t 帧，并用遮挡掩码 M 只在可见像素上惩罚差异。测试时不需要计算光流，高分辨率视频也能实时运行。评测指标是 \\( E_{warp}(V_t,V_{t+1})=\\frac{1}{\\sum_i M_t^{(i)}}\\sum_i M_t^{(i)}\\|V_t^{(i)}-\\hat V_{t+1}^{(i)}\\|_2^2 \\)：\\( \\hat V_{t+1} \\) 是按光流 warp 回第 t 帧的下一帧，M 是非遮挡掩码，i 是像素索引，最后对整段视频取平均。数值例：静止墙面上某个像素每帧随机亮度 ±5，逐帧 PSNR 几乎看不出问题，warping error 会直接把它记下来。",
+   "anchor_link_zh": "Quark 明确承认逐帧、逐视角重建会闪烁，但没有报告任何时间指标。Ha et al. 只用了 STED、TCC、SDT，没有基于光流的 warping error，这是本调研深读指出的主要评测缺口。这篇论文可以从两方面补上：一是评测，warping error 应当加入远程临场的评测方案；二是“盲”后处理，可以把 Quark 这类没有时间机制的逐帧 NVS 输出当作 P_t 来做时间稳定。它的短期/长期时间损失也是 anchor_compare 建议给 Quark 加的 temporal warping loss 的原型。",
+   "concept_ids": [
+    "v-temporal",
+    "v-metrics",
+    "d-flow",
+    "l-loss"
+   ],
+   "difficulty": "进阶",
+   "must_read": true
+  },
+  {
+   "title": "Exploiting Temporal Consistency for Real-Time Video Depth Estimation",
+   "authors": "Haokui Zhang et al.",
+   "year": 2019,
+   "venue": "ICCV 2019",
+   "url": "https://arxiv.org/abs/1908.03706",
+   "citations": 144,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "这是较早把视频深度估计的时间一致性作为明确目标的工作。它用 ST-CLSTM 融合相邻帧特征，用对抗式时间一致性损失约束输出，还提出了 TCC（temporal change consistency）指标，后来被视频深度和在线 NVS 工作借用。引用量不高，但它是 Ha et al. 时间指标的直接来源。",
+   "contributions_zh": "方法：在任意单帧深度网络后面接一个空间-时间 ConvLSTM（ST-CLSTM），几乎不增加计算量，可以实时运行。训练时除了空间损失，还用一个 GAN 判别器区分预测深度序列和真值序列的时间变化，作为时间一致性损失。TCC 定义为预测序列和真值序列的“相邻帧差图”之间 SSIM 的平均：\\( \\mathrm{TCC}=\\frac{1}{T-1}\\sum_{t=1}^{T-1}\\mathrm{SSIM}(|D^t-D^{t+1}|,|G^t-G^{t+1}|) \\)，D 是预测，G 是真值，T 是帧数，越接近 1 越好。直觉：它不要求每帧都准确，只要求“哪里在变、怎么变”和真值一致。例：真值里只有人手在动，如果预测在静止墙面上也出现帧差，TCC 就会下降。",
+   "anchor_link_zh": "Ha et al. 的式 (8) TCC 就是把这里针对深度的定义改用到彩色渲染帧 ℐ^t 和真值 I^t 上。在其 Table 1 中，DyNeRF 上 Ha 为 0.872，ENeRF 为 0.867；ENeRF-Outdoor 上 Ha 为 0.897，是最高值。理解 TCC 只看帧差结构这一点，就能明白两件事：为什么完整模型和去掉 TSDF 引导的版本（0.869）差距很小；为什么这个指标只在相机固定的动态场景里有意义，因为相机固定时，真值帧差只来自场景本身的运动。",
+   "concept_ids": [
+    "v-temporal",
+    "v-metrics",
+    "d-mono"
+   ],
+   "difficulty": "进阶",
+   "must_read": false
+  },
+  {
+   "title": "Large Scale Multi-view Stereopsis Evaluation",
+   "authors": "Rasmus Jensen et al. (Technical University of Denmark)",
+   "year": 2014,
+   "venue": "CVPR 2014",
+   "url": "https://doi.org/10.1109/CVPR.2014.59",
+   "citations": 1077,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "这就是 DTU 数据集。它提供了带结构光几何真值的大规模 MVS 基准，是 MVSNet 系列学习式 MVS 的标准训练和测试集，也是 pixelNeRF、MVSNeRF、ENeRF 等可泛化 NVS 方法的默认训练集。“在 DTU 上训练，再在其他数据上零样本测试”由此成为可泛化方法的标准协议。",
+   "contributions_zh": "采集方式：工业机械臂搭载结构光扫描仪，每个物体从 49 或 64 个可精确复现的位置拍摄 1600×1200 图像，并在 7 种光照（从定向光到漫射光）下各采一遍。相机内外参经过高精度标定，每张图都有对应的结构光扫描作为几何真值。数据集共 124 个场景，其中 80 个用于本文评测；IJCV 2016 的扩展版 “Large-Scale Data for Multiple-View Stereopsis” 描述了完整数据集。评测用两项点云指标：accuracy（重建点到真值的距离）和 completeness（真值点到重建的距离）。",
+   "anchor_link_zh": "两篇锚点都没有在 DTU 上评测。不过它们共同的最强基线 ENeRF 按 MVSNeRF 的协议在 DTU 上训练，再零样本泛化到其他数据。Quark 迭代式的“匹配 + 可见性”设计，也继承自在 DTU 上发展起来的 plane-sweep MVS 路线。需要注意，DTU 是黑色背景、受控光照下的桌面物体，和临场场景（人、室内、动态）差距很大。两篇锚点都改用了更接近真实场景的训练数据：Quark 用 Spaces/RFF/Shiny/SWORD，Ha 用 ScanNet/Spaces/DyNeRF。",
+   "concept_ids": [
+    "d-mvs",
+    "g-sfm",
+    "d-sensors"
+   ],
+   "difficulty": "入门",
+   "must_read": false
+  },
+  {
+   "title": "Tanks and Temples: Benchmarking Large-Scale Scene Reconstruction",
+   "authors": "Arno Knapitsch et al. (Intel Labs)",
+   "year": 2017,
+   "venue": "ACM Transactions on Graphics 36(4) (SIGGRAPH 2017)",
+   "url": "https://doi.org/10.1145/3072959.3073599",
+   "citations": 1728,
+   "citations_source": "OpenAlex",
+   "theme": "t-generative-ff",
+   "influence_zh": "这是首个在真实户外和室内大场景中、用工业激光扫描仪获取几何真值、并以视频作为输入的重建基准。它的 F-score 协议成为 MVS/SfM 评测的标准。后来 NeRF++、Mip-NeRF 360、3DGS 等工作把其中的场景（如 Truck、Train）用作 NVS 测试场景，所以它也成了新视角合成的常用基准。",
+   "contributions_zh": "场景分为训练集、Intermediate 和 Advanced 三组，输入是高分辨率视频序列，真值来自激光扫描。评测指标：precision P 是重建点中距真值小于阈值 τ 的比例，recall R 是真值点中距重建小于 τ 的比例，二者合成 \\( F=\\frac{2PR}{P+R} \\)，τ 按场景单独设定。数值例：如果重建只覆盖了建筑的一半，但每个点都很准，那么 P≈1、R≈0.5、F≈0.67，即“准但不全”。",
+   "anchor_link_zh": "Quark 的 Table 3 在 3DGS 所用的 T&T 场景上与逐场景优化方法比较：Quark 为 23.60 / 0.852 / 0.138（PSNR/SSIM/LPIPS），高于 3DGS-30K 的 23.14 / 0.841 / 0.183，排名第一，而 Quark 从未在 T&T 上训练。这是 Quark 声称“前馈方法也能胜过逐场景优化”的关键证据之一。Ha et al. 没有使用这个数据集。",
+   "concept_ids": [
+    "d-mvs",
+    "g-sfm",
+    "v-metrics"
+   ],
+   "difficulty": "入门",
+   "must_read": false
+  },
+  {
+   "title": "ScanNet: Richly-annotated 3D Reconstructions of Indoor Scenes",
+   "authors": "Angela Dai et al. (Stanford / Princeton / TUM)",
+   "year": 2017,
+   "venue": "CVPR 2017",
+   "url": "https://arxiv.org/abs/1702.04405",
+   "citations": 5922,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "这是首个百万帧级别的真实室内 RGB-D 视频数据集，带有相机位姿、表面重建和语义标注。室内 3D 理解、深度估计、SLAM、神经表面重建和可泛化 NVS 都把它当作公共基础数据。",
+   "contributions_zh": "作者用 iPad 加 Structure 深度传感器搭建了一套易扩展的采集系统，配合自动稠密重建（BundleFusion）和众包语义标注。数据共 1513 个扫描、2.5M 帧 RGB-D，每帧都有相机位姿和传感器深度。需要注意，传感器深度在物体边缘处常有缺失，在反光和透明表面上会出现空洞，这正是“深度传感器噪声特性”在实际数据中的样子。",
+   "anchor_link_zh": "ScanNet 是 Ha et al. 三个训练数据集之一。Ha 用它的传感器深度（而不是 RAFT-Stereo 估计的深度）训练融合网络，以目标帧为中心在 ±30 帧内取输入帧（排除 ±4 帧）。ScanNet 是静态场景，而且训练时输入视角与目标视角在同一时刻采样，这是 Ha 的网络从未见过视频中的时间变化、也没有时间损失的原因之一。Ha 的 image-based TSDF 融合也延续了 ScanNet 背后的 KinectFusion/BundleFusion 体系（Ha 引用 [13] BundleFusion）。Quark 没有使用 ScanNet。",
+   "concept_ids": [
+    "d-sensors",
+    "d-tsdf",
+    "g-sfm"
+   ],
+   "difficulty": "入门",
+   "must_read": false
+  },
+  {
+   "title": "Neural 3D Video Synthesis from Multi-view Video",
+   "authors": "Tianye Li et al. (Meta Reality Labs Research)",
+   "year": 2022,
+   "venue": "CVPR 2022 (Oral)",
+   "url": "https://arxiv.org/abs/2103.02597",
+   "citations": 379,
+   "citations_source": "OpenAlex",
+   "theme": "t-generative-ff",
+   "influence_zh": "论文做了两件事。一是提出最早一批把 NeRF 扩展到真实多视角视频的方法（DyNeRF）。二是发布了 Neural 3D Video 数据集（简称 N3DV，也叫 DyNeRF 数据集），包含厨房做饭、火焰、倒咖啡等 6 段多视角同步视频。此后几乎所有动态 NVS、4DGS 和流式重建方法（K-Planes、HexPlane、4DGS、3DGStream、4K4D 等）都在这个数据集上报告结果。",
+   "contributions_zh": "采集：用 21 台 GoPro Hero 7 组成同步阵列，2028×2704、30 fps，用 COLMAP 标定，cam00 是中心的保留测试视角。方法：每帧对应一个可学习的紧凑隐码 z_t，与位置和方向一起输入 NeRF MLP；再配合分层训练（先训关键帧，再训全部帧）和射线重要性采样（优先采样随时间变化大的射线）。结果：18 台相机、10 秒、30 fps 的视频可以压缩到 28 MB；如果逐帧训练 NeRF，大约需要 15000 GPU 小时和 1 GB 存储。",
+   "anchor_link_zh": "这是两篇锚点共同使用的动态评测集。Ha et al. 在 3 个 DyNeRF 场景上训练，在 Sear Steak 和 Flame Steak 上测试（9 个测试视角、前 100 帧、1352×1014），PSNR 31.17，ENeRF 为 29.51。但训练和测试场景出自同一厨房和同一相机阵列，存在域内优势。Quark 把它称为 N3DV，评测设置为 1024×768、300 帧中每 10 帧评一次、以 0 号相机为目标，结果为 31.57 / 0.942 / 0.127。Quark 训练时完全没有动态数据，所以这里测的是逐帧泛化能力，不是时间建模能力。了解这个阵列的布局（前向、约 20 台相机）有助于理解为什么两篇锚点都只选最近的 4–8 个视角作为输入。",
+   "concept_ids": [
+    "n-dynamic",
+    "n-nerf",
+    "g-rig"
+   ],
+   "difficulty": "进阶",
+   "must_read": true
+  },
+  {
+   "title": "DL3DV-10K: A Large-Scale Scene Dataset for Deep Learning-based 3D Vision",
+   "authors": "Lu Ling et al. (Purdue University)",
+   "year": 2024,
+   "venue": "CVPR 2024",
+   "url": "https://arxiv.org/abs/2312.16256",
+   "citations": 568,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "它把真实场景级多视角数据的规模从几百个场景提高到一万段 4K 视频，并覆盖反射、透明、光照变化等难例。2024 年以后，前馈 3DGS 和大模型 NVS 大多用它训练和评测。它还提供了 DL3DV-140 这个 NVS 基准。",
+   "contributions_zh": "数据集包含 51.2M 帧、10,510 段 4K 视频，来自 65 类兴趣点地点，有界和无界场景都有，每个场景都标注了反射、透明度、光照等复杂度属性。作者从中抽取 140 个场景组成 DL3DV-140，对 Instant-NGP、Nerfacto、Mip-NeRF 360、Zip-NeRF、3DGS 做统一评测。另外做了一个用它训练可泛化 NeRF 的试点实验，说明数据规模对前馈重建很重要。",
+   "anchor_link_zh": "Quark 的 Table 2 直接在 DL3DV-10K 基准上与逐场景优化方法比较：Quark 为 31.31 / 0.932 / 0.103，高于 Zip-NeRF 的 31.22 / 0.921 / 0.112 和 3DGS 的 29.82 / 0.919 / 0.120。基线数字取自本文，分辨率较低，而且 Quark 没有在 DL3DV 上训练过。Quark 的后续工作（如 iLRM）则在 RE10K 和 DL3DV 上训练和评测。",
+   "concept_ids": [
+    "g-sfm",
+    "n-nerf",
+    "n-3dgs",
+    "v-metrics"
+   ],
+   "difficulty": "入门",
+   "must_read": false
+  },
+  {
+   "title": "Denoising Diffusion Probabilistic Models",
+   "authors": "Jonathan Ho et al. (UC Berkeley)",
+   "year": 2020,
+   "venue": "NeurIPS 2020",
+   "url": "https://arxiv.org/abs/2006.11239",
+   "citations": 35356,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "DDPM 让扩散模型的图像质量首次追上 GAN（无条件 CIFAR-10 上 FID 3.17、IS 9.46），并给出了极简的“预测噪声”训练目标。此后几乎所有图像、视频和 3D 生成模型（LDM/Stable Diffusion、SVD、Zero-1-to-3、CAT3D 等）都建立在这套框架上。",
+   "contributions_zh": "前向过程逐步加高斯噪声：\\( q(x_t|x_{t-1})=\\mathcal N(\\sqrt{1-\\beta_t}\\,x_{t-1},\\beta_t I) \\)，可以一步写成 \\( x_t=\\sqrt{\\bar\\alpha_t}\\,x_0+\\sqrt{1-\\bar\\alpha_t}\\,\\epsilon \\)。其中 β_t 是第 t 步的噪声方差，\\( \\bar\\alpha_t=\\prod_{s\\le t}(1-\\beta_s) \\)，ε~N(0,I)。网络 ε_θ(x_t,t) 学习预测所加的噪声，简化损失为 \\( L=\\mathbb E\\|\\epsilon-\\epsilon_\\theta(x_t,t)\\|^2 \\)。论文证明这个损失等价于加权的变分下界，并与去噪得分匹配和 Langevin 动力学联系起来。设置为 T=1000，β 从 1e-4 线性增加到 0.02。数值例：t=500 时 \\( \\bar\\alpha_t\\approx0.08 \\)，信号系数约 0.28、噪声系数约 0.96，图像已经以噪声为主。采样时要从纯噪声 x_T 反向迭代 1000 步。",
+   "anchor_link_zh": "两篇锚点都没有使用扩散模型。Quark §2.3 把“带学习先验的生成式方法”（引用 Zero-1-to-3、Tseng et al. 2023 等）归为单视图或受限视角的另一类问题，没有与之比较。锚点之后的 2026 年工作开始引入扩散，例如 LiveStre4m 用扩散 Transformer 做时间插值和超分辨率。DDPM 的迭代去噪和 Quark 的迭代 render-and-refine 都是多步细化，但前者从噪声出发，采样出一个“可能”的解；后者从观测出发，逼近唯一的真实解。这是两者在临场应用中可信度不同的根源。",
+   "concept_ids": [
+    "l-diffusion",
+    "f-prob"
+   ],
+   "difficulty": "进阶",
+   "must_read": true
+  },
+  {
+   "title": "Denoising Diffusion Implicit Models",
+   "authors": "Jiaming Song et al. (Stanford University)",
+   "year": 2021,
+   "venue": "ICLR 2021",
+   "url": "https://arxiv.org/abs/2010.02502",
+   "citations": 13571,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "DDIM 不改训练，只改采样：它把 DDPM 的 1000 步马尔可夫链换成可以跳步的非马尔可夫采样，墙钟时间快 10–50 倍。它确立了“训练与采样解耦”的思路，并给出噪声与图像之间的确定性映射。后续的 DPM-Solver、蒸馏和一致性模型等少步采样研究都从这里出发；图像反演编辑和 SDS 类方法也常用它。",
+   "contributions_zh": "在同一个训练目标下，DDIM 构造了一族非马尔可夫前向过程。采样分两步：先估计干净图像 \\( \\hat x_0=(x_t-\\sqrt{1-\\bar\\alpha_t}\\,\\epsilon_\\theta(x_t,t))/\\sqrt{\\bar\\alpha_t} \\)，再得到 \\( x_{t'}=\\sqrt{\\bar\\alpha_{t'}}\\,\\hat x_0+\\sqrt{1-\\bar\\alpha_{t'}}\\,\\epsilon_\\theta(x_t,t) \\)，其中 t'<t，可以一次跨越多步；η=0 时整个过程没有随机项，是确定性的。数值例：用 50 步代替 1000 步，网络调用次数减少 20 倍，FID 只略微变差。",
+   "anchor_link_zh": "锚点没有使用扩散模型，但 DDIM 说明了引入生成式先验时的时间门槛。Quark 在单张 A100 上 1080p 重建加渲染约 33 ms/帧；Ha et al. 用 TensorRT 约 39 ms/帧。即使每次网络调用只要 10 ms，50 步 DDIM 也需要 0.5 s。所以想把扩散补洞加进临场管线，必须用少步或单步采样。例如 Difix 使用单步的 SD-Turbo，也仍需 76 ms。",
+   "concept_ids": [
+    "l-diffusion",
+    "f-prob"
+   ],
+   "difficulty": "进阶",
+   "must_read": false
+  },
+  {
+   "title": "High-Resolution Image Synthesis with Latent Diffusion Models",
+   "authors": "Robin Rombach et al. (LMU Munich / Runway)",
+   "year": 2022,
+   "venue": "CVPR 2022",
+   "url": "https://arxiv.org/abs/2112.10752",
+   "citations": 27566,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "LDM 把扩散过程搬到预训练自编码器的低维潜空间里，训练和推理成本大幅下降，并用 cross-attention 统一接入文本、布局等各种条件。开源的 Stable Diffusion 就基于它。Zero-1-to-3、MVDream、CAT3D、SVD、Difix 等 3D 和视频生成先验几乎都以它为骨干。",
+   "contributions_zh": "方法分两阶段。第一阶段训练一个感知压缩自编码器，下采样因子 f 取 4–8 时细节保留与效率平衡最好，并用感知损失加对抗损失保证重建锐利。第二阶段在潜变量 z=E(x) 上训练 UNet 去噪器：\\( L=\\mathbb E\\|\\epsilon-\\epsilon_\\theta(z_t,t,\\tau_\\theta(y))\\|^2 \\)，τ_θ(y) 是条件 y（如文本）的编码器。条件通过 cross-attention \\( \\mathrm{softmax}(QK^\\top/\\sqrt d)V \\) 注入，Q 来自 UNet 特征，K 和 V 来自条件编码。数值例：Stable Diffusion 把 512×512×3 的图像压成 64×64×4 的潜变量（f=8），每步去噪处理的数值量只有原来的约 1/48。",
+   "anchor_link_zh": "首先要注意命名冲突：Quark 里的 “LDM” 指 Layered Depth Map（分层深度图），和这里的 Latent Diffusion Model 毫无关系。阅读 Quark 和生成式 3D 文献时必须分清。锚点本身不使用扩散。潜扩散进入这条研究线的直接途径是：Quark 团队的后续工作 Tok-D（ICCV 2025，作者包括 Kaza、Luo、Lombardi）用基于潜扩散的 CAT3D 生成合成训练数据。",
+   "concept_ids": [
+    "l-diffusion",
+    "l-attention",
+    "l-cnn"
+   ],
+   "difficulty": "进阶",
+   "must_read": true
+  },
+  {
+   "title": "Adding Conditional Control to Text-to-Image Diffusion Models",
+   "authors": "Lvmin Zhang et al. (Stanford University)",
+   "year": 2023,
+   "venue": "ICCV 2023",
+   "url": "https://arxiv.org/abs/2302.05543",
+   "citations": 7807,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "ControlNet 给出了在不破坏大模型原有能力的前提下，为扩散模型加入空间条件（边缘、深度、分割、人体姿态等）的标准做法，训练数据少于 50k 或多于 1M 时都能稳定训练。它让“几何条件 → 真实感图像”成为通用工具，其条件注入结构也被大量 3D 和视频生成工作沿用。",
+   "contributions_zh": "做法是冻结原 UNet 的编码块，另复制一份可训练副本来接收条件 c，两者通过“零卷积”（权重初始化为 0 的 1×1 卷积）相连：\\( y_c=\\mathcal F(x;\\Theta)+\\mathcal Z(\\mathcal F(x+\\mathcal Z(c;\\Theta_{z1});\\Theta_c);\\Theta_{z2}) \\)。其中 F 是网络块，Θ 是冻结参数，Θ_c 是可训练副本的参数，Z 是零卷积。训练开始时两个 Z 的输出都为 0，模型行为与原模型完全相同；随着训练，条件分支从零逐渐“长出来”，不会一开始就引入有害噪声。例：输入一张深度图和文本“客厅”，生成的图像布局会和深度图一致。",
+   "anchor_link_zh": "锚点没有使用 ControlNet。它与临场的关联在于“深度条件生成”：Ha et al. 每帧都有由 TSDF 光线步进得到的目标视角深度 𝒟^t，Quark 也输出每层的深度。如果要把这些几何信息交给生成模型去填补 disocclusion 空洞，ControlNet 式的深度条件是最直接的接口。这是一个可能的扩展方向，锚点没有做。",
+   "concept_ids": [
+    "l-diffusion",
+    "l-cnn",
+    "g-depth"
+   ],
+   "difficulty": "进阶",
+   "must_read": false
+  },
+  {
+   "title": "Stable Video Diffusion: Scaling Latent Video Diffusion Models to Large Datasets",
+   "authors": "Andreas Blattmann et al. (Stability AI)",
+   "year": 2023,
+   "venue": "arXiv 技术报告 2023",
+   "url": "https://arxiv.org/abs/2311.15127",
+   "citations": 2928,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "报告系统总结了视频潜扩散模型的三阶段训练（文生图预训练 → 大规模视频预训练 → 高质量视频微调）和数据筛选策略。开源权重成了图生视频和相机控制视频生成的通用底座。报告还表明，视频模型本身就是很强的多视角 3D 先验，可以微调成一次前向生成多个视角的模型（后续有 SV3D 等）。",
+   "contributions_zh": "模型在图像 LDM 中插入时间层，让一段视频所有帧的潜变量在同一个去噪过程中联合生成。报告强调数据策展对基础模型质量起决定作用，包括生成字幕、用光流过滤几乎静止的片段、用 OCR 去除带大量文字的片段等。报告还展示了相机运动 LoRA 和多视角微调。关键直觉：时间一致性来自模型内部跨帧的注意力，而不是事后处理。",
+   "anchor_link_zh": "锚点没有使用视频扩散模型。三者的时间一致性机制可以对比着看：Quark 完全没有时间机制；Ha et al. 靠差分掩码、递归滤波和前一帧 TSDF 回灌这类启发式手段；视频扩散则在网络内部联合建模多帧。2026 年的 LiveStre4m 用扩散 Transformer 做时间插值和超分辨率，代表了用生成先验取代启发式时间滤波的方向，代价是多步采样的延迟和生成“幻觉”内容的风险。",
+   "concept_ids": [
+    "l-diffusion",
+    "v-temporal",
+    "l-attention"
+   ],
+   "difficulty": "进阶",
+   "must_read": false
+  },
+  {
+   "title": "DreamFusion: Text-to-3D using 2D Diffusion",
+   "authors": "Ben Poole et al. (Google Research / UC Berkeley)",
+   "year": 2023,
+   "venue": "ICLR 2023",
+   "url": "https://arxiv.org/abs/2209.14988",
+   "citations": 3866,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "论文提出 Score Distillation Sampling（SDS），首次证明不需要任何 3D 训练数据，只用一个冻结的 2D 文生图扩散模型，就能优化出 3D NeRF。它开启了“把 2D 先验提升到 3D”的整条研究线，包括 Magic3D、ProlificDreamer，以及 MVDream 中的多视图 SDS。",
+   "contributions_zh": "从一个随机初始化的 NeRF 出发，每次随机选一个相机渲染出图像 x=g(θ)，加噪得到 x_t，再用冻结的扩散模型预测噪声。SDS 梯度为 \\( \\nabla_\\theta L_{SDS}=\\mathbb E_{t,\\epsilon}[\\,w(t)(\\hat\\epsilon_\\phi(x_t;y,t)-\\epsilon)\\frac{\\partial x}{\\partial\\theta}] \\)：y 是文本，w(t) 是时间步权重，\\( \\hat\\epsilon_\\phi \\) 是扩散模型预测的噪声，并省略了 UNet 的雅可比。直觉是让渲染图在扩散模型看来更像符合该文本的图片。NeRF 带有基于法线的着色，并随机渲染无纹理版本，以防形状退化成贴在平面上的图案。多个随机视角反复施加 SDS 后，逐渐得到三维一致的形状。",
+   "anchor_link_zh": "锚点没有使用 SDS，但在概念上可以和 Quark 对照：两者都是“用一个网络为 3D 表示提供更新方向”。SDS 把冻结扩散模型的去噪残差当作梯度，对每个场景迭代优化；Quark 继承 DeepView 的 learned gradient descent，由训练好的 Update/Fusion 模块直接预测更新量，只迭代 5 步就能实时运行。分清这两种做法（生成式、逐场景、慢，对比重建式、前馈、快），有助于判断生成式先验在临场管线中适合放在哪个环节。",
+   "concept_ids": [
+    "l-diffusion",
+    "n-nerf",
+    "f-optim",
+    "l-iterative"
+   ],
+   "difficulty": "进阶",
+   "must_read": false
+  },
+  {
+   "title": "Zero-1-to-3: Zero-shot One Image to 3D Object",
+   "authors": "Ruoshi Liu et al. (Columbia University / Toyota Research Institute)",
+   "year": 2023,
+   "venue": "ICCV 2023",
+   "url": "https://arxiv.org/abs/2303.11328",
+   "citations": 1867,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "这是首个把大规模预训练图像扩散模型微调成“给定相对相机变换的新视角生成器”的工作。它只在合成数据（Objaverse 渲染）上训练，却能零样本泛化到真实照片甚至绘画。由此开启了视角条件扩散（Zero123++、SyncDreamer 等）和“先生成多视图、再重建 3D”的路线。",
+   "contributions_zh": "以 Stable Diffusion 为初始化，用两种方式输入条件：一是把输入图像的 CLIP 嵌入与相对相机参数（极角、方位角、半径的变化）拼接后作为全局条件；二是把输入图像的潜变量与噪声潜变量按通道拼接。模型在 Objaverse 物体的成对渲染图上微调，生成的新视角可以配合 SDS 用于单图 3D 重建。例：给一张杯子的正面照和“方位角 +90°”，模型生成杯子的侧面图，包括原图中看不到的把手。",
+   "anchor_link_zh": "Quark §2.3（Single-view Methods）把 Zero-1-to-3（Liu et al., 2023）和 Tseng et al. 2023 等列为“使用带学习先验的生成式算法”的方法，认为这类方法能简化采集硬件，但属于另一类问题，所以没有与之比较。这说明 Quark 坚持多视角输入和忠实重建，不让模型凭先验编造没观测到的内容。对于临场中人脸身份这类对可信度要求很高的内容，这是有意的取舍。",
+   "concept_ids": [
+    "l-diffusion",
+    "g-pinhole",
+    "n-generalizable"
+   ],
+   "difficulty": "进阶",
+   "must_read": false
+  },
+  {
+   "title": "MVDream: Multi-view Diffusion for 3D Generation",
+   "authors": "Yichun Shi et al. (ByteDance)",
+   "year": 2024,
+   "venue": "ICLR 2024",
+   "url": "https://arxiv.org/abs/2308.16512",
+   "citations": 1094,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "MVDream 证明，让扩散模型一次联合生成多张相互一致的视图，就能得到一个与具体 3D 表示无关、可泛化的 3D 先验。它显著缓解了 SDS 类方法中的多面（Janus）问题。“把 2D 自注意力扩展为跨视图的 3D 自注意力，再加相机嵌入”这一结构被 ImageDream、CAT3D 等广泛沿用。",
+   "contributions_zh": "在 Stable Diffusion 中，把每层的自注意力改为对 4 个视图的全部 token 联合计算（3D self-attention），并把相机外参经 MLP 编码后加到时间步嵌入上。训练数据混合了 Objaverse 多视角渲染和 LAION 2D 图文数据，这样既保留了 2D 模型的泛化能力，又获得了 3D 一致性。生成的多视图可以通过多视图 SDS 优化 NeRF，也支持类似 DreamBooth 的少样本个性化。",
+   "anchor_link_zh": "锚点没有使用 MVDream，但它和 Quark 的跨视角融合是同一个问题的两种解法。MVDream 对 4 个视图的全部 token 做完全自注意力，计算量随视图数平方增长。Quark 的 One-to-many attention 只让目标 LDM 的特征作为唯一的 query，去关注 M=8 个输入视角的 Δ，并把 K/V 投影折叠进 Q 和输出投影。按其附录 A，输入视角从 4 个增加到 64 个时，One-to-many 的计算量只增加到 1.9 倍，标准 cross-attention 则增加到 13 倍。理解 MVDream 的 3D 自注意力，就能理解 Quark 为什么必须设计更省的注意力，才能在 1080p 下实时运行。",
+   "concept_ids": [
+    "l-diffusion",
+    "l-attention",
+    "l-encoding"
+   ],
+   "difficulty": "进阶",
+   "must_read": false
+  },
+  {
+   "title": "CAT3D: Create Anything in 3D with Multi-View Diffusion Models",
+   "authors": "Ruiqi Gao et al. (Google DeepMind / Google Research)",
+   "year": 2024,
+   "venue": "NeurIPS 2024",
+   "url": "https://arxiv.org/abs/2405.10314",
+   "citations": 484,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "CAT3D 把“用多视图扩散模型模拟真实采集，再做鲁棒 3D 重建”做成了通用的场景级流程。输入可以是 1 张、少量或任意数量的图像，最快约 1 分钟生成完整 3D 场景，在单图和少视图场景生成上超过 ReconFusion、ZeroNVS。它把生成式 3D 先验从物体级推进到了场景级。",
+   "contributions_zh": "模型基于潜扩散，仿照视频扩散模型把 2D 自注意力“膨胀”成 3D 自注意力，联合处理共 8 个视图：1 个条件视图加 7 个目标视图，或 3 个条件视图加 5 个目标视图。相机用 raymap 表示：它和潜变量同尺寸，每个位置编码对应射线的原点和方向，坐标相对第一个条件相机。生成时先生成一组覆盖整个场景的 anchor 视图，再分组并行生成其余视图（单图输入时共 80 张）。最后用 Zip-NeRF 重建，额外加入 LPIPS 损失，并给离观测视角更近的生成视图更高权重，以容忍生成视图之间的轻微不一致。",
+   "anchor_link_zh": "锚点没有使用 CAT3D，但它和 Quark 团队直接相关：Quark 作者 Kaza、Luo、Lombardi 参与的 Tok-D（ICCV 2025）用 CAT3D 生成大规模合成多视角数据，训练 LVSM 式的前馈 NVS 模型，并在相关工作中称 Quark 能在高得多的分辨率下达到 SOTA。CAT3D 的 raymap 和 Quark 的射线方向编码 γ 解决的是同一个问题：告诉网络每个像素对应哪条射线。CAT3D 的生成视图并不完全一致、需要鲁棒重建来兜底，这也提醒我们：在临场中用生成模型补洞，必须控制视角一致性，而 Ha et al. 的 SDV 衡量的正是这一点。",
+   "concept_ids": [
+    "l-diffusion",
+    "l-attention",
+    "l-encoding",
+    "n-nerf",
+    "n-generalizable"
+   ],
+   "difficulty": "专家",
+   "must_read": false
+  },
+  {
+   "title": "Difix3D+: Improving 3D Reconstructions with Single-Step Diffusion Models",
+   "authors": "Jay Zhangjie Wu et al. (NVIDIA / NUS)",
+   "year": 2025,
+   "venue": "CVPR 2025",
+   "url": "https://arxiv.org/abs/2503.01774",
+   "citations": 187,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "论文证明，单步扩散模型就能充当 NeRF/3DGS 渲染伪影的通用修复器。它有两种用法：在重建阶段清理伪训练视图，再蒸馏回 3D；在推理阶段作为实时后处理增强器。FID 平均提升约 2 倍，生成式先验的开销降到了接近交互式的水平。",
+   "contributions_zh": "Difix 从单步扩散模型 SD-Turbo 微调而来，冻结 VAE 编码器，用 LoRA 微调解码器。关键观察是：带渲染伪影的图像，其分布类似于扩散训练中噪声水平 τ≈200（而不是 1000）的样本。因此可以直接把渲染图当作 x_τ，做一步“去噪”。在 τ 的消融中，τ=200 的 PSNR/SSIM 最好。模型还加入了参考视图混合层，以保持多视图一致。作为推理后处理时，在 A100 上只增加 76 ms，比多步扩散快 10 倍以上。例：稀疏视角下 3DGS 在外推视角出现的漂浮物和模糊，经过一步 Difix 后被清理掉。",
+   "anchor_link_zh": "锚点没有使用 Difix3D+，但它对应两篇锚点共同的弱点。Ha et al. 用 4 层 U-Net 预测背景图 I_BG，来填补前向 warping 留下的 disocclusion 空洞（Fig. 11）；Quark 在视角覆盖不足的 Deep Blending 上出现硬边伪影（23.61 dB，3DGS 为 30.04 dB）。Difix 是生成式补洞的代表，但 76 ms 仍然超过 30 fps 的 33 ms 帧预算，而且它逐帧独立处理，会引入新的闪烁。这类闪烁正是 TCC、STED 和 warping error 应当检测出来的问题。",
+   "concept_ids": [
+    "l-diffusion",
+    "n-3dgs",
+    "v-metrics",
+    "i-warping"
+   ],
+   "difficulty": "进阶",
+   "must_read": false
+  },
+  {
+   "title": "LRM: Large Reconstruction Model for Single Image to 3D",
+   "authors": "Yicong Hong et al. (Adobe Research / ANU)",
+   "year": 2024,
+   "venue": "ICLR 2024",
+   "url": "https://arxiv.org/abs/2311.04400",
+   "citations": 989,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "这是首个“大重建模型”：用 5 亿参数的 Transformer，在约 100 万个物体上端到端训练，单张图像 5 秒内直接回归出 NeRF（triplane）。它证明了“大规模数据 + 通用 Transformer + 可微渲染监督”可以替代逐场景优化和类别特定模型，由此衍生出 Instant3D、GS-LRM、Long-LRM、iLRM 等整个 LRM 家族。",
+   "contributions_zh": "网络结构：先用预训练的 DINO ViT 把输入图像编码成 patch token；再由 image-to-triplane Transformer 解码，以可学习的 triplane token 作为 query，通过 cross-attention 读取图像特征，相机信息作为调制输入。输出是三平面（triplane）特征，由 MLP 解码出密度和颜色后做体渲染，用多视角渲染图的 MSE 加 LPIPS 监督。训练数据包括 Objaverse 合成渲染和 MVImgNet 真实采集。",
+   "anchor_link_zh": "锚点没有使用 LRM，但把 LRM 家族和 Quark 对比，是理解 Quark 定位的关键。LRM 一次前向输出一个持久的 3D 表示（triplane 或 Gaussians）；Quark 则为每个目标视角迭代重建一个 LDM，这个 LDM 只在该视锥内有效。Quark 的后续工作 iLRM（2025）明确批评 Quark 的表示绑定在目标视角上、缺少显式持久的 3D 表示，并把类似 Quark 的迭代细化引入了 LRM 框架。",
+   "concept_ids": [
+    "l-attention",
+    "r-reps",
+    "r-volume",
+    "n-generalizable"
+   ],
+   "difficulty": "进阶",
+   "must_read": false
+  },
+  {
+   "title": "pixelSplat: 3D Gaussian Splats from Image Pairs for Scalable Generalizable 3D Reconstruction",
+   "authors": "David Charatan et al. (MIT 等)",
+   "year": 2024,
+   "venue": "CVPR 2024",
+   "url": "https://arxiv.org/abs/2312.12337",
+   "citations": 812,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "它是前馈 3DGS 的开山之作之一：从一对图像直接预测逐像素的 3D Gaussian。与光场 Transformer 类方法相比，渲染快约 2.5 个数量级，而且得到的是可解释、可编辑的显式 3D 表示。它奠定了 pixel-aligned Gaussians 这种表示，MVSplat、GPS-Gaussian、GS-LRM 后来都沿用了它。",
+   "contributions_zh": "编码器用极线 Transformer 沿极线匹配两视图的特征，同时估计场景尺度。核心难点在于：直接回归 Gaussian 位置很容易陷入局部极小。pixelSplat 的做法是为每条射线预测一个沿深度 bin 的概率分布，从中采样 Gaussian 中心，并把被采中 bin 的概率作为这个 Gaussian 的不透明度。这是一种重参数化技巧，使采样变得可微，梯度可以穿过 splatting 回传。在 RealEstate10K 和 ACID 上以 256×256 分辨率做宽基线 NVS，超过了当时的方法。",
+   "anchor_link_zh": "Ha et al. §2 把 pixelSplat [8] 列为只处理稀疏静态场景的前馈模型之一。Ha 同样每个像素放一个 Gaussian，但做法相反：Gaussian 中心直接由 RAFT-Stereo 深度反投影得到，尺度设为恰好覆盖 1 个像素（附录 A.3），参数不交给网络预测。它给出的理由是，在稠密像素网格上预测出的尺度、不透明度和旋转会收敛成近似常数。和 pixelSplat 对照，才能看清 Ha 的设计思路：几何交给深度，网络只负责融合。",
+   "concept_ids": [
+    "n-3dgs",
+    "n-generalizable",
+    "g-epipolar",
+    "g-depth",
+    "r-raster"
+   ],
+   "difficulty": "专家",
+   "must_read": true
+  },
+  {
+   "title": "MVSplat: Efficient 3D Gaussian Splatting from Sparse Multi-View Images",
+   "authors": "Yuedong Chen et al. (Monash University / ETH Zürich 等)",
+   "year": 2024,
+   "venue": "ECCV 2024",
+   "url": "https://arxiv.org/abs/2403.14627",
+   "citations": 628,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "MVSplat 用平面扫描代价体（cost volume）为前馈 3DGS 提供显式的几何线索。与 pixelSplat 相比，参数量少 10 倍，推理快 2 倍以上（22 fps），跨数据集泛化也更好。它确立了“MVS 代价体 + 逐像素 Gaussian”这一最常用的前馈 3DGS 基线，DepthSplat 等后续工作都沿用了这个设计。",
+   "contributions_zh": "流程：多视图 Transformer 提取各视图特征；在一组深度候选（按逆深度均匀采样）上，把其他视图的特征 warp 到参考视图，计算特征相关，得到代价体（即 plane sweep）；2D U-Net 细化代价体后做 softmax 得到深度，反投影成 Gaussian 中心。不透明度、协方差、颜色等其余参数同时预测，整个模型只用光度损失监督。直觉例：某个像素在深度候选 d_k 处与另一视图的特征最相似，代价体就在第 k 个 bin 上出现峰值，这个像素的深度就取在 d_k 附近。",
+   "anchor_link_zh": "Ha et al. 附录 A.8 的 Fig. 12 在 ENeRF-Outdoor 上与 MVSplat 做了定性比较，称 MVSplat（预训练的稀疏视角模型）结果模糊；§2 也把它列为静态前馈模型。代价体的概念可以直接对应到 Quark：Quark 的初始 LDM 各层放在等视差的 anchor 上；每次 Update 后，按当前深度把各视角的特征反投影回 LDM 的层空间，得到 Δ，本质上就是学习化的 plane-sweep volume。读懂 MVSplat 的代价体，就能读懂 Quark 第 3 阶段中的 (c) 步。",
+   "concept_ids": [
+    "d-mvs",
+    "i-psv",
+    "n-3dgs",
+    "n-generalizable",
+    "g-depth"
+   ],
+   "difficulty": "进阶",
+   "must_read": true
+  },
+  {
+   "title": "GS-LRM: Large Reconstruction Model for 3D Gaussian Splatting",
+   "authors": "Kai Zhang et al. (Adobe Research)",
+   "year": 2024,
+   "venue": "ECCV 2024",
+   "url": "https://arxiv.org/abs/2404.19702",
+   "citations": 375,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "GS-LRM 把 LRM 的规模化思路和逐像素 Gaussian 结合起来：用一个极简的纯 Transformer，从 2–4 张带位姿的图像在单张 A100 上 0.23 秒预测出高质量 3DGS，物体（Objaverse）和场景（RealEstate10K）都能处理，效果大幅超过此前方法。它是 Long-LRM、LVSM 等工作的直接对照。",
+   "contributions_zh": "每张图像与它的逐像素 Plücker 射线坐标按通道拼接。Plücker 坐标是 \\( r=(d,\\,o\\times d) \\)，o 是相机光心，d 是射线方向，共 6 维。拼接后切成 patch token，所有视图的 token 连在一起，送入一串标准的自注意力 Transformer 块。每个输出 token 被线性解码为该 patch 内每个像素的 Gaussian 参数：沿射线的距离、颜色、尺度、旋转和不透明度。解码后直接渲染，用 MSE 加感知损失监督。模型没有代价体、极线这类显式几何模块。",
+   "anchor_link_zh": "Ha et al. §3.1 直接点名 GS-LRM（Zhang et al. [79]）：把所有输入视角的 Gaussian 一次性渲染到目标视角，既解决不了空洞和飞点，还会因 Z-fighting 让边缘更差（Fig. 4）。因此 Ha 改为逐视角单独渲染，再由网络融合。其消融中的 “No Blending”（仿照 GPS-Gaussian 一次渲染全部 Gaussian）只有 PSNR 24.64、STED 483.3，完整模型为 31.17 和 68.76。这组数字是 Ha 采用“逐视角渲染 + 融合”的定量依据。",
+   "concept_ids": [
+    "l-attention",
+    "l-encoding",
+    "n-3dgs",
+    "n-generalizable",
+    "r-raster"
+   ],
+   "difficulty": "进阶",
+   "must_read": true
+  },
+  {
+   "title": "LVSM: A Large View Synthesis Model with Minimal 3D Inductive Bias",
+   "authors": "Haian Jin et al. (Cornell / Adobe Research 等)",
+   "year": 2025,
+   "venue": "ICLR 2025",
+   "url": "https://arxiv.org/abs/2410.17242",
+   "citations": 188,
+   "citations_source": "Semantic Scholar",
+   "theme": "t-generative-ff",
+   "influence_zh": "LVSM 证明，几乎不带 3D 归纳偏置的纯 Transformer，也能做高质量的可泛化 NVS，而且效果随数据和算力增长，比此前 SOTA 高 1.5–3.5 dB PSNR。这里的“不带偏置”指没有 NeRF/3DGS 表示，也没有极线或平面扫描模块。它把承接 SRT 的“几何无关大模型 NVS”推成了 2025 年以后的主流范式之一，Tok-D 等后续工作都在它的基础上改进。",
+   "contributions_zh": "输入图像切成 patch，并与逐像素的 Plücker 射线嵌入融合成 token；目标视角只用它的 Plücker 射线作为 query token。论文给出两种结构。encoder-decoder：先把输入压成固定数量的 1D 潜 token，作为学习到的场景表示，推理更快。decoder-only：输入 token 和目标 token 一起经过完全自注意力，质量和零样本泛化更好。模型只用渲染损失（MSE 加感知损失）训练，即使只用 1–2 张 GPU 训练，也能超过此前方法。场景级实验在 RealEstate10K 上以 256×256 评测，沿用 pixelSplat 的数据划分。",
+   "anchor_link_zh": "LVSM 和两篇锚点形成对照。Quark 保留了大量 3D 偏置：LDM、等视差分层、反投影、用全分辨率输入像素做 IBR 混合，以此实现 1080p 实时；LVSM 去掉了几乎所有这类偏置，但场景级结果只在 256×256 上报告。Quark 团队的后续工作 Tok-D（Kaza、Luo、Lombardi）改进了 LVSM 的 Transformer 块，用 CAT3D 合成数据扩大训练集，并在相关工作中称 Quark 能在高得多的分辨率下达到 SOTA。LVT（SIGGRAPH Asia 2025，Flynn 等）则只在局部视角邻域内做注意力，以避免二次复杂度。理解 LVSM，才能理解 2025 年以后“保留 3D 偏置还是追求可扩展性”这一核心争论。",
+   "concept_ids": [
+    "l-attention",
+    "l-encoding",
+    "n-generalizable"
+   ],
+   "difficulty": "进阶",
+   "must_read": true
+  }
+ ]
+}

@@ -1,0 +1,396 @@
+{
+ "module_id": "M7",
+ "intro_zh": "M7 把前面学过的相机几何、体渲染、alpha 合成和 IBR 串成一张“神经渲染地图”。这张地图有三根坐标轴。① 场景用什么表示：MLP 隐式场、显式 3D 高斯、与目标视角对齐的分层深度图（LDM），或与输入像素对齐的基元。② 表示怎么得到：对每个场景单独做梯度下降优化，还是用一个跨场景训练好的网络一次前向推理出来。③ 时间怎么处理：静态、逐帧独立、带状态的流式，或整段序列离线拟合成 4D。NeRF 与 3DGS 占据“逐场景优化、静态”这个角落，质量很高，但重建要几十分钟到几天。DyNeRF、4DGS、4K4D 把这一角延伸到整段视频，仍然是离线的。3DGStream 走流式，但每帧仍要约 12 秒优化。\n\n远程临场（telepresence）要求每秒 30 帧以上，并且只能用“此刻”多路相机拍到的画面出图。每帧 33 ms 的预算决定了只能走“跨场景训练、推理时不做优化”的前馈路线，两篇锚点论文都落在这里。Quark（SIGGRAPH Asia 2024）为每个目标视角即时预测一个分层深度图（LDM），逐帧独立处理，没有时间状态。Ha et al.（CVPR 2025）用深度把每个像素变成参数解析给定的小高斯并前向投影，再用 TSDF 深度引导一个 U-Net 做融合，只在深度这一层保留很短的时间状态。它们比较的对象，无论是基线（ENeRF、IBRNet、GPNR、SIMPLI、FWD、GPS-Gaussian）还是参照（Zip-NeRF、3DGS、4DGS、4K4D），都落在本模块的四个概念里。\n\n读完本模块，你应当能回答三个问题：为什么 Quark 可以说自己在 DL3DV 上超过了 Zip-NeRF，却又承认闪烁方面不如 3DGS；为什么 Ha 用了 3DGS 的光栅器，却一次优化都不做；为什么同一套厨房数据在 Quark 里叫 N3DV、在 Ha 里叫 DyNeRF，而它们的 31.57 dB 和 31.17 dB 不能直接比较（提示：同一个 ENeRF 在两种协议下分别得到 29.86 和 29.51）。",
+ "study_tips_zh": "1) 手算：用 4 个采样点手算一遍 NeRF 的离散体渲染，求出权重、像素颜色和期望深度，再用 α = 1 − exp(−σδ) 在 NeRF 的 σ 与 Quark 所说的“density”（实际就是 alpha）之间来回换算。\n2) 写 50 行 PyTorch：输入一条射线上的 (σ, c)，实现体渲染和分层采样（逆 CDF）。把 σ 换成网络直接输出的 α，就得到 Quark 式 (1) 中的 over 合成；再验证“从前到后累加”和“从后到前反复 over”结果相同。\n3) 用官方 3DGS 代码或 gsplat 训练一个小场景，记录 7K 步和 30K 步的耗时、模型文件大小和训练峰值显存，与论文表 1 的 Mip-NeRF360 数字对照（训练 6m25s / 41m33s；模型存储 523 MB / 734 MB，注意这一列是参数存储量，不是显存；论文另说大场景训练峰值显存可超过 20 GB）。体会一下：“渲染实时”背后是几十分钟的逐场景优化。\n4) 复现 Ha 的像素高斯前向 warping。取一张 RGB-D 图（ScanNet，或 DyNeRF 加立体深度），给每个像素放一个 s≈z/f、不透明度为 1 的各向同性高斯，用 gsplat 渲染到一个平移 10 cm 的相机。然后做两组对比：与“一点一像素”的点溅射比较空洞和锯齿；把 K=4 个视角分开渲染和一次性合并渲染，观察 z-fighting。\n5) 写一个融合函数：输入 K 张 warp 图及各自的 alpha，按 I_FG = Σ 𝓘_k α_k w_k / Σ α_k w_k 融合。分别用均值权重和 softmax 权重试一遍，亲眼看到重影是怎么出现和消失的。\n6) 在 DyNeRF/N3DV 的一个序列上固定目标相机，逐帧运行任一前馈方法（或者直接用第 4 步的 warp 加第 5 步的融合），画出 x–t 时间切片，看清闪烁的样子。再加上 Ha 式的差分掩码递归滤波，比较加入前后的切片。\n7) 最后整理一张表，每行一种方法，列出：每个场景的重建时间、每帧耗时、每多一个观看视点的额外代价、是否有时间状态、训练数据是什么。把 NeRF、3DGS、ENeRF、GPS-Gaussian、4DGS、3DGStream、Quark、Ha 都填进去。这张表就是本模块的地图。",
+ "concepts": [
+  {
+   "id": "n-nerf",
+   "name_zh": "神经辐射场（NeRF）",
+   "name_en": "Neural Radiance Fields",
+   "tldr_zh": "NeRF 用一个 MLP 把三维点和观察方向映射成体密度和颜色，再用可微的体渲染沿射线积分成像素，针对每个场景用几十到上百张照片做梯度下降来拟合。质量高，但每个场景要训练数小时到数天，这正是两篇锚点论文想绕开的“逐场景优化”路线。",
+   "intuition_zh": "把场景想象成一团“会发光的雾”：空间里每一点都有密度 σ，表示光在这里被挡住的快慢；还有颜色 c，表示这一点朝某个方向发出的光。NeRF（Mildenhall et al., ECCV 2020）不存体素网格，而是用一个 8 层、每层 256 通道的 MLP 当作连续函数 F_Θ(x, d) → (σ, c)：输入三维位置 x 和观察方向 d，输出密度和颜色。σ 只看位置，颜色还要看方向，所以能表达高光随视角移动这类视角相关外观（见 r-appearance）。\n\n要从这团雾得到像素，就沿相机射线取若干采样点，用体渲染（见 r-volume）把各点颜色加权求和，权重等于“到达该点之前一直没被挡住的概率 T_i”乘以“在该点被挡住的概率 α_i”。整个过程可微，所以只要有多张已标定的照片（位姿通常来自 COLMAP，见 g-sfm），就能用渲染值与真实像素之差的平方做损失，对 MLP 做梯度下降。这里有两个关键技巧。第一是位置编码 γ：把坐标展开成一组不同频率的正余弦（位置用 L=10，方向用 L=4），否则 MLP 只能学出模糊的低频结果（见 l-encoding）。第二是分层采样：先把射线的近远区间均匀切成 64 段、每段随机取 1 个点（stratified sampling），跑“粗网络”；再按粗网络给出的权重分布，在可能有表面的地方追加 128 个点，跑“细网络”。\n\n代价在于“逐场景”。原版 NeRF 每个场景要在单张 V100 上迭代 10–30 万次，约 1–2 天。渲染时每条射线要查询 256 次（粗网络 64 次，细网络在 64+128 个点上 192 次）；合成数据 800×800 每张图约 64 万条射线，真实场景 1008×756 约 76 万条，合计每张图 1.5–2 亿次 MLP 查询，V100 上约 30 秒。后续工作把速度提高了几个数量级。Instant-NGP 用多分辨率哈希网格（16 级，每级 2^14–2^24 个条目，每个条目 2 维特征），把训练缩短到几秒到几分钟，1080p 渲染只要几十毫秒。Mip-NeRF 360、Zip-NeRF 解决了无界场景和抗锯齿问题，质量最好，但训练仍然很久（3DGS 论文把 Mip-NeRF360 的训练折算为单卡约 48 小时）。不管多快，这些方法都要先拿到这一个场景的密集照片（通常几十到上百张）再做优化。这对实时远程临场是致命的，因为画面里的人每 33 ms 就动一下。加速与抗锯齿的进阶内容见 a-nerf-fast。\n\n既然锚点论文都不用 NeRF，为什么还要懂它？原因有四个。第一，两篇论文的对照组就是 NeRF 家族：Quark 的表 2 和表 3 把它和 Zip-NeRF、Mip-NeRF360、Instant-NGP 放在一起比。第二，它们的渲染公式是 NeRF 体渲染“采样点很少”的离散版本：Quark 的 LDM 每一层就相当于射线上的一个采样点（Sec. 2.1 原话是各层“可以看作体积光线步进的步”），只是位置由网络预测，并且只有 6 层。第三，Quark 的射线方向编码最后一步沿用了 NeRF 式的正弦编码：Sec. 3.2.1 先回顾 NeRF 的正弦编码和 Ref-NeRF 的球谐编码，再提出一种利用 LDM 几何的更简单编码，最后仍用 8 个 octave 的正弦编码展开。第四，Ha 最强的基线 ENeRF 本身就是一个可泛化 NeRF：先预测深度，再只在表面附近少量采样。",
+   "analogy_zh": "NeRF 像一位为某一个房间专门练了两天的临摹画家。他把整个房间记在脑子里（MLP 权重约 5 MB），之后从任何角度都能画得很像。可是只要换一个房间，或者房间里的人动了一下，他就得再练两天。Quark 和 Ha 更像速写师：没见过这个房间，只看眼前几台相机此刻拍到的画面，几十毫秒内就画出一个新角度。",
+   "equations": [
+    {
+     "tex": "F_{\\Theta}:\\ \\big(\\gamma(\\mathbf{x}),\\ \\gamma(\\mathbf{d})\\big)\\ \\mapsto\\ \\big(\\sigma,\\ \\mathbf{c}\\big)",
+     "explain_zh": "x∈R³ 是世界坐标下的采样点（NeRF 会先把它归一化到 [−1,1]）；d 是单位观察方向（从相机指向场景）；γ(·) 是位置编码；Θ 是 MLP 参数（8 层 ×256 通道，把输入 γ(x) 再拼接到第 5 层的激活上作为跳连）。σ≥0 是体密度，即单位长度上光被消去的速率（单位为长度的倒数，如 m⁻¹），用 ReLU 保证非负，只由 x 决定。c∈[0,1]³ 是该点朝相机方向（即 −d）发出的 RGB，用 sigmoid 输出，由 x 的 256 维特征拼上 γ(d) 后再经过一层 128 通道得到。让颜色“晚一点才看方向”是有意设计的归纳偏置：几何与观察方向无关，外观可以与方向有关。"
+    },
+    {
+     "tex": "\\gamma(p) = \\big(\\sin(2^{0}\\pi p),\\ \\cos(2^{0}\\pi p),\\ \\dots,\\ \\sin(2^{L-1}\\pi p),\\ \\cos(2^{L-1}\\pi p)\\big)",
+     "explain_zh": "p 是一个标量坐标，x 的 3 个分量和 d 的 3 个分量各自单独编码。L 是频率个数，NeRF 中位置取 L=10、方向取 L=4。2^k π 是第 k 个频率（k=0,…,L−1）。编码后位置变成 3×2×10=60 维，方向变成 3×2×4=24 维（官方代码还会拼上原始坐标，分别成为 63 维和 27 维）。没有这一步，MLP 的频谱偏置会让输出过于平滑（见 l-encoding）。Quark 的射线方向编码最后一步也是这种正弦编码（8 个 octave，再线性投影到 C=32 维），但被编码的量不同：取一条输入射线与目标 LDM 视锥近平面、远平面的两个交点，在目标视锥的投影空间里求这两点的 2D 差向量，先过 tanh 再做正弦编码（Sec. 3.2.1）。输入射线恰好与某条目标射线重合时，两个交点投影到同一位置，差向量为 0，编码也为 0；tanh 保证视锥外的射线仍有表示，只是精度较低。"
+    },
+    {
+     "tex": "\\hat{C}(\\mathbf{r}) = \\sum_{i=1}^{N} T_i\\,\\big(1-e^{-\\sigma_i\\delta_i}\\big)\\,\\mathbf{c}_i,\\qquad T_i = \\exp\\Big(-\\sum_{j=1}^{i-1}\\sigma_j\\delta_j\\Big),\\qquad \\delta_i = t_{i+1}-t_i",
+     "explain_zh": "这是 NeRF 论文式 (3)。r 是某个像素对应的相机射线 r(t)=o+t·d。沿射线从近到远取 N 个采样距离 t_i；σ_i、c_i 是 MLP 在第 i 个点的输出；δ_i 是相邻两个采样点的间距。α_i=1−e^{−σ_i δ_i} 是光在第 i 段被“挡住”的概率，也就是 alpha。T_i 是透射率，即光从相机出发、走到第 i 段之前一直没被挡住的概率。Ĉ(r) 是预测的像素颜色。因为 T_i=Π_{j<i} e^{−σ_jδ_j}=Π_{j<i}(1−α_j)，代回去就得到 Ĉ=Σ c_i α_i Π_{j<i}(1−α_j)。这正是 r-alpha 中的 over 合成。NeRF 和 3DGS 从前往后累加，Quark 式 (1) 的 𝒪 算子从后往前反复做 over，两种顺序算出的结果完全相同。"
+    },
+    {
+     "tex": "w_i = T_i\\,\\big(1-e^{-\\sigma_i\\delta_i}\\big),\\quad \\hat{w}_i = \\frac{w_i}{\\sum_{j} w_j},\\qquad \\mathcal{L} = \\sum_{\\mathbf{r}\\in\\mathcal{R}} \\big\\|\\hat{C}_c(\\mathbf{r})-C(\\mathbf{r})\\big\\|_2^2 + \\big\\|\\hat{C}_f(\\mathbf{r})-C(\\mathbf{r})\\big\\|_2^2",
+     "explain_zh": "w_i 是第 i 个采样点对像素的贡献权重（NeRF 式 (5)）。ŵ_i 是归一化后的权重，被当作沿射线分段常数的概率密度，细采样就用逆 CDF 从中再抽 N_f=128 个点。ℛ 是一个 batch 中的射线（NeRF 每批 4096 条）。Ĉ_c 是粗网络在 N_c=64 个点上的渲染结果，Ĉ_f 是细网络在 64+128 个点上的渲染结果，C(r) 是真实像素。粗网络的损失也要计入，因为它的权重分布必须足够准，才能指导细采样放在哪里。Σ w_i t_i 给出期望深度。Quark 可选输出的深度图也是同一个思路：把每层解码出的深度当作“颜色”，按层做 over 合成（Sec. 3 开头）。"
+    }
+   ],
+   "worked_example_zh": "设一条射线上有 4 个采样点，t=(1.0, 1.5, 2.0, 2.5) m，间距 δ=0.5 m（这里假设最后一段也取 0.5 m；NeRF 官方代码把最后一段间距设成 1e10，相当于让最后一个点吸收剩下的所有光）。MLP 输出 σ=(0, 0.2, 4, 10) m⁻¹，颜色 c₂=灰(0.5,0.5,0.5)、c₃=红(1,0,0)、c₄=蓝(0,0,1)。\n① 计算 alpha：α_i=1−e^{−σ_iδ_i}=(0, 1−e^{−0.1}=0.095, 1−e^{−2}=0.865, 1−e^{−5}=0.993)。\n② 计算透射率：T₁=1，T₂=1（第 1 段 σ=0，什么也没挡），T₃=e^{−0.1}=0.905，T₄=e^{−2.1}=0.122。\n③ 计算权重：w_i=T_iα_i=(0, 0.095, 0.782, 0.122)，总和 0.999，说明射线几乎被完全挡住，透到背景的不到 0.1%。\n④ 像素颜色 =0.095×灰+0.782×红+0.122×蓝=(0.830, 0.048, 0.169)，偏红，说明表面在 t≈2 m 附近。期望深度 Σw_it_i=0.143+1.565+0.304=2.01 m。\n⑤ 分层采样：按论文的分段常数 PDF，w₃ 对应区间 [2.0, 2.5) m，ŵ₃=0.782/0.999≈0.78，所以细采样的 128 个点里约有 100 个落在这一段。\n⑥ 对照 Quark：如果把这 4 个点看成 LDM 的 4 层，Quark 会直接预测每层的 alpha（0, 0.095, 0.865, 0.993）和深度，完全不经过 σ。这就是为什么它论文里叫“density”的量其实是 alpha（Sec. 3.1）。它从后往前做 over 合成，得到的颜色与③④完全相同。\n⑦ 成本：一张 1008×756 的图有 76.2 万条射线。每条射线要查询 64 次（粗网络）加 192 次（细网络在 64+128 个点上），共 256 次，总计约 1.95 亿次 MLP 查询。这与论文附录所说“每张图 1.5–2 亿次查询、V100 上约 30 秒”一致。远程临场每帧只有 33 ms，相差约 900 倍，而且这还没算 1–2 天的训练。作为对照，Quark 在 A100 上对 1024×768 做重建加渲染一帧共 32.2 ms（表 1）。",
+   "pitfalls_zh": [
+    "把 Quark 论文中的“density”当成 NeRF 的 σ。Quark Sec. 3.1 写明 LDM 的 density 存的是“transparency (i.e. alpha)”，Sec. 3.2.3 给出解码方式 σ=sigmoid(V W_σ)，取值在 (0,1)。NeRF 的 σ 取值在 [0,∞)，单位是长度的倒数，要先乘上间距 δ，再代入 1−e^{−σδ}，才得到 alpha。把两者混为一谈，公式就对不上，还会误以为 Quark 在做连续的体积分。",
+    "把“渲染实时”当成“重建实时”。Instant-NGP 渲染 1080p 只要几十毫秒，3DGS 也能达到 30 fps 以上，但它们的重建仍要做秒级到小时级的逐场景优化，而且需要密集的多视角图像。Quark 在引言（Sec. 1）中专门强调，它实时的是“重建加渲染合计”，这是它与 NeRF/3DGS 的根本区别。",
+    "以为 NeRF 在稀疏视角下也能用。原版 NeRF 需要几十到上百张图。如果只给 4–8 张宽基线图，σ 会在各个输入视角前面像贴图一样过拟合，出现漂浮物（floaters）。这正是 pixelNeRF 等可泛化方法出现的原因（见 n-generalizable）。",
+    "对 Quark“在 DL3DV 上超过 Zip-NeRF”（31.31 vs 31.22 dB）解读过度。表 2 的基线数值直接取自 DL3DV 论文，作者在 Sec. 4.2 也说明这些方法只有较低分辨率下的分数。评测协议是每 8 个视角取 1 个做目标、目标视角不参与输入；DL3DV 是稠密视频轨迹，最近的输入视角离目标非常近，天然有利于 IBR。在视角覆盖较差的 Deep Blending 上（Quark 只测了 Playroom 一个场景），Quark 只有 23.61 dB，远低于 3DGS 的 30.04 dB。"
+   ],
+   "in_quark": {
+    "used": true,
+    "where": "Sec. 1、Sec. 2.1–2.2（与逐场景优化路线的对照）；Sec. 3 开头与 Sec. 3.1 式 (1)（over 合成、可选深度输出）；Sec. 3.2.1（射线方向编码）；Sec. 3.2.3（σ 的 sigmoid 解码）；Sec. 4.1 表 2、表 3 与图 5、图 6",
+    "how_zh": "Quark 不用 NeRF 作表示，也不做任何逐场景优化，但有三处直接继承自 NeRF。① 渲染。Sec. 2.1 说 LDM 的各层“可以看作体积光线步进的步”，式 (1) 用 over 算子 𝒪 从后往前合成各层。这与上面的离散体渲染公式等价，区别在于每条射线只有 6 个采样点（Quark）或 8 个（Quark+），而且采样位置（每层深度）和 alpha 都由网络直接预测；NeRF 则需要 64+128 个点。② 编码。Sec. 3.2.1 把 NeRF 的正弦位置编码列为已有做法，然后利用 LDM 的几何构造了一个更简单的射线方向编码（近、远平面交点的差向量），最后一步仍是 8 个 octave 的正弦编码，再线性投影到 C=32 维。③ 对照。表 2（DL3DV，基线数值取自 DL3DV 论文）中 Quark 为 31.31/0.932/0.103，Zip-NeRF 为 31.22/0.921/0.112，Mip-NeRF360 为 30.98，Instant-NGP 为 25.01，Nerfacto 为 24.61。表 3 的 Mip-NeRF360 场景上，Quark 26.60，M-NeRF360 27.69，Quark 排第三。Sec. 4.1 还指出，NeRF 类方法的渲染结果有光线步进常见的斑点（speckling）伪影；在视角覆盖不足的地方，逐场景方法的失败“更体面”，只是变糊，Quark 的混合权重则会产生错误的硬边。如果不懂 NeRF 的“逐场景优化加体渲染”，就无法理解 Quark 为什么把“重建加渲染合计 30 fps”当作核心卖点，也读不懂式 (1) 和表 2 的意义。"
+   },
+   "in_ha": {
+    "used": false,
+    "where": "Sec. 2（Neural-based View Synthesis 段）；Sec. 4.1 基线 IBRNet、ENeRF；附录 A.1 的 TSDF 光线步进",
+    "how_zh": "Ha et al. 完全没有 MLP 辐射场，也不做体积分渲染。NeRF 只以两种方式出现。① Sec. 2 把体渲染类方法，包括 3D 的 NeRF、Mip-NeRF、Zip-NeRF、Instant-NGP 等和 4D 的 HyperReel、HexPlane、K-Planes、DyNeRF、4K4D 等，归为“逐场景训练代价太高、不适合在线使用”的路线。② Sec. 4.1 的两个基线 IBRNet 和 ENeRF 本身就是可泛化 NeRF，用体渲染出图。在 DyNeRF 上，ENeRF 为 29.51 dB，IBRNet 为 22.49 dB，本文为 31.17 dB。有一处容易混淆，需要对照着理解：Ha 在附录 A.1 里也“沿射线走”，但做的是 TSDF 的表面求交。它以 0.8·s（s 为当前点融合后的截断 SDF 值）为步长前进，检测到符号变化后再做 3 步二分，每条射线只找出一个表面深度（见 r-raymarch、d-tsdf）。NeRF 则是把一路上所有采样点按权重累加。前者给出一个干净的深度用作引导，后者能表示半透明和多层结构。分不清这两种“光线步进”，就会误以为 Ha 的 TSDF 深度也是体渲染得到的期望深度。"
+   },
+   "in_field_zh": "① 离线采集：会前先把会议室背景或参与者的高质量头像用 NeRF/Zip-NeRF 类方法离线优化好，通话时只处理动态部分。这种“静态背景预先建好、动态前景实时处理”的拆分很常见。② 训练前馈模型：pixelNeRF、IBRNet、ENeRF 等可泛化方法都依靠 NeRF 的可微体渲染，只用 2D 光度损失就能训练，不需要 3D 真值。③ 评测：Zip-NeRF、Mip-NeRF360 常被当作质量上限的参照。④ 带宽直觉：一个静态 NeRF 只有约 5 MB 权重，大约相当于一路 5 Mbps 的 1080p 视频流 8 秒的数据量，但它表示不了一个正在动的人；逐帧重训的代价见 n-dynamic。⑤ 哈希网格、提议网络、烘焙等加速技术，是后续实时方法常用的零件，见 a-nerf-fast。",
+   "resources": [
+    {
+     "title": "NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis (Mildenhall et al., ECCV 2020)",
+     "url": "https://arxiv.org/abs/2003.08934",
+     "type": "paper",
+     "note_zh": "原论文。重点读 Sec. 4（体渲染与式 (3)）、Sec. 5.1（位置编码，L=10/4）、Sec. 5.2（分层采样，式 (5)）、Sec. 5.3（实现细节：每批 4096 条射线，64+128 个采样点，V100 上 1–2 天）。附录中有网络结构图（第 5 层跳连），还给出渲染耗时（每张图 1.5–2 亿次查询，约 30 秒）。"
+    },
+    {
+     "title": "Instant Neural Graphics Primitives with a Multiresolution Hash Encoding (Müller et al., SIGGRAPH 2022)",
+     "url": "https://arxiv.org/abs/2201.05989",
+     "type": "paper",
+     "note_zh": "读 Sec. 3 和表 1（L=16，T=2^14–2^24，F=2）。理解哈希网格为什么能把训练从几天缩短到几秒或几分钟，同时注意它仍然是逐场景优化。代码见 https://github.com/NVlabs/instant-ngp"
+    },
+    {
+     "title": "CMU 16-825 Learning for 3D Vision (Tulsiani) — 2026 秋季课表",
+     "url": "https://learning3d.github.io/schedule.html",
+     "type": "course",
+     "note_zh": "第 9 讲 Volume Rendering（建议阅读 Volume Rendering Digest），第 10 讲 Neural Radiance Fields（阅读 NeRF 原文）。适合先补体渲染，再看 NeRF。"
+    },
+    {
+     "title": "Szeliski, Computer Vision: Algorithms and Applications, 2nd ed., Ch. 14 Image-based rendering, §14.6 Neural rendering",
+     "url": "https://szeliski.org/Book/",
+     "type": "book",
+     "note_zh": "第 14 章的最后一节 Neural rendering（前面依次是视图插值、分层深度图、光场与 Lumigraph、环境遮罩、基于视频的渲染）。它把 NeRF 放在 IBR 与光场的脉络中讲，正好衔接 M5。在官网填写信息后可免费下载 PDF（仅限个人使用）。"
+    }
+   ],
+   "self_check": [
+    {
+     "q_zh": "NeRF 在某个采样点预测 σ=3 m⁻¹，相邻采样间距 δ=0.2 m，这一段的 alpha 是多少？如果 Quark 某一层的“density”输出为 0.45，这两个数分别代表什么？",
+     "a_zh": "α=1−e^{−3×0.2}=1−e^{−0.6}=0.451。两个数几乎相等，但含义不同。NeRF 的 σ 是单位长度上的消光率，乘以 δ 再代入 1−e^{−σδ} 才得到 alpha。Quark 的 density 本身就是 alpha（Sec. 3.1；sigmoid 输出见 Sec. 3.2.3），可以直接进入 over 合成。"
+    },
+    {
+     "q_zh": "NeRF 为什么让 σ 只依赖位置，颜色才依赖方向？在 Quark 里，“视角相关”由谁负责？",
+     "a_zh": "几何不应随观察方向改变。这条约束防止网络靠“从不同方向看到不同密度”来作弊拟合训练图；颜色依赖方向，则是为了表达高光。Quark 没有显式的反射模型。它的视角相关性来自两点：每个目标视角都重新生成 LDM 的 blend weights；射线方向编码让网络偏向离目标射线较近的输入（Sec. 3.2.1、4.3）。因此它只能对输入颜色做凸组合，近似复现一部分反射和折射。"
+    },
+    {
+     "q_zh": "Quark 说它在 DL3DV 上超过了 Zip-NeRF，同时又承认“在时间闪烁上 NeRF 和 3DGS 更好”。这两句话为什么不矛盾？",
+     "a_zh": "PSNR、SSIM、LPIPS 都是逐帧、逐图计算的，不衡量闪烁。Zip-NeRF 用全部视角优化出一个固定的全局场景，相机移动时画面自然连续。Quark 每一帧、每个目标视角都只用最近的 8 个输入重新推理，目标相机一动、输入集合一切换，或者输入之间曝光不一致，画面就会跳变（Sec. 4.1 末段）。"
+    }
+   ],
+   "prereqs": [
+    "r-volume",
+    "l-encoding"
+   ]
+  },
+  {
+   "id": "n-3dgs",
+   "name_zh": "3D Gaussian Splatting（3D 高斯溅射）",
+   "name_en": "3D Gaussian Splatting",
+   "tldr_zh": "3DGS 用数百万个带颜色、不透明度和各向异性协方差的 3D 高斯表示场景。渲染时把每个高斯用 EWA 近似投影成屏幕上的 2D 椭圆，按 16×16 的 tile 排序，再从前到后做 alpha 混合。每个场景要优化几十分钟，渲染 1080p 可达 30 fps 以上。Ha et al. 直接复用了它的光栅器，但高斯参数不是优化出来的，而是由深度图解析给定。",
+   "intuition_zh": "NeRF 慢在每个像素都要沿射线问 MLP 上百次。3DGS（Kerbl et al., SIGGRAPH 2023）换了一个思路：把场景直接存成一堆显式的“彩色半透明椭球”。每个 3D 高斯有中心 μ，有协方差 Σ（决定椭球的大小和朝向），有不透明度 o，还有一组球谐（SH）系数（决定颜色怎样随视角变化）。渲染时不沿射线采样，而是把每个椭球“拍”到屏幕上，变成一个 2D 椭圆斑（splat）。这可以看作 r-raster 中点溅射的升级版：斑的大小和形状会随距离、朝向正确地变化。\n\n它又快又能训练，靠的是三个工程设计。① 协方差参数化 Σ=RSS^T R^T：用缩放向量 s 和四元数 q 分开存储，保证 Σ 永远半正定。投影时用 EWA（Elliptical Weighted Average）splatting（Zwicker et al., 2001）的局部仿射近似 Σ'=JWΣW^T J^T，得到屏幕上的 2D 协方差。② tile 光栅化：把屏幕切成 16×16 像素的 tile，每个高斯按它的 3σ 范围复制到所覆盖的 tile 里，以“tile ID + 深度”为键做一次 GPU 基数排序。每个 tile 内按深度从前到后做 alpha 混合（见 r-alpha），某个像素的累计不透明度接近 1 时就提前停止。③ 自适应致密化：从 SfM 得到的稀疏点起步，热身之后每 100 次迭代检查一次视空间位置梯度。梯度超过 τ_pos=0.0002 的高斯，如果较小就克隆一份，如果较大就一分为二、尺度除以 1.6。每 3000 次迭代把所有高斯的 alpha 重置到接近 0：真正需要的高斯会在后续优化中重新长回来，一直停在阈值以下的就被删掉。颜色用 4 个 band（0–3 阶）的球谐，每个通道 16 个系数，训练中先只优化 0 阶，之后每 1000 步多开放一个 band。\n\n效果方面，在 Mip-NeRF360 场景上迭代 30K 次约需 41 分钟（A6000），PSNR 27.21，渲染 134 fps，模型存储 734 MB，场景含一到五百万个高斯。作为对比，Mip-NeRF360 折算单卡要训练约 48 小时，渲染 0.06 fps。但 3DGS 仍然是逐场景优化：需要 SfM 点，需要几十上百张视角，需要几十分钟。对远程临场来说，3DGS 真正吸引人的是它的“表示加渲染器”：一旦有了一组高斯，从任意多个视点渲染都很便宜，无论是左右眼还是多个观众。于是 2024 年之后出现了“前馈 3DGS”，由网络直接为每个输入像素预测一个高斯，代表作有 pixelSplat、MVSplat、GPS-Gaussian（见 n-generalizable 与 a-ff-3dgs）。\n\nHa et al. 走得更远，连网络都不用，而是用深度图“解析地”放置高斯。每个输入像素对应一个高斯：中心由像素深度反投影得到，颜色就是像素颜色，各向同性，不透明度为 1，尺度让它在源图里恰好覆盖 1 个像素。然后对每个输入视角分别调用原版 3DGS 光栅器，渲染到目标相机。之所以用高斯而不是“一个点对应一个像素”，是为了借用光栅器的两个本事：相邻高斯的斑会互相重叠，视角拉近时像素之间不会出现空隙和锯齿；按深度排序后从前到后混合，天然就能处理遮挡。理解了 3DGS 的每个参数和光栅器的流程，才能看懂 Ha 为什么说“网络预测的参数会收敛到常数，所以干脆解析设定”。",
+   "analogy_zh": "3DGS 像用喷枪在墙上作画。每个高斯是一次喷涂：喷口的大小和方向（协方差）决定落在墙上的椭圆斑，油漆的浓淡是不透明度，颜色还会随你站的角度微微变化（球谐）。作画顺序是先按远近排好，从离你最近的一层开始往后叠，叠到后面完全看不见为止。Ha 的做法相当于每个输入像素只喷一个正好一像素大、完全不透明的圆点，不再逐个去调喷口。",
+   "equations": [
+    {
+     "tex": "G(\\mathbf{x}) = \\exp\\!\\Big(-\\tfrac{1}{2}(\\mathbf{x}-\\boldsymbol{\\mu})^{\\top}\\Sigma^{-1}(\\mathbf{x}-\\boldsymbol{\\mu})\\Big),\\qquad \\Sigma = R\\,S\\,S^{\\top}R^{\\top},\\ \\ S=\\mathrm{diag}(s_x,s_y,s_z)",
+     "explain_zh": "x 是世界坐标中的点；μ 是高斯中心；Σ 是 3×3 协方差，决定椭球三个主轴的长短和朝向；R 是由单位四元数 q 转成的旋转矩阵；S 是对角缩放矩阵，s_x、s_y、s_z 是三个主轴方向的标准差（训练时存对数尺度，经指数激活保证为正）。G 不带归一化常数，峰值为 1。如果直接优化 Σ 的 6 个元素，Σ 可能变得不再半正定，所以要拆成 R 和 S（3DGS 论文式 (6)）。Ha 的像素高斯取 R=I、s_x=s_y=s_z=s，即 Σ=s²I，是最简单的特例。"
+    },
+    {
+     "tex": "\\Sigma' = J\\,W\\,\\Sigma\\,W^{\\top}J^{\\top},\\qquad J = \\begin{pmatrix} f_x/z & 0 & -f_x x/z^{2} \\\\ 0 & f_y/z & -f_y y/z^{2} \\end{pmatrix}",
+     "explain_zh": "这是 3DGS 论文式 (5)。W 是世界坐标到相机坐标的旋转部分，属于外参（见 g-pinhole）。(x, y, z) 是高斯中心在相机坐标下的位置；f_x、f_y 是以像素为单位的焦距。J 是透视投影 (u, v)=(f_x x/z, f_y y/z) 在高斯中心处的雅可比，也就是把非线性的投影在局部近似成仿射变换，这是 EWA 的核心近似。Σ' 是 2×2 的屏幕空间协方差（论文先写成 3×3 再去掉第三行第三列，两者等价），单位是像素²。官方 CUDA 实现（forward.cu 的 computeCov2D）还会在 Σ' 的对角线上各加 0.3 像素² 作为低通，保证每个斑的标准差至少约 0.55 像素；再以 ceil(3·√λ_max) 作为斑的半径（λ_max 是 Σ' 的最大特征值），据此确定它覆盖哪些 tile。"
+    },
+    {
+     "tex": "\\alpha_i = \\min\\!\\Big(0.99,\\ o_i\\,\\exp\\!\\big(-\\tfrac{1}{2}\\mathbf{d}_i^{\\top}\\Sigma_i'^{-1}\\mathbf{d}_i\\big)\\Big),\\qquad C = \\sum_{i=1}^{N}\\mathbf{c}_i(\\mathbf{v})\\,\\alpha_i\\prod_{j=1}^{i-1}(1-\\alpha_j)",
+     "explain_zh": "i 是覆盖该像素的所有高斯，按深度从近到远编号。d_i 是像素中心到第 i 个斑中心的 2D 偏移（单位为像素）。o_i∈(0,1) 是学到的不透明度，经 sigmoid 激活。α_i 是这个高斯在该像素处的实际 alpha，上限截断为 0.99，小于 1/255 的直接跳过（论文附录 C）。c_i(v) 是沿观察方向 v 由球谐算出的颜色，c(v)=Σ_{l=0}^{3}Σ_{m=−l}^{l} k_{lm} Y_{lm}(v)，每个通道 16 个系数。Π(1−α_j) 是透射率 T_i；论文要求累计不透明度不超过 0.9999，代码里表现为 T 降到 0.0001 以下就停止累加。这个式子与 NeRF 的离散体渲染完全同形（见 n-nerf 第 3 个公式），区别只在 α 从哪里来：NeRF 由 σδ 算出，3DGS 由 2D 高斯的衰减乘以不透明度算出。"
+    },
+    {
+     "tex": "\\boldsymbol{\\mu}_{k}(u,v) = R_k^{\\top}\\Big(D_k(u,v)\\,K_k^{-1}[u,\\,v,\\,1]^{\\top} - \\mathbf{t}_k\\Big),\\qquad \\Sigma = s^{2}\\mathbf{I}_3,\\ \\ s = c\\,\\frac{D_k(u,v)}{f_k}\\ \\big(c=\\mathcal{O}(1)\\big),\\ \\ o = 1,\\ \\ \\mathbf{c} = I_k(u,v)",
+     "explain_zh": "这是 Ha et al. Sec. 3.1 和附录 A.3 的解析像素高斯，公式由本文按针孔模型整理。k 表示第 k 个输入视角；(u, v) 是像素坐标；D_k(u, v) 是该像素沿光轴的 z 深度（附录 A.1 用 s_k=z_k−D_k 定义有符号距离，说明 D 是 z 深度而不是沿射线的距离），来自 RAFT-Stereo 或深度传感器；K_k 是内参，[R_k|t_k] 是世界到相机的外参；μ_k 是反投影得到的世界坐标中心。s 是各向同性的尺度（标准差）。论文只说尺度“使其在源图中的投影恰好覆盖一个像素”，没有给出公式。按针孔模型，一个像素在深度 z 处对应的物理宽度约为 z/f，所以 s=c·D/f，c 是 1 左右的常数（c=1 时源图中投影标准差为 1 px，c=0.5 时为 0.5 px），确切取值以作者实现为准。由于光栅器会加 0.3 px² 的低通，无论 c 取多小，投影斑的标准差都不低于约 0.55 px。o=1 表示完全不透明；颜色直接取像素值，不用球谐；旋转取单位阵（各向同性时旋转没有意义）。每个视角单独光栅化，输出 warp 图 𝓘_k^t、累计 alpha α_k^t 和深度 𝒟_k^t。"
+    }
+   ],
+   "worked_example_zh": "(a) 一般的 3DGS。相机焦距 f=1000 px，某个高斯直接在相机坐标系中给出（即 W=I）：中心 (0, 0, 2) m，尺度 s=(0.02, 0.005, 0.005) m，R=I，不透明度 o=0.8。于是 Σ=diag(4×10⁻⁴, 2.5×10⁻⁵, 2.5×10⁻⁵) m²。中心在光轴上（x=y=0），J 的第三列为 0，J=(f/z)[I₂ | 0]，其中 f/z=500 px/m，所以 Σ'=diag(500²×4×10⁻⁴, 500²×2.5×10⁻⁵)=diag(100, 6.25) px²，即横向 σ=10 px、纵向 σ=2.5 px 的扁椭圆。官方实现加上 0.3 的低通后变为 diag(100.3, 6.55)，半径为 ceil(3×√100.3)=31 px。注意代码按最大特征值取一个正方形外接框 63×63 px，所以即使椭圆很扁，它也会被登记到 4–5 个 16 px 宽的 tile 行和列上。考虑距中心 d=(5, 2) px 的像素：指数项为 −½(25/100.3 + 4/6.55)=−0.430，α=0.8×e^{−0.430}=0.52。如果这个红色高斯后面还有一个在该像素处 α=0.9 的蓝色高斯，像素颜色为 0.52×红 + (1−0.52)×0.9×蓝 = 0.52 红 + 0.43 蓝，剩余透射率 0.48×0.1=0.048。\n(b) Ha 的像素高斯（取 c=1）。输入相机 f=1000 px，某像素深度 z=2.0 m，于是 s≈2 mm，在源图中投影标准差为 1 px。目标相机就在旁边，看这个点的深度 z'=2.2 m，f'=1000 px，投影后 σ≈1000×0.002/2.2≈0.91 px，方差 0.83，加 0.3 低通后为 1.13 px²（σ≈1.06 px），半径 ceil(3×1.2)=4 px（代码求特征值时有一个 0.1 的下限，所以按 √1.44 计，结果仍是 4 px）。中心处 α=min(0.99, 1×1)=0.99，偏离 1 px 处 α=e^{−0.5/1.13}=0.64。相邻源像素在目标图中相距约 0.91 px，而每个斑的 σ≈1.06 px，所以斑与斑大量重叠。即使目标相机靠近到 z'=1.0 m，相邻源像素在目标图中相距约 2 px，斑的 σ 也放大到约 2 px，依然连成一片；“一点一像素”的点溅射此时会每隔一个像素留下一个空洞，形成网状空洞。另一方面，如果两个视角看到的同一表面因深度误差相差几毫米，放在一次渲染里时两者会按深度交替“胜出”，形成 z-fighting 斑点。这就是 Ha 坚持每个视角单独渲染的原因。\n(c) 成本对比。3DGS 在 Mip-NeRF360 上迭代 7K 步用时 6m25s，PSNR 25.60；迭代 30K 步用时 41m33s，PSNR 27.21，渲染 134 fps，模型 734 MB。Ha 对 K=4 个 1352×1014 视角做前向 splat 共 10 ms（表 4）。它不做任何优化，只剩下“渲染”这一半。",
+   "pitfalls_zh": [
+    "误以为 3DGS 的“实时”包括重建。3DGS 的 30 fps 以上只指渲染；在 Mip-NeRF360 上重建仍要 6–41 分钟，而且需要 SfM 点和密集视角。Quark 在 Sec. 2.1 明确说，Gaussian splats“像 NeRF 一样需要缓慢、离线的逐场景过程”。表 2 中 3DGS 的 29.82 dB 与 Quark 的 31.31 dB 相比时要记住：前者是离线优化的结果，后者是 32 ms 前馈推理的结果。",
+    "混淆不透明度 o 与像素上的 alpha。o 是高斯本身的属性；像素上的 α 还要乘以 2D 高斯的衰减，并被截断到 0.99。Ha 所说“完全不透明”（o=1）的高斯，在斑的边缘 α 依然很小，在中心也只有 0.99。不过相邻斑大量重叠，所以 Ha 的累计 alpha 图 α_k^t 在有数据的表面处接近 1、在空洞处接近 0，正好可以当作“这个视角在这里有没有数据”的掩码，送进融合网络。",
+    "以为排序是逐像素精确的。3DGS 每帧按“tile ID + 高斯中心的视空间深度”做一次全局排序，并不对每个像素单独排序。视角变化时，两个重叠高斯的前后顺序可能突然交换，产生跳变（popping），这是 3DGS 视频闪烁的来源之一。这也说明，把多个视角的高斯放在一起渲染，会在深度相近处产生 z-fighting。",
+    "忽视 EWA 近似和各向同性假设的适用范围。雅可比 J 只在高斯中心处线性化，所以大高斯或广角画面边缘处误差较大。0.3 px² 的固定低通会在拉近或拉远时引起锯齿或变粗，Mip-Splatting 专门处理了这个问题（见 a-3dgs-ext）。Ha 的像素高斯是各向同性的，忽略了表面倾斜：在掠射角下，真实足迹应该是拉长的椭圆，用圆斑近似就可能出现拉伸或缝隙。"
+   ],
+   "in_quark": {
+    "used": false,
+    "where": "Sec. 2.1（表示综述）；Sec. 3.2.2（Render to Input Views 中的双线性 splat）；Sec. 4.1 表 2、表 3 与图 5、图 6",
+    "how_zh": "Quark 不使用 3D 高斯，3DGS 在文中扮演三种角色。① 对照路线。Sec. 2.1 指出，Gaussian splats 虽然渲染快，但“和 NeRF 一样需要缓慢、离线的逐场景计算”；相比之下，LDM 的二维层结构可以用高效的 2D 网络来求解。② 数字对照。表 2 中，DL3DV 上 3DGS 为 29.82/0.919/0.120，Quark 为 31.31/0.932/0.103。表 3 的数值取自 3DGS 论文：3DGS-30K 在 Mip-NeRF360 上为 27.21（Quark 26.60），在 Tanks&Temples 上为 23.14（Quark 23.60），在 Deep Blending 的 Playroom 场景上为 30.04（Quark 23.61）。Sec. 4.1 说 Quark、Quark+ 与 3DGS 看起来同样清晰，但 3DGS 需要昂贵的离线优化。③ 相似的算子。Sec. 3.2.2 中，把中间 LDM 渲染回输入视角时用的是“双线性 splat 加 over 合成”，作者强调 splat 避开了昂贵的光线追踪或光栅化。它和 3DGS 的斑一样，都是“把基元往图像上抹”，只是核函数是双线性而不是高斯；而且 LDM 的层本身已按视差带排好顺序，按层 over 合成即可，不需要对基元排序。懂了 3DGS，就能看清两者的取舍：3DGS 重建一次、之后任意视点都能廉价渲染；Quark 每个目标视角都要重新推理，换来的是完全不需要优化。"
+   },
+   "in_ha": {
+    "used": true,
+    "where": "Sec. 3.1（Forward Warping with 3D Gaussians）；附录 A.3（Dense Pixel-sized 3D Gaussians，图 10）；图 4；Sec. 4 实现说明；Sec. 4.5 消融 No Blending；表 4",
+    "how_zh": "这是 Ha et al. 流程的第一步。按 Sec. 3.1，对 K 个最近输入视角中的每个像素，用深度 D_k^t 和相机位姿确定一个各向同性、完全不透明的 3D 高斯的位置，颜色取该像素值，尺度使其在源图中恰好覆盖 1 个像素，由此得到每个视角的前向渲染图 𝓘_k^t、累计 opacity α_k^t 和深度 𝒟_k^t。Sec. 4 写明“用原版 3D Gaussian splatting 代码做前向渲染”，表 4 中这一步耗时 10 ms（DyNeRF，1352×1014，K=4）。作者做了两个与主流相反的选择。① 不用网络预测高斯参数，这一点不同于 GPS-Gaussian、Tele-Aloha、GS-LRM。他们观察到，在稠密像素网格上，网络预测的尺度、不透明度、旋转会收敛到近似常数，预测的颜色也与输入图一致。附录 A.3 还说，网络可以学会放大背景高斯的尺度去填补遮挡空洞，但这往往会降低整体 PSNR，所以补洞交给后面的融合网络。② 不把所有视角一次性渲染。图 4(a) 和消融 No Blending（单次渲染全部高斯，图 4 与 Sec. 4.5 引用 GPS-Gaussian；Sec. 3.1 正文则把这种做法归于 GS-LRM）表明，这样会产生飞点、空洞，边缘还会因 z-fighting 变差，PSNR 只有 24.64，STED 为 483.3。为什么用高斯而不用传统点溅射？附录 A.3 和图 10 给出的理由是：高斯能处理遮挡，像素之间不留缝，边缘也不出锯齿。如果不理解 3DGS 的 α 是怎么算的、又是怎样从前到后混合的，就读不懂 α_k^t 为什么能充当空洞掩码，也读不懂融合公式 I_FG 为什么要用 α_k·w_k 加权。"
+   },
+   "in_field_zh": "3DGS 是 2024 年后远程临场系统最常用的持久表示。一旦得到高斯集合，无论是左右眼双目、多个观众，还是 HMD 要求的 72–90 Hz，都只是多做几次廉价的光栅化。而 Quark、Ha 这类与目标视角绑定的方法，每多一个视点就要多跑一次网络。由此出现了三条延伸。① 前馈 3DGS（GPS-Gaussian、pixelSplat、MVSplat）：每帧从少量相机直接预测像素对齐的高斯，适合人像实时采集（a-ff-3dgs）。② 高斯的压缩与流式传输：锚点资料中的 Tele360 用视频编码器把高斯参数图（Gaussian maps）推流到远端，GS-SCNet 把多视角编码与前馈 3DGS 联合设计以节省码率（见 a-compression）。③ 动态高斯（见 n-dynamic）。工程上还要注意三点：3DGS 的存储与显存开销（大场景模型数百 MB，渲染时光栅器还需额外 30–500 MB，原型实现的训练峰值显存可超过 20 GB）、排序跳变带来的时间不稳定，以及抗锯齿（见 a-3dgs-ext）。",
+   "resources": [
+    {
+     "title": "3D Gaussian Splatting for Real-Time Radiance Field Rendering (Kerbl et al., SIGGRAPH 2023)",
+     "url": "https://arxiv.org/abs/2308.04079",
+     "type": "paper",
+     "note_zh": "原论文。Sec. 4 讲可微 3D 高斯与 EWA 投影（式 5、6）；Sec. 5.2 讲自适应致密化（τ_pos=0.0002，每 100 步一次，分裂时尺度除以 φ=1.6，每 3000 步重置 α）；Sec. 6 讲 tile 光栅器；附录 C 给出数值细节（α 上限 0.99，跳过阈值 1/255，累计不透明度上限 0.9999）；表 1 列出训练时间、fps 和模型存储。项目页见 https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/"
+    },
+    {
+     "title": "Mathematical Supplement for the gsplat Library (Ye & Kanazawa, 2023)",
+     "url": "https://arxiv.org/abs/2312.02121",
+     "type": "tutorial",
+     "note_zh": "逐式推导投影、2D 协方差和 alpha 合成的前向与反向传播，适合对照代码亲手推一遍梯度。配套开源库见 https://github.com/nerfstudio-project/gsplat"
+    },
+    {
+     "title": "MIT 6.S980 Machine Learning for Inverse Graphics (Sitzmann, Fall 2023)",
+     "url": "https://www.scenerepresentations.org/courses/2023/fall/inverse-graphics",
+     "type": "course",
+     "note_zh": "看 “Differentiable Rendering”（球面追踪、体渲染、光场渲染）和 “Differentiable Rendering II: Gaussian Splatting” 两讲，都有录像和幻灯片，可以把 NeRF 与 3DGS 放在同一个可微渲染框架下理解。"
+    },
+    {
+     "title": "graphdeco-inria/diff-gaussian-rasterization（官方 CUDA 光栅器）",
+     "url": "https://github.com/graphdeco-inria/diff-gaussian-rasterization",
+     "type": "code",
+     "note_zh": "Ha et al. 用的就是这套代码。建议读 cuda_rasterizer/forward.cu：computeCov2D（其中的 +0.3 低通）、以 ceil(3√λ_max) 作为半径决定覆盖哪些 tile，以及逐 tile 从前到后的混合（α 截断到 0.99，小于 1/255 跳过，T<0.0001 时停止）。"
+    },
+    {
+     "title": "CMU 16-825 Learning for 3D Vision — Lecture 12: Differentiable Primitive Rendering (Meshes, Gaussians)",
+     "url": "https://learning3d.github.io/schedule.html",
+     "type": "course",
+     "note_zh": "2026 秋季课表第 12 讲，建议阅读 Soft Rasterizer 和 3DGS 原文。适合在学完第 9–10 讲的体渲染与 NeRF 后，对照理解“基元光栅化”这条路线。"
+    }
+   ],
+   "self_check": [
+    {
+     "q_zh": "一个各向同性高斯，s=1 cm，位于相机正前方 z=4 m 的光轴上，焦距 f=800 px。忽略 0.3 的低通，它在屏幕上的标准差和 3σ 半径各是多少像素？如果相机前移到 z=1 m 呢？",
+     "a_zh": "σ'=f·s/z=800×0.01/4=2 px，3σ 半径为 6 px。z=1 m 时 σ'=8 px，半径 24 px。斑的尺寸按 1/z 缩放，这正是雅可比 J 中 f/z 一项的作用。"
+    },
+    {
+     "q_zh": "Ha 为什么说“用网络预测像素高斯的参数没有必要”？这个结论成立的前提是什么？",
+     "a_zh": "在稠密的像素网格上，相邻像素的高斯本来就铺满了表面，网络预测出的尺度、不透明度、旋转趋于常数，颜色也等于像素值（Sec. 3.1），所以解析设定更省事。这有两个前提：一是有足够好的逐像素深度，因为高斯的位置完全来自深度；二是空洞交给后续的融合网络和背景图 I_BG 处理（附录 A.3 提到让网络靠放大尺度来补洞会降低 PSNR）。在深度较差、半透明、头发或掠射角表面等情况下，常数参数就不够用了。"
+    },
+    {
+     "q_zh": "Ha 为什么要把 K 个视角分别光栅化，而不像 GPS-Gaussian 那样把所有高斯放进一次光栅化？这样做的代价是什么？",
+     "a_zh": "各视角的深度都有误差。同一表面来自不同视角的高斯深度很接近、互相穿插，一次性按深度混合就会出现 z-fighting 和飞点（图 4a；消融 No Blending 的 PSNR 为 24.64、STED 为 483.3）。分开渲染后，由融合网络逐像素决定该相信哪个视角。代价是：光栅化次数和后续网络的输入都随 K 线性增长（图 8），并且必须有一个学出来的融合网络。"
+    }
+   ],
+   "prereqs": [
+    "r-raster",
+    "r-alpha",
+    "r-appearance"
+   ]
+  },
+  {
+   "id": "n-generalizable",
+   "name_zh": "可泛化 / 前馈式新视角合成",
+   "name_en": "Generalizable / feed-forward novel view synthesis",
+   "tldr_zh": "可泛化（前馈式）新视角合成先在大量场景上训练一个网络，推理时只做一次前向：输入几张已标定的邻近视图，直接输出新视角图像，或者输出一个可以渲染的中间表示，全程不做逐场景优化。Quark 和 Ha et al. 都属于这一类，它们的基线 IBRNet、ENeRF、GPNR、GPS-Gaussian 也是。",
+   "intuition_zh": "在 NeRF 和 3DGS 里，“学习”是针对单个场景的：参数 φ 就是这个场景本身，训练完换一个场景就作废。可泛化方法把学习挪到了“跨场景”这一层：训练一个网络 F_θ，让它学会“如何从几张照片推断几何和外观”这种通用能力，推理时 θ 固定不变。好处是新场景来了只需一次前向（几十毫秒到几秒），而且只用 2–8 张稀疏的图就够。代价是质量受训练数据分布的限制，遇到训练中没见过的场景类型会退化。\n\n这条路线的代表方法，可以按“网络在哪里利用几何”分成四类。① 像素对齐特征加 NeRF：pixelNeRF（CVPR 2021）把 3D 点投影到每张输入图上，取出 CNN 特征喂给 NeRF 的 MLP，多个视角的特征取均值；MVSNeRF 用平面扫描代价体提供几何线索（见 i-psv、d-mvs）。② 学习式 IBR：IBRNet（CVPR 2021）不直接回归颜色，而是为邻近视图的像素颜色预测混合权重，并用一个 ray transformer 沿射线推理密度；ENeRF（SIGGRAPH Asia 2022）先用级联代价体估计深度，只在表面附近采少量点，比此前的可泛化辐射场方法至少快 60 倍。③ 无几何 Transformer：GPNR 沿极线取 patch 送进 Transformer；LVSM（2024）连极线和平面扫描都不用，只用 Plücker 射线嵌入标记像素 patch，由 Transformer 直接输出目标视图（见 a-geometry-free）。④ 前馈 3DGS：pixelSplat、MVSplat（代价体加深度，22 fps）、GPS-Gaussian（面向人像，2K 分辨率）为每个输入像素预测一个高斯，得到一个能从任意视点廉价渲染的持久表示（见 a-ff-3dgs）。\n\n这些方法都要回答同一个核心问题：多个视角的信息怎么聚合？常见的选项有：直接拼接（依赖视角顺序，视角数也必须固定）；取均值或方差（pixelNeRF、IBRNet，简单、与顺序无关，但表达力弱）；反复 max-pool（DeepView）；跨视角自注意力（NerFormer，代价为 O(M²)）。Quark 在 Sec. 2.2 逐一分析了这些选项，并在 Sec. 3.3 给出自己的 One-to-many attention；Ha 则用 U-Net 做通道拼接（视角数固定为 K）。另一个核心问题是“输出什么”：直接回归颜色，还是对输入像素做凸组合（即 IBR）。两篇锚点论文都选了 IBR：高频细节直接取自全分辨率的输入像素，网络只需在低分辨率上决定每个像素“取谁的颜色”。\n\n在这张地图上，两篇锚点论文的位置很清楚。Quark 是学习式 IBR，加上与目标视角对齐的分层表示（LDM），再加上学习式迭代细化（见 l-iterative、i-layered），几何完全是端到端学出来的。Ha 的几何由外部给定（立体深度加 TSDF），用解析的像素高斯做前向 warp，只用一个小 U-Net 学融合权重，把“学习”压到了最少。两者都在每一帧、每个目标视角上重新计算，不保留持久的 3D 模型，这与前馈 3DGS“重建一次、渲染多次”的做法形成对照。",
+   "analogy_zh": "逐场景优化像是给每座城市单独背一张地图。可泛化方法像是培养一位经验丰富的向导：他没来过这座城市，但看几张街景照片，就能推断出街道怎么连、哪栋楼挡住了哪栋。向导的本事取决于他以前走过多少种城市，也就是训练数据。到了完全陌生的地形，比如训练时只见过室内、测试时却是户外，他就会出错。",
+   "equations": [
+    {
+     "tex": "\\text{per-scene: }\\ \\phi^{*} = \\arg\\min_{\\phi}\\sum_{i=1}^{N_{\\mathrm{img}}}\\mathcal{L}\\big(R(\\phi, P_i),\\, I_i\\big)\\qquad \\text{feed-forward: }\\ \\theta^{*} = \\arg\\min_{\\theta}\\ \\mathbb{E}_{\\mathcal{S}}\\Big[\\mathcal{L}\\big(F_{\\theta}(\\{I_m, P_m\\}_{m=1}^{M},\\ P_t),\\ I_t\\big)\\Big]",
+     "explain_zh": "逐场景优化中，φ 是某一个场景的参数（NeRF 的 MLP 权重或 3DGS 的高斯集合），R 是可微渲染器，P_i 是第 i 张训练图的相机参数，I_i 是这张图，𝓛 是光度损失，N_img 是该场景的图片数，通常为几十到数百张。前馈式中，θ 是网络参数，𝒮 是训练场景的分布（期望对场景和目标视角的随机抽样取），{I_m, P_m} 是 M 张输入图及其相机（Quark 中 M=8，Ha 中 K=4 或 2），P_t、I_t 是留出的目标视角及其真值，F_θ 一次前向就输出目标图。两者的区别在于：φ* 每换一个场景都要重新求解，θ* 只需训练一次，推理时保持固定。"
+    },
+    {
+     "tex": "\\mathbf{c}(\\mathbf{x}) = \\sum_{m=1}^{M} w_m(\\mathbf{x})\\, I_m\\big(\\pi_m(\\mathbf{x})\\big),\\quad w_m = \\frac{\\exp(s_m)}{\\sum_{m'=1}^{M}\\exp(s_{m'})},\\qquad \\mathbf{c}_{\\mathrm{target}} = \\mathcal{O}\\Big(\\sum_{m=1}^{M}\\beta_m\\cdot\\mathcal{P}^{T}_{\\theta}(\\mathbf{I},\\mathbf{d}),\\ \\sigma\\Big)",
+     "explain_zh": "前两式是学习式 IBR 的通用形式。x 是一个 3D 点（或 LDM 某层上的某个像素）；π_m 是把点投影到第 m 张输入图的函数（见 g-pinhole）；I_m(π_m(x)) 是用双线性插值取到的输入颜色；s_m 是网络给视角 m 的打分，经 softmax 后得到非负且和为 1 的权重 w_m，所以输出颜色是输入颜色的凸组合。第三式是 Quark 的式 (1)：𝒫^T_θ(I, d) 把全分辨率输入图按每层深度 d 反投影到 LDM 的各层（θ 在这里指相机参数，不是网络权重）；β_m 是每层每个像素对 M 个视角的混合权重，由最后一个 Fusion Block 的 One-to-many attention 给出，softmax 推迟到上采样到目标分辨率之后才施加（Sec. 3.2.3）；σ 是各层的 alpha；𝒪 是从后往前的 over 合成。"
+    },
+    {
+     "tex": "I_{\\mathrm{FG}} = \\frac{\\sum_{k=1}^{K}\\mathcal{I}_k\\,\\alpha_k\\,w_k}{\\sum_{k=1}^{K}\\alpha_k\\,w_k},\\qquad I = (1-w_{\\mathrm{BG}})\\,I_{\\mathrm{FG}} + w_{\\mathrm{BG}}\\,I_{\\mathrm{BG}}",
+     "explain_zh": "这是 Ha et al. Sec. 3.3 式 (4)–(5)。原文把式 (4) 写成对“分式”求和，分子分母中的 α_k w_k 会直接约掉，显然是漏写了分母的求和号，这里按语义补上。𝓘_k 是第 k 个视角前向 splat 到目标相机后的图；α_k 是它的累计 alpha，在空洞处约为 0；w_k 是 U-Net 预测的逐像素权重；w_BG 是背景权重；I_BG 是网络直接生成的背景图，用来填补所有视角都看不到的遮挡空洞。乘上 α_k，是为了让“在这里没有数据”的视角不参与融合。整张输出中，只有 I_BG 这一项的像素是网络“生成”的，其余都是真实像素重新加权的结果。"
+    },
+    {
+     "tex": "\\boldsymbol{\\mu}_m(u,v) = \\mathbf{C}_m + D_m(u,v)\\,\\mathbf{r}_m(u,v),\\qquad \\big(\\mathbf{s},\\,\\mathbf{q},\\,o,\\,\\mathbf{c}\\big)_m(u,v) = h_{\\theta}\\big(\\mathbf{f}_m(u,v)\\big)",
+     "explain_zh": "这是前馈 3DGS（pixelSplat、MVSplat、GPS-Gaussian）中的“像素对齐高斯”。C_m 是第 m 个输入相机的光心；r_m(u, v) 是像素 (u, v) 的射线方向（如果 D 是 z 深度，r 应取 z 分量为 1 的未归一化方向；如果 D 是沿射线的距离，r 取单位向量）；D_m 是网络预测的深度（或由代价体、立体匹配得到），它决定了高斯中心 μ；f_m 是该像素的特征；h_θ 是预测头，输出尺度 s、旋转四元数 q、不透明度 o 和颜色 c。整个场景由 M×H×W 个高斯组成，可以用 3DGS 光栅器从任意视点渲染。Ha 取同样的 μ，但把 (s, q, o, c) 换成了解析常数（见 n-3dgs 第 4 个公式）。"
+    }
+   ],
+   "worked_example_zh": "(1) 时间预算。远程临场要求 30 fps，即每帧 33 ms。逐场景方法：NeRF 每个场景 1–2 天，3DGS 在 Mip-NeRF360 上 41 分钟；即使是流式逐帧优化的 3DGStream，每帧也要约 12 s。前馈方法（同一张 A100，Quark 表 1，1024×768，重建加渲染）：Quark 32.2 ms，Quark+ 91.9 ms，ENeRF 205 ms，SIMPLI 4.4 s，GPNR 25 s。Ha 的表 4：splat 10 ms + TSDF 6 ms + 融合 23 ms（TensorRT）≈ 39 ms，但不含 RAFT-Stereo 深度估计；Ha 文中测得 GPS-Gaussian 为 143.4 ms。只有前馈路线有可能挤进 33 ms。\n(2) 为什么要学混合权重。设某个目标像素在 3 个输入视角中取到的颜色为 I₁=(0.80, 0.20, 0.20)、I₂=(0.78, 0.22, 0.20)，两者都看到了红色表面；I₃=(0.20, 0.20, 0.80)，它被前景的蓝色物体挡住了。如果取均值：R=(0.80+0.78+0.20)/3=0.59，G=0.21，B=(0.20+0.20+0.80)/3=0.40，结果是偏紫的重影。如果网络识别出视角 3 被遮挡，给出打分 s=(2.0, 1.5, −1.0)，softmax 计算为 e²=7.389、e^{1.5}=4.482、e^{−1}=0.368，总和 12.239，得到 w=(0.604, 0.366, 0.030)。输出 R=0.604×0.80+0.366×0.78+0.030×0.20=0.775，G=0.207，B=0.218，接近真实的红色。两篇论文的消融正好量化了这一点：Quark 把跨视角注意力退化为均值（No cross attention）后，PSNR 从 30.41 降到 29.73；Ha 改用按相机距离的固定权重（Distance-based Blending）只有 26.08 dB，完整模型为 31.17 dB。\n(3) Ha 式融合如何处理空洞。设 K=2，某个像素处 𝓘₁ 为红色，α₁=1，w₁=0.7；𝓘₂ 在此处是空洞，α₂=0，w₂=0.3。I_FG=(红×1×0.7 + 任意×0×0.3)/(1×0.7+0×0.3) = 红。可见没有数据的视角会自动退出。如果两个 α 都是 0，分母为 0（实现中需加一个小 ε），这时就要靠 w_BG→1，用背景图 I_BG 来填补；损失 L_Mask 正是鼓励 w_BG 在空洞处变大。",
+   "pitfalls_zh": [
+    "以为“可泛化”就没有域差。Quark 的训练集是 Spaces、RFF、Shiny、SWORD（全是静态场景），而 RFF 和 Shiny 同时也是它的测试集，论文没有说明是否剔除了测试场景。Ha 用 3 个 DyNeRF 场景训练，却在同一厨房、同一相机阵列下的另外两个 DyNeRF 场景上测试，而 IBRNet、ENeRF 用的是官方预训练权重。在训练中未出现的户外数据 ENeRF-Outdoor 上，Ha 的 PSNR 为 24.01，反而低于 ENeRF 的 25.79（不过在同样未参与训练的 D3DMV 上，Ha 领先最多：32.58 对 27.79）。读结果表时，先看“谁在什么数据上训练”。",
+    "忽视视角选择。两篇论文都只用离目标最近的少数视角：Quark 用 M=8，训练时从最近的 16 个中随机抽 8 个；Ha 用 K=4 或 2。这既是速度的来源，也是失败的来源。Quark 在视角覆盖差的 Deep Blending（Playroom 场景）上只有 23.61 dB（3DGS 为 30.04）。目标相机移动导致输入视角集合切换时，两者都会跳变或闪烁。",
+    "比较运行时间时不问“算了哪些环节”。Quark 的 32.2 ms 包括重建和渲染，但不含采集和传输；Ha 的约 39 ms 不含立体深度估计；LVSM 的 FPS 是在物体级、256×256 下测的。此外，Quark 和 Ha 的表示都绑定在目标视角上，双目 HMD 或多个观众需要成倍计算；前馈 3DGS 生成一次高斯，就能供多个视点渲染。",
+    "以为 IBR 的凸组合什么都能表达。输出颜色只能落在输入颜色的凸包之内：输入中从未出现过的高光位置、所有视角都被遮挡的区域，都无法正确生成。Quark 靠每个视角重新生成加射线编码来“近似”反射（Sec. 4.3），Ha 靠一张背景图 I_BG 补洞。无几何的 LVSM 可以“想象”出内容，但目前分辨率较低（场景级评测在 256×256 上进行）。"
+   ],
+   "in_quark": {
+    "used": true,
+    "where": "全文定位（标题中的 General、Sec. 1）；Sec. 2.2 Generalizable Neural Algorithms；Sec. 3（输入编码、迭代更新、Sec. 3.3 One-to-many attention、IBR 渲染）；Sec. 3.4 训练；Sec. 4.1 表 1；Sec. 4.2 消融",
+    "how_zh": "Quark 本身就是一个可泛化前馈网络。它在 Spaces、RFF、Shiny、SWORD 的混合数据上训练（Sec. 3.4，16×A100，600K 步），推理时对任何新场景只做一次前向。Sec. 2.2 把“generalizable”定义为两层意思：不需要按场景训练，而且只用少量宽基线图像也能得到高质量结果。该节的主题是多视角聚合，逐一分析了各种做法：拼接依赖视角顺序、视角数也要固定；RNN 允许可变数量但不具备顺序不变性；均值（pixelNeRF）和方差（IBRNet）与顺序无关但表达力有限；反复 max-pool（DeepView）是强大的集合聚合器；AggTransformer 只做一次 softmax 聚合；NerFormer 的代价是 O(M²)。Quark 的 One-to-many attention（Sec. 3.3）目标是兼得 AggTransformer 的效率与 Transformer 的大部分表达力。它直接比较了三个可泛化基线（在 RFF+IBRNet 数据上重训）：GPNR（极线 patch 加 Transformer，25 s）、ENeRF（单层带厚度的深度，205 ms）和 SIMPLI（同样采用 render-and-refine 加 LDM，4.4 s）。在 RFF、Shiny、N3DV 上 Quark 都更好，例如 N3DV 上 Quark 31.57，ENeRF 29.86。输出方式属于学习式 IBR：式 (1) 对全分辨率输入像素做凸组合。消融中把它换成直接回归 RGB 后，PSNR 从 30.41 降到 29.18，是所有消融项里退化最大的一项。需要注意，Quark 没有与 pixelSplat、MVSplat、GPS-Gaussian、LVSM 等同期前馈方法做比较。"
+   },
+   "in_ha": {
+    "used": true,
+    "where": "Sec. 1；Sec. 2（Neural-based / Point-based View Synthesis 段）；Sec. 3.1–3.3；Sec. 4 实现说明与 4.1 Baselines；附录 A.4、A.5、A.7",
+    "how_zh": "Ha et al. 同样不做逐场景优化（Sec. 2 的 Neural-based View Synthesis 段末写道 “does not require per-scene optimization”），但它是一个“半学习”的前馈系统。几何来自外部（RAFT-Stereo 或传感器深度，再加 TSDF），高斯参数解析设定，只有融合网络是学出来的。融合网络是一个 4 层 U-Net，输入 9K+1 个通道，包括 K 张 warp 后的 RGB（3K）、K 张深度、K 张 alpha、1 张 TSDF 深度，以及 4 组各 K 通道的相机特征（附录 A.4）；输出 K 个逐像素权重、背景权重和背景图，对应上面的第 3 个公式。训练数据是 ScanNet、Google Spaces 和 3 个 DyNeRF 场景，单张 V100 迭代 150K 次，每次迭代随机选 1 个目标视角和 K=4 个输入视角（Sec. 4、附录 A.5）。Sec. 4.1 的四个基线全是可泛化方法：FWD（深度前向 warp 加融合）、IBRNet、ENeRF，以及 GPS-Gaussian（前馈像素高斯）；其中 IBRNet 和 ENeRF 用作者发布的预训练权重，FWD 和 GPS-Gaussian 的预训练模型无法泛化到测试集，作者按本文数据和训练策略重训。Sec. 2 还把 pixelNeRF、MuRF、FWD、IBRNet 归为“难以处理动态场景”的可泛化方法，把 pixelSplat、MVSplat、LaRa、Splatter Image、GS-LRM 等归为面向稀疏静态场景的前馈模型，并指出这些方法连同 GPS-Gaussian、Tele-Aloha 这类动态人像前馈模型，都没有显式处理输入深度的噪声，因而会出现时间和视角上的不一致。消融显示，按距离加权的融合只有 26.08 dB，完整模型为 31.17 dB：几乎全部提升都来自“有一个学出来的融合网络”。"
+   },
+   "in_field_zh": "这是实时远程临场的主战场。无论是 Project Starline/Google Beam 这类固定多相机舱体，还是 Tele-Aloha 的 4 相机方案，都必须在每帧 33 ms 内用当下的图像给出结果。系统设计上有三个取舍。① 表示绑定目标视角，还是用像素对齐的持久 3DGS。前者如 Quark、Ha，适合“服务端按观看者头部位姿渲染，再推送 2D 视频”；后者如 GPS-Gaussian、LVT、Tele360，适合把表示推送到端侧，再做多视点渲染。② 几何是学出来的（Quark、MVSplat），还是外部给定的（Ha、Starline 式 TSDF）。外部给定的几何可解释、可调参，但受深度前端的限制。③ 训练数据要覆盖目标域，包括人像、头发、快速手势和户外场景。2025 年之后的前沿方向有：无位姿或在线标定（AnySplat、LiveStre4m）、无几何的大模型（LVSM 及其扩展），以及带时间记忆的前馈模型（见 n-dynamic、a-generalizable-ibr、a-ff-3dgs、a-geometry-free）。",
+   "resources": [
+    {
+     "title": "IBRNet: Learning Multi-View Image-Based Rendering (Wang et al., CVPR 2021)",
+     "url": "https://arxiv.org/abs/2102.13090",
+     "type": "paper",
+     "note_zh": "学习式 IBR 的代表作。读 Sec. 3 的多视角特征聚合（均值和方差）与 ray transformer，理解“预测混合权重而不是颜色”这一设计。Quark 在相关工作中把它作为方差聚合的代表，Ha 用它作基线。项目页见 https://ibrnet.github.io/"
+    },
+    {
+     "title": "MVSplat: Efficient 3D Gaussian Splatting from Sparse Multi-View Images (Chen et al., ECCV 2024)",
+     "url": "https://arxiv.org/abs/2403.14627",
+     "type": "paper",
+     "note_zh": "前馈 3DGS 的代表作：用平面扫描代价体估计深度，再逐像素预测高斯，推理 22 fps，参数量只有 pixelSplat 的 1/10。建议与 Ha 的解析像素高斯对照阅读，看清“网络预测”与“解析设定”的区别。"
+    },
+    {
+     "title": "LVSM: A Large View Synthesis Model with Minimal 3D Inductive Bias (Jin et al., 2024)",
+     "url": "https://arxiv.org/abs/2410.17242",
+     "type": "paper",
+     "note_zh": "无几何 Transformer 的代表作：只用 Plücker 射线嵌入加图像 patch token，不用极线或平面扫描。注意它的场景级评测在 256×256 分辨率下进行，FPS 也是在物体级 256×256 下测的，与 Quark 1080p 实时的定位不同。"
+    },
+    {
+     "title": "MIT 6.S980 Machine Learning for Inverse Graphics — Prior-Based Reconstruction I–III",
+     "url": "https://www.scenerepresentations.org/courses/2023/fall/inverse-graphics",
+     "type": "course",
+     "note_zh": "三讲内容涵盖自编码与 auto-decoding、全局与局部条件化（即 pixelNeRF 式的像素对齐特征）、基于体渲染和光场渲染的极线推理，以及基于注意力的条件化，都有录像和幻灯片，正好覆盖本概念的理论脉络。"
+    },
+    {
+     "title": "CMU 16-825 Learning for 3D Vision — Lecture 15: Multi-view Transformers: View Synthesis",
+     "url": "https://learning3d.github.io/schedule.html",
+     "type": "course",
+     "note_zh": "2026 秋季课表第 15 讲，建议阅读 pixelNeRF、Scene Representation Transformer、LVSM 和 TokenGS，从像素对齐条件化一路讲到无几何 Transformer。"
+    }
+   ],
+   "self_check": [
+    {
+     "q_zh": "Quark 的内部分辨率只有 288×512，为什么能输出 1080p 的图？为什么直接回归 RGB 的变体会变糊？",
+     "a_zh": "因为输出是对全分辨率输入像素的凸组合（式 1）。网络只需在低分辨率上确定深度、alpha 和混合权重，双线性上采样 3.75 倍后，再逐像素到全分辨率输入图里取颜色，高频纹理来自真实像素。直接回归 RGB 时，结果受限于网络的输出分辨率和容量；消融中 PSNR 从 30.41 降到 29.18，LPIPS 从 0.154 升到 0.179。"
+    },
+    {
+     "q_zh": "Ha 的融合网络输入视角数固定为 K，而 Quark 可以做成支持 4–16 个可变输入的版本。这是由什么设计决定的？",
+     "a_zh": "Ha 把 K 个视角的 RGB、深度、alpha 等按通道拼接后送进 U-Net（9K+1 个通道），通道数随 K 固定，而且依赖视角的排列顺序。Quark 用 One-to-many attention 对视角集合做注意力聚合，对视角顺序不敏感，可以接受可变数量的输入。主模型用 M=8 训练，论文另训练了一个支持 4–16 张输入的变体，用于 Spaces 上的基线距离实验。"
+    },
+    {
+     "q_zh": "一个 VR 远程临场场景需要为双眼各渲染 72 Hz 的图像。粗略比较 Quark 和一个前馈 3DGS 方法的计算量。",
+     "a_zh": "Quark 的 LDM 与目标视角绑定，每只眼睛都要完整推理一次：每秒 2×72=144 次，每次约 32–33 ms（A100，表 1），合计每秒约需 4.6–4.8 秒的 GPU 时间，单卡跑不动。前馈 3DGS 每个采集帧（例如 30 fps）只需预测一次高斯，之后双眼 72 Hz 只做光栅化，而 3DGS 的渲染速度可达每秒上百帧；网络推理次数与观看视点数无关。"
+    }
+   ],
+   "prereqs": [
+    "n-nerf",
+    "i-psv",
+    "l-attention"
+   ]
+  },
+  {
+   "id": "n-dynamic",
+   "name_zh": "动态场景与 4D 表示",
+   "name_en": "Dynamic scenes & 4D representations",
+   "tldr_zh": "动态场景方法首先要回答“时间怎么表示”。一种做法是把整段视频拟合成一个 4D 表示，比如变形场加规范空间、时间条件 NeRF、4D 高斯，质量高但只能离线处理。另一种做法是逐帧或流式处理，可以在线、实时，但要另外设法保证时间一致性。Quark 属于逐帧、无状态；Ha et al. 属于逐帧处理、只在深度上保留少量状态的在线方法。",
+   "intuition_zh": "静态的 NeRF 和 3DGS 都默认“同一个空间点在所有照片里都是同一个东西”。场景一动，这个假设就不成立了。最朴素的做法是把每一帧都当作一个独立的静态场景重建一遍（逐帧重建），但对 NeRF 来说这极其昂贵。DyNeRF 论文估算过：一段 18 台相机、30 fps、10 秒长的视频，逐帧训练 NeRF 每帧约需 50 GPU 小时，共约 15,000 GPU 小时，而且得到的只是一串互不相干的快照，帧与帧之间会闪烁。\n\n第一大类思路是“把整段视频拟合成一个 4D 表示”，利用时间上的冗余。① 规范空间加变形场（D-NeRF、Nerfies、HyperNeRF）：假设存在一个处于“标准姿态”的场景，时刻 t 的每个点 x 先由一个网络 Δ(x, t) 映射回规范空间，再去查询颜色和密度。这些方法主要针对单目视频（一台移动的手机拍摄），与多相机阵列是不同的问题。② 时间条件场：DyNeRF（Neural 3D Video，CVPR 2022）为每一帧学一个 1024 维的潜码 z_t，MLP（结构同 NeRF，但前 8 层加宽到 512 通道）以 (x, d, z_t) 为输入，并按帧间差异做重要性采样。它在 8 张 V100 上训练约一周（论文自报约 1.3K GPU 小时，K-Planes 论文折算为 1344 GPU 小时），10 秒视频的模型只有 28 MB。K-Planes 和 HexPlane 把 4D 场分解成 6 个 2D 特征平面，在同一数据上把训练降到 GPU 小时量级：K-Planes（hybrid）约 1.8 小时，HexPlane 约 12 小时（10 万步的短训版约 2 小时）。③ 4D 高斯：4DGS（Wu et al., CVPR 2024）用 HexPlane 式的特征加一个小 MLP，预测每个高斯随时间的位移、旋转和缩放，在 800×800 下达到 82 fps（RTX 3090）；Dynamic 3D Gaussians 让高斯的颜色、不透明度和大小保持不变、只移动和旋转，顺带得到稠密跟踪；Spacetime Gaussians 加入了随时间变化的不透明度；4K4D 用 4D 点云加硬件光栅化，在 ENeRF-Outdoor 上以 4K 分辨率渲染可达 80 fps（RTX 4090）。这些方法渲染都是实时的，但都必须先拿到整段视频再离线优化，所以“渲染实时”不等于“在线”。进阶内容见 a-dynamic-4d。\n\n第二大类是“在线/流式”：每来一帧就更新一次，不能看到未来的帧。3DGStream（CVPR 2024）在上一帧高斯的基础上，只学一个小的“神经变换缓存”（平移和旋转），并自适应地添加新高斯。它每帧约需 12 秒，渲染 200 fps，已经是在线的了，但离 33 ms 还差约 360 倍。完全前馈的方法（ENeRF、Quark、GPS-Gaussian）则把每一帧当作一个新场景，一次推理完成。速度足够，但没有任何时间状态，逐帧误差的随机波动在画面上就表现为闪烁。折中的办法是给前馈系统加一个轻量的递归状态：S^t = U(S^{t−1}, 新观测)。Ha et al. 正是在深度这一层做了最小化的递归：用差分掩码滤波深度，并回灌上一帧的 TSDF 深度。\n\n数据集也要认清楚。最常用的多视角动态数据集是 Li et al. 的 Neural 3D Video：用 21 台 GoPro Black Hero 7 拍摄，2028×2704，30 fps，个别序列剔除了同步失败的相机；官方协议用 18 个视角训练、留出上排中间的 1 个相机评测，场景包括 Sear Steak、Flame Steak 等厨房片段。Quark 称它为 N3DV，Ha 称它为 DyNeRF，其实是同一套数据。此外还有 ENeRF-Outdoor（18 台 1080p 户外相机）和 D3DMV（10 台户外相机）。不同论文在同一个数据集上的评测协议（分辨率、帧段、测试相机）往往不同，数字不能直接横向比较。",
+   "analogy_zh": "想把一段舞蹈拍给远方的人看，有三种做法。① 先录完整段，回去慢慢做一个“会动的雕塑”，这相当于 4D 表示：最精致，但只能事后观看。② 每一帧现场捏一个新泥人，这相当于逐帧前馈：够快，但每个泥人都有些随机差异，连起来看就会“抖”。③ 捏新泥人时参考上一个泥人，只改动变了的地方，这相当于流式或递归状态。Quark 用的是第二种；Ha 在第二种的基础上加了一点第三种，但它只参考上一帧的“骨架”（深度），不参考“表皮”（颜色和融合权重）。",
+   "equations": [
+    {
+     "tex": "\\mathbf{x}_c = \\mathbf{x} + \\Delta_{\\psi}(\\mathbf{x}, t),\\qquad (\\sigma, \\mathbf{c}) = F_{\\Theta}\\big(\\gamma(\\mathbf{x}_c),\\ \\gamma(\\mathbf{d})\\big)",
+     "explain_zh": "规范空间加变形场，这里写的是 D-NeRF 的形式；Nerfies 用 SE(3) 场（每点一个刚体变换），思想相同。x 是时刻 t 观测空间中的一个点；Δ_ψ 是参数为 ψ 的变形网络，输出位移；x_c 是 x 在规范空间中的对应位置；F_Θ 是规范空间里的一个静态 NeRF。所有帧共享同一个 F_Θ，时间上的变化全部由 Δ 来解释，所以天然具备跨帧对应关系。缺点是拓扑变化（比如张嘴、新物体出现）很难用连续形变来描述。"
+    },
+    {
+     "tex": "(\\sigma, \\mathbf{c}) = F_{\\Theta}\\big(\\gamma(\\mathbf{x}),\\ \\gamma(\\mathbf{d}),\\ \\mathbf{z}_t\\big),\\qquad \\mathbf{z}_t \\in \\mathbb{R}^{1024}",
+     "explain_zh": "这是 DyNeRF 的时间条件辐射场。z_t 是第 t 帧可学习的潜码，与网络参数一起优化（潜码学习率是其他参数的 10 倍）；其余符号与 NeRF 相同。它不假设存在规范空间，所以能表达火焰、液体这类拓扑变化。但所有帧的潜码必须在整段视频上联合优化，无法在“下一帧”到来时即时推理。"
+    },
+    {
+     "tex": "\\boldsymbol{\\mu}(t) = \\boldsymbol{\\mu} + \\Delta\\boldsymbol{\\mu}(t),\\quad \\mathbf{q}(t) = \\mathbf{q} + \\Delta\\mathbf{q}(t),\\quad \\mathbf{s}(t) = \\mathbf{s} + \\Delta\\mathbf{s}(t),\\qquad (\\Delta\\boldsymbol{\\mu},\\Delta\\mathbf{q},\\Delta\\mathbf{s}) = \\mathrm{MLP}\\big(\\mathbf{f}(\\boldsymbol{\\mu}, t)\\big)",
+     "explain_zh": "这是 4DGS 式的高斯变形。μ、q、s 分别是规范高斯的中心、旋转四元数和尺度；Δ(t) 是时刻 t 的偏移量；f(μ, t) 是从 4D 分解特征平面（HexPlane 式，xy、xz、yz、xt、yt、zt 共 6 个 2D 平面）中取出的特征；MLP 是一个小型解码器。渲染时先变形，再用 3DGS 光栅器渲染（见 n-3dgs 第 2、3 个公式）。颜色和不透明度通常不随时间变化。"
+    },
+    {
+     "tex": "\\mathcal{S}^{t} = U\\big(\\mathcal{S}^{t-1},\\ \\{I_n^{t}\\}\\big),\\quad \\hat{I}^{t} = R\\big(\\mathcal{S}^{t}, P_t\\big);\\qquad \\dot{D}_n^{t} = M_n^{t} D_n^{t} + (1-M_n^{t})\\,\\dot{D}_n^{t-1},\\quad M_n^{t} = \\min\\!\\Big(\\frac{|I_n^{t}-I_n^{t-1}|}{\\lambda_t} + \\beta,\\ 1\\Big)",
+     "explain_zh": "前半是流式处理的一般形式。𝒮^t 是时刻 t 的状态，可以是一组高斯、一段记忆，也可以只是滤波后的深度；U 是更新函数；R 是从状态渲染目标视角 P_t 的函数。无状态的前馈方法（如 Quark）相当于 𝒮^t 只依赖当前帧。后半是 Ha et al. Sec. 3.2 式 (1)–(2) 的具体实例。D_n^t 是视角 n 当前帧的立体深度，Ḋ_n^t 是滤波后的深度，M_n^t 是软差分掩码，其中 λ_t=0.7、β=0.6，掩码在 1/4 分辨率上计算，经 3×3 max-pool 后再双线性上采样。颜色变化大的像素 M→1，只相信新深度；静止像素的 M 至少为 0.6，仍然至少取 60% 的新深度。这个公式依赖“相机位姿固定”，才能逐像素比较同一台相机的前后两帧。Ha 还把上一帧渲染出的目标视角深度 𝒟^{t−1} 作为额外输入，按权重融入 TSDF（附录 A.2），这是它仅有的第二个时间状态。"
+    }
+   ],
+   "worked_example_zh": "(1) 成本账。考虑一段 10 秒、30 fps、约 18 台相机的 DyNeRF 序列，共 300 帧。逐帧训练 NeRF 每帧约 50 GPU 小时，共约 15,000 GPU 小时；DyNeRF 约需 1.3K GPU 小时（8 张 V100 训练一周）；K-Planes hybrid 约 1.8 小时；3DGStream 每帧约 12 s，300 帧约 1 小时，但每帧 12 s 是实时预算 33 ms 的约 360 倍；Quark 每帧 32.2 ms（1024×768，A100）；Ha 每帧约 39 ms（不含立体深度估计）。只有最后两者能在线跟上 30 fps。\n(2) Ha 的差分掩码滤波。假设颜色已归一化到 [0,1]。静止像素若 |ΔI|=0.02，M=min(0.02/0.7+0.6, 1)=0.629，新深度占 62.9%，历史深度占 37.1%。运动像素若 |ΔI|=0.30，M=min(1.03, 1)=1，只用新深度；实际上 |ΔI| 达到 (1−0.6)×0.7=0.28 时 M 就已经等于 1。再算降噪效果：对静止像素，设每帧立体深度等于真值加上独立噪声（方差 σ²），递归 Ḋ^t=M D^t+(1−M)Ḋ^{t−1} 在稳态下的方差 V 满足 V=M²σ²+(1−M)²V，解得 V=M/(2−M)·σ²。M=0.6 时 V=0.43σ²，标准差只降到 0.65σ，最多约 35% 的降噪。记忆很短，这也解释了为什么它主要改善的是 STED（去掉时间滤波后 STED 从 68.76 升到 89.62），而 PSNR 几乎不变（31.17 对 31.16）。\n(3) 同一数据、不同协议。Quark 在 N3DV 上的协议是：视频裁到 300 帧，每 10 帧评一次，以 0 号相机为目标，分辨率 1024×768，M=8，结果为 31.57 dB。Ha 在 DyNeRF 上的协议是：Sear Steak 和 Flame Steak 的前 100 帧，9 个测试视角，分辨率 1352×1014，K=4，结果为 31.17 dB。一个直接的证据是：同一个 ENeRF，在 Quark 的协议下得到 29.86 dB，在 Ha 的协议下得到 29.51 dB。数据集相同，但帧段、目标相机、分辨率、输入视角数都不同，而且 Ha 还用同一厨房的 3 个 DyNeRF 场景训练过。这两个数不能拿来比高低。",
+   "pitfalls_zh": [
+    "把 N3DV 和 DyNeRF 当成两个数据集，或者直接横比两篇论文的数字。它们是同一套 Neural 3D Video 数据（Li et al., CVPR 2022），而 Quark 与 Ha 的评测协议完全不同（见上例）。",
+    "把“渲染实时”的 4D 方法当成在线方法。4DGS 的 82 fps（800×800，RTX 3090）和 4K4D 的 4K 80 fps（RTX 4090），都是在整段视频离线优化之后才达到的。它们需要先看到全部帧，不能用于直播式远程临场。Ha 在附录 A.8 图 12 中只和 4DGS、4K4D（逐场景优化，使用 K=17 个视角）以及 MVSplat 做了定性比较，没有给出定量数字。",
+    "混淆单目动态与多视角动态。D-NeRF、Nerfies、HyperNeRF 处理的是一台移动相机拍的视频，靠变形先验来解决严重欠约束的问题。远程临场用的是固定多相机阵列，每帧都有多视角约束，难点在于实时和时间一致，而不在于能不能观测到。Quark 在 Sec. 2.3（Single-view Methods）里也把这类“随时间变化的多个视角”的方法和单图、生成式方法归为另一类，不做比较。",
+    "以为逐帧 PSNR 高就不会闪烁。PSNR、SSIM、LPIPS 都是逐帧计算的，对帧间的随机抖动不敏感。Quark 承认所有指标都不衡量时间闪烁（Sec. 4.1），Ha 才额外报告了 TCC、STED 等时间指标（见 v-temporal、v-metrics）。另外，Ha 只在深度上有状态，融合网络和背景图 I_BG 仍然逐帧独立，它们自身带来的闪烁不受约束。"
+   ],
+   "in_quark": {
+    "used": false,
+    "where": "Sec. 1 与图 1 说明（视频流、每个时间步、每帧生成并丢弃 LDM）；Sec. 2.3（Single-view Methods）；Sec. 4.1 表 1 的 Neural 3D Video 列与评测协议；Sec. 4.1 末段与 Sec. 4.3 Limitations",
+    "how_zh": "Quark 没有任何 4D 表示或时间状态，它处理动态场景的方式是“每一帧都当作新场景”。图 1 的说明写到，网络在每个时间步都重新编码输入、推断 LDM；Sec. 1 说 LDM 每帧重建、渲染后即丢弃。它在 Neural 3D Video（即 DyNeRF 数据）上评测，按 Li et al. 的协议把视频裁到 300 帧，每 10 帧评一次，以 0 号相机为目标。在 1024×768 下，Quark 为 31.57/0.942/0.127，ENeRF 为 29.86，GPNR 为 29.80，SIMPLI 为 28.79。注意 Quark 的训练集里没有任何动态数据。Sec. 4.3 明确承认，Quark 不强制帧间一致，逐帧独立重建会产生闪烁。Sec. 4.1 末段补充了两点：所有指标都不衡量闪烁，在视频中 NeRF、3DGS 这类离线全场景方法表现更好；目标相机移动导致输入相机切换时也会闪烁，输入曝光差异大时更明显。Sec. 2.3 把 D-NeRF、Nerfies、HyperNeRF 等“随时间的多视角”方法与单图、生成式方法一起归为另一类，不做比较。理解了动态表示的谱系，就能看清 Quark 选择的是“逐帧前馈”这一端：换来了 30 fps 和零预处理，付出的是时间一致性。"
+   },
+   "in_ha": {
+    "used": true,
+    "where": "标题与 Sec. 1（online 3D video synthesis）；Sec. 2（Voxel-based 段的 4D 扫描、Neural-based 段的 4D 体渲染、Point-based 段的动态高斯）；Sec. 3.2 式 (1)–(3)；附录 A.2 式 (13)–(14)；Sec. 4.2、4.3、4.5；附录 A.6–A.8（图 12）",
+    "how_zh": "Ha et al. 的任务就是多视角视频的在线新视角合成，但它刻意不建 4D 表示。Sec. 2 把三类动态方法列为对照：4D 扫描方法（DynamicFusion、Fusion4D 等，在规范 TSDF 空间里估计运动）必须在体素分辨率和计算量之间折中；4D 体渲染方法（DyNeRF、HexPlane、K-Planes、4K4D 等）逐场景训练代价太高；动态高斯方法（Deformable 3DGS、Dynamic 3D Gaussians、4DGS、Spacetime Gaussians、3DGStream、ST-4DGS、GauFRe 等）“需要昂贵的逐场景优化”。它的时间机制只有两条，都作用在深度上。① Sec. 3.2 式 (1)–(2) 的颜色差分掩码递归滤波（λ_t=0.7，β=0.6），即上面的第 4 个公式。② 附录 A.2 把上一帧渲染出的目标视角深度 𝒟^{t−1} 作为 TSDF 的额外输入，权重上限 η=15，权重大小由前向 splat 到目标视角、再逐通道取最大值的差分掩码决定。网络本身没有状态，也没有时间损失，训练样本都取自单一时刻。评测在 DyNeRF（Sear Steak 和 Flame Steak 的前 100 帧）、ENeRF-Outdoor 和 D3DMV 上进行，除保真度外还报告 TCC、STED 和视角一致性指标 SDT、SDV。消融中去掉时间滤波后 PSNR 几乎不变（31.16），STED 从 68.76 恶化到 89.62。附录 A.8 图 12 与逐场景优化的 4DGS、4K4D（K=17）以及 MVSplat 做了定性比较。这个设计有两个隐含前提：相机阵列固定，这样才能逐像素比较前后两帧；回灌上一帧深度时，默认目标相机没有移动（论文没有说明目标相机移动时 𝒟^{t−1} 如何重投影）。"
+   },
+   "in_field_zh": "远程临场本质上是一个“流式动态”问题：人在动，观看者的头也在动，而系统只能看到过去和现在。实践中常把场景拆成两部分：静态背景可以用 NeRF/3DGS 离线预建，动态前景逐帧前馈处理，再用时间机制抑制闪烁。几种做法各有取舍：无状态逐帧处理简单、不会漂移，但会闪烁；短期递归（如 Ha 的深度滤波）很便宜，但记忆短，而且依赖相机固定；长期记忆或持久高斯可以利用“之前看到过、现在被挡住”的像素，但要处理漂移和新物体出现的问题。锚点资料中的 Online Neural Space Time Memory、SplatVoxel 等工作正沿着这个方向补 Quark 的短板。带宽方面，4D 高斯可以压缩后流式传输（见 a-compression），而与目标视角绑定的方法需要把 K 路 RGB（和深度）实时送到渲染端。评测上必须补上时间指标、长序列漂移，以及“头在动、场景也在动”的组合情形（见 v-temporal、a-temporal-video、a-dynamic-4d）。",
+   "resources": [
+    {
+     "title": "Neural 3D Video Synthesis from Multi-view Video (Li et al., CVPR 2022)",
+     "url": "https://arxiv.org/abs/2103.02597",
+     "type": "paper",
+     "note_zh": "N3DV/DyNeRF 数据集（21 台 GoPro Black Hero 7，2028×2704，30 fps，18 个训练视角，留出上排中间相机评测）的来源，也是时间潜码方法 DyNeRF 的原文。读 Sec. 3（潜码、层级训练、重要性采样）和 Sec. 4.1 的评测协议（长度不少于 300 帧的视频每 10 帧评一次），Quark 沿用的正是这套协议。数据下载见 https://github.com/facebookresearch/Neural_3D_Video"
+    },
+    {
+     "title": "4D Gaussian Splatting for Real-Time Dynamic Scene Rendering (Wu et al., CVPR 2024)",
+     "url": "https://arxiv.org/abs/2310.08528",
+     "type": "paper",
+     "note_zh": "用 HexPlane 式分解的 4D 神经体素特征加小 MLP 预测高斯变形，800×800 下 82 fps（RTX 3090）。它是 Ha 附录 A.8 定性对比的逐场景基线之一。可对照第 3 个公式阅读，理解“离线 4D”这一端。"
+    },
+    {
+     "title": "3DGStream: On-the-Fly Training of 3D Gaussians for Efficient Streaming of Photo-Realistic Free-Viewpoint Videos (Sun et al., CVPR 2024)",
+     "url": "https://arxiv.org/abs/2403.01444",
+     "type": "paper",
+     "note_zh": "流式逐帧优化的代表作：用神经变换缓存（平移、旋转）加自适应新增高斯，每帧约 12 s，渲染 200 fps。读它可以理解“在线但不实时”处在地图上的什么位置。"
+    },
+    {
+     "title": "CMU 16-825 Learning for 3D Vision — Lecture 14: Dynamic 3D Representations",
+     "url": "https://learning3d.github.io/schedule.html",
+     "type": "course",
+     "note_zh": "2026 秋季课表第 14 讲，建议阅读 Neural Scene Flow Fields 和 Nerfies。可以配合 MIT 6.S980（https://www.scenerepresentations.org/courses/2023/fall/inverse-graphics）的 Dynamic Scene Representations I–II 两讲录像（光流、场景流，以及把运动建模进场景表示）一起学。"
+    }
+   ],
+   "self_check": [
+    {
+     "q_zh": "Ha 的差分掩码滤波为什么必须以“相机固定”为前提？如果用在手持移动的相机上会怎样？",
+     "a_zh": "式 (1) 逐像素比较同一台相机前后两帧的差 |I^t−I^{t−1}|。相机固定时，像素颜色不变基本就意味着场景在那里是静止的，可以复用历史深度。相机一动，几乎所有像素的颜色都会变，M 全部饱和为 1，滤波就失效了。更糟的是，如果某些像素恰好颜色相近而没有变化，错位的历史深度会被混进来。正确的做法是先按运动做 warping（用光流或位姿，见 d-flow），再做比较。"
+    },
+    {
+     "q_zh": "4DGS 在 800×800 下能以 82 fps 渲染，为什么仍然不适合直播式远程临场？",
+     "a_zh": "82 fps 只是渲染速度。它的变形场和规范高斯要在整段多视角视频上离线优化，必须先拿到全部帧，每段序列还要花训练时间。直播则要求每一帧在采集后几十毫秒内就能看到。"
+    },
+    {
+     "q_zh": "Quark 在 N3DV 上得到 31.57 dB，Ha 在 DyNeRF 上得到 31.17 dB。能否据此说 Quark 更好？请至少给出三个理由。",
+     "a_zh": "不能。① 评测协议不同：Quark 用 300 帧、每 10 帧评一次、以 0 号相机为目标；Ha 用两个场景的前 100 帧、9 个测试视角。同一个 ENeRF 在两种协议下分别是 29.86 和 29.51，说明协议本身就会带来差异。② 分辨率和输入视角数不同：前者为 1024×768、M=8，后者为 1352×1014、K=4。③ 训练数据不同：Ha 用同一厨房的 3 个 DyNeRF 场景训练过，Quark 的训练集里没有动态数据。④ 两篇论文都没有与对方直接比较；而且 PSNR 不反映闪烁，Ha 的优势主要体现在 STED 等时间指标上。"
+    }
+   ],
+   "prereqs": [
+    "n-nerf",
+    "n-3dgs"
+   ]
+  }
+ ],
+ "change_log": [
+  "n-nerf 第 2 个公式与 in_quark ②：更正 Quark 射线方向编码的描述。原稿写成“输入射线与目标射线在近、远平面交点之差”，实际是同一条输入射线与 LDM 视锥近平面、远平面两个交点在目标投影空间中的 2D 差向量（与目标射线重合时为 0，先过 tanh 再做 8 octave 正弦编码）。另外，Quark 是在回顾 NeRF 正弦编码之后提出的“更简单编码”，原稿“明确说借鉴”表述过强，已改（据 Quark Sec. 3.2.1 原文）。",
+  "n-nerf 陷阱 1、自测 1：sigmoid 解码 σ=sigmoid(V W_σ) 出自 Quark Sec. 3.2.3，不在 Sec. 3.1；Sec. 3.1 原文是“transparency (i.e. alpha)”。已分开标注两处出处。",
+  "Deep Blending 对比（n-nerf 陷阱 4、n-3dgs in_quark、n-generalizable 陷阱 2）：Quark 只测了 Playroom 一个场景（Sec. 4.1），3DGS 的 30.04 是 Playroom 单场景分数，3DGS 在 Deep Blending 两个场景上的平均是 29.41。已加注。",
+  "n-nerf 陷阱 4：DL3DV 表述改为 Quark 原话，即基线分数只有较低分辨率可用（Sec. 4.2），协议为每 8 个视角取 1 个做目标、目标视角不参与输入。",
+  "n-nerf：补充 T_i=Π(1−α_j) 的推导，并说明从前到后累加（NeRF/3DGS）与从后到前反复 over（Quark 𝒪）结果相同；补充 NeRF 第 5 层跳连的准确含义（输入拼接）、官方代码拼接原始坐标（63/27 维）；在算例中说明最后一段间距的约定（官方代码取 1e10），以及 w_i 对应的 PDF 区间；把 1.5–2 亿次查询与 64 万（800×800）/76 万（1008×756）条射线对上（据 NeRF 附录原文）。",
+  "n-nerf in_field ④：把“比一路视频还小”改成可核算的对比：5 MB 约等于 5 Mbps 视频 8 秒的数据量。",
+  "n-3dgs 与学习提示第 3 条：3DGS 表 1 中 523 MB / 734 MB 是参数存储量，不是显存。据 3DGS 原文，训练峰值显存可超过 20 GB，渲染时光栅器另需 30–500 MB。已改学习提示第 3 条和 in_field。",
+  "n-3dgs 第 4 个公式（Ha 像素高斯）：尺度改写为 s=c·D/f，c 为未公开的 O(1) 常数；注明 D 是 z 深度（由 Ha 附录 A.1 的 s_k=z_k−D_k 推出），以及 0.3 px² 低通带来的投影标准差下限（约 0.55 px）。",
+  "n-3dgs 算例：(a) 注明给定坐标就是相机坐标（W=I），并说明官方代码按最大特征值取正方形外接框。(b) 对照官方 forward.cu 复核半径：特征值计算中有 max(0.1,·) 下限，结果仍为 4 px；补充相邻源像素在目标图中的间距（0.91 px；z'=1 m 时为 2 px），把“为什么不出空洞”讲清楚。所有数值已重算并确认。",
+  "n-3dgs：补充 EWA 全称、α 重置后如何剪枝、SH 从 0 阶开始逐步开放、全局排序键是“tile ID + 中心深度”；in_quark 补充 LDM 层已有序、不需要排序；in_ha 补充 Sec. 3.1 正文把单次渲染归于 GS-LRM，而图 4 和消融引用的是 GPS-Gaussian，并用原文措辞改写“调整背景高斯尺度补洞会降低 PSNR”。",
+  "n-3dgs in_field：GS-SCNet 改为准确描述（多视角编码与前馈 3DGS 联合设计），Tele360 为推流高斯参数图。",
+  "n-generalizable in_ha：按 Ha Sec. 2 原文重新分组。pixelNeRF/MuRF/FWD/IBRNet 属于“难以处理动态场景”；pixelSplat/MVSplat/LaRa/Splatter Image/GS-LRM 属于“稀疏静态场景”的前馈模型；“没有显式处理噪声深度”这句针对 Point-based 段，也包括 GPS-Gaussian 和 Tele-Aloha。另注明 FWD 与 GPS-Gaussian 都是重训的，IBRNet 与 ENeRF 用预训练权重（Sec. 4.1）。",
+  "n-generalizable 陷阱 1：删去“唯一真正域外的 ENeRF-Outdoor”。D3DMV 同样不在 Ha 的训练集中，而且 Ha 在 D3DMV 上领先最多（32.58 对 27.79），已补充。",
+  "n-generalizable 第 2 个公式：注明 β 由最后一个 Fusion Block 的 One-to-many attention 给出，softmax 推迟到上采样之后（据 Quark Sec. 3.2.3 原文）；注明 𝒫^T_θ 中的 θ 是相机参数。in_quark 按 Quark Sec. 2.2 原文细化各聚合方式的评价，补充基线是在 RFF+IBRNet 数据上重训的。",
+  "n-generalizable：核实 LVSM 的 FPS 确实在物体级 256×256 下测量，已加“物体级”；自测 3 的计算改为 32–33 ms，合计每秒 4.6–4.8 s；算例 (3) 补充分母为 0 时需加 ε，以及 L_Mask 的作用。",
+  "n-dynamic：更正 HexPlane 训练时间。原稿写“几小时以内”，实际完整版 12 h、10 万步短训版 2 h；K-Planes hybrid 为 1.8 h。补充 DyNeRF 自报 1.3K GPU 小时（K-Planes 折算为 1344 h）、DyNeRF 的 MLP 为 512 通道、潜码学习率为其他参数的 10 倍、数据集相机型号（GoPro Black Hero 7）、剔除同步失败相机，以及留出上排中间相机评测（据 DyNeRF 与 K-Planes/HexPlane 原文）。",
+  "n-dynamic：Ha 附录 A.8 图 12 的定性对比还包括 MVSplat，已补；in_ha 补充 Ha Sec. 2 中的 4D 体渲染一类，以及目标相机移动时 𝒟^{t−1} 如何重投影没有说明；4K4D 标注 RTX 4090，Dynamic 3D Gaussians 补充不透明度也固定。",
+  "n-dynamic 算例：(2) 补出一阶递归滤波的稳态方差推导 V=M/(2−M)·σ²；(3) 补充同一个 ENeRF 在两种协议下分别得到 29.86 和 29.51，以此说明协议差异。引言和自测 3 同步更新。",
+  "资源：n-3dgs 新增 CMU 16-825 第 12 讲（Differentiable Primitive Rendering），n-generalizable 新增第 15 讲（Multi-view Transformers: View Synthesis）。两讲都在 2026 秋季课表页面上核实过。MIT 6.S980 的讲次名称与内容、Szeliski 第 14 章各节顺序和“填写信息后可下载 PDF”也已核实。",
+  "URL 核验：所有链接均已打开或检查（HTTP 200；szeliski.org/Book/ 对 curl 默认 UA 返回 406，换浏览器 UA 后返回 200）：arXiv 2003.08934、2201.05989、2308.04079、2312.02121、2102.13090、2403.14627、2410.17242、2103.02597、2310.08528、2403.01444；github.com/NVlabs/instant-ngp、nerfstudio-project/gsplat、graphdeco-inria/diff-gaussian-rasterization、facebookresearch/Neural_3D_Video；repo-sam.inria.fr 3DGS 项目页；ibrnet.github.io；learning3d.github.io/schedule.html；scenerepresentations.org 6.S980 页面。没有发现死链。",
+  "引言：基线列表补上 SIMPLI、FWD。以下内容已逐项核实，没有问题：各锚点论文数字（Quark 表 1–3 与消融；Ha 表 1–4、消融、附录 A.1–A.8）、3DGS 数值细节（0.99、1/255、0.9999、τ_pos=0.0002、φ=1.6、每 100/3000/1000 步、表 1 各数）、NeRF 数值（8×256、L=10/4、4096、64+128、1–2 天、5 MB、30 s），以及 ENeRF“至少快 60 倍”、MVSplat 22 fps、4DGS 82 fps、3DGStream 12 s/200 fps、4K4D 80 fps@4K、DyNeRF 15K GPU 小时/28 MB/1024 维。"
+ ]
+}

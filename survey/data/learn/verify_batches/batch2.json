@@ -1,0 +1,495 @@
+[
+ {
+  "title": "Motion2Fusion: Real-time Volumetric Performance Capture",
+  "authors": "Mingsong Dou, Philip Davidson, Sean Fanello, ..., Shahram Izadi",
+  "year": 2017,
+  "venue": "ACM TOG (SIGGRAPH Asia 2017)",
+  "url": "https://doi.org/10.1145/3130800.3130801",
+  "citations": 177,
+  "citations_source": "OpenAlex",
+  "theme": "t-fusion-capture",
+  "influence_zh": "在同样的 GPU 上，它比 Fusion4D 快了近 3 倍，使 360° 非刚性体积捕捉可以跑到很高的帧率。它用学习得到的三维对应和前后双向对齐，更稳地处理快速动作和拓扑变化，并保留高频几何细节。它标志着“传统融合 + 机器学习模块”的混合路线成形。",
+  "contributions_zh": "(1) 新的非刚性融合流水线，能重建高频几何细节，避免以往的过度平滑。(2) 高速流水线，配合机器学习估计三维对应场：对提取的点学习一个谱嵌入的近似，得到数据体到关键体的对应，用来初始化匹配，减少快速运动造成的跟踪错误。(3) 前向 + 后向双向非刚性对齐，更稳地处理拓扑变化。原因是 ED 图把开放拓扑对齐到封闭拓扑（表面合并）容易，反方向（表面分离）会失败。(4) 论文展示，系统以 100 fps 运行时，大部分快速运动伪影会自然消失。",
+  "anchor_link_zh": "它说明高帧率本身就是一种时间一致性手段：帧间运动越小，跟踪和对应越容易。Ha et al. 在 30 fps 的 DyNeRF 数据上用颜色差分掩码（λ_t=0.7，β=0.6）判断像素是否在动，背后的假设相同：帧间变化小的区域可以信任历史。",
+  "concept_ids": [
+   "n-dynamic",
+   "d-tsdf",
+   "f-optim",
+   "d-flow"
+  ],
+  "difficulty": "专家",
+  "must_read": false,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "Montage4D: Interactive Seamless Fusion of Multiview Video Textures",
+  "authors": "Ruofei Du, Ming Chuang, Wayne Chang, Hughes Hoppe, Amitabh Varshney (UMD / Microsoft)",
+  "year": 2018,
+  "venue": "ACM I3D 2018 (extended in JCGT 2019)",
+  "url": "https://doi.org/10.1145/3190834.3190843",
+  "citations": 57,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-fusion-capture",
+  "influence_zh": "它系统地分析了实时体积临场中多视角视频纹理拼接的伪影：投影缝、误配准缝、遮挡缝，以及法线加权混合带来的模糊和重影。对此给出的实时方案是：视角相关权重，加测地距离扩散抑制接缝，再加时间纹理场保证时间一致。它显著提升了 Holoportation 渲染器的质量，帧率仍在 100 fps 以上，是“混合权重设计 + 时间平滑”的教科书案例。",
+  "contributions_zh": "(1) 以 Holoportation 的法线加权 \\( T_v^i=V_v\\max(0,\\hat n_v\\cdot\\hat v_i)^\\alpha \\) 为基线，改成视角相关的目标权重 \\( T_v^i=V_v\\,g_i\\,\\gamma_v^i\\max(0,\\hat v\\cdot\\hat v_i)^\\alpha \\)。其中 \\( \\hat v \\) 是用户视线方向，g_i 是该相机的全局可见度，γ 是到接缝的测地距离。(2) 从接缝出发在网格上迭代扩散等距测地线，让接缝附近的权重降低、逐渐过渡。(3) 时间纹理场：\\( \\bar T(t)=(1-\\lambda)\\bar T(t-1)+\\lambda T(t) \\)，λ=0.05。视点突变后，权重在约半秒内平滑过渡到新值。(4) 在 5 个数据集上 RMSE、PSNR 和 SSIM 全面改善，例如 Timo 的 PSNR 从 38.60 升到 40.23 dB。帧率 114–135 fps，Holoportation 基线为 187–227 fps。",
+  "anchor_link_zh": "它是 Ha et al. 最直接的前身之一。Ha 融合网络的输入里，“输入射线与 TSDF 法线的点积”对应 Montage4D 公式中的 \\( \\hat n\\cdot\\hat v_i \\)，“输入与目标视线方向的点积”对应 \\( \\hat v\\cdot\\hat v_i \\)。区别是 Ha 让 U-Net 学权重，不用手工乘积。Montage4D 的时间纹理场是对混合权重做 EMA；Ha 则对输入深度做 EMA（式 1–2：\\( \\dot D=M D+(1-M)\\dot D^{t-1} \\)，M≥0.6）并回灌 TSDF。一个平滑“权重”，一个平滑“几何”。Quark 在局限性中承认：目标相机移动导致输入视角集合切换，会引起闪烁。这正是 Montage4D 用时间纹理场处理的现象，因为权重不会在一帧内突跳。",
+  "concept_ids": [
+   "i-blending",
+   "v-temporal",
+   "f-prob",
+   "r-appearance"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "LookinGood: Enhancing Performance Capture with Real-time Neural Re-Rendering",
+  "authors": "Ricardo Martin-Brualla, Rohit Pandey, ..., Shahram Izadi, Sean Fanello (Google)",
+  "year": 2018,
+  "venue": "ACM TOG (SIGGRAPH Asia 2018)",
+  "url": "https://arxiv.org/abs/1811.05029",
+  "citations": 116,
+  "citations_source": "OpenAlex",
+  "theme": "t-fusion-capture",
+  "influence_zh": "它首次把“神经重渲染”（neural re-rendering）用于实时表演捕捉。思路不是追求更完美的几何，而是用一个 CNN 把粗糙体积重建渲染出的图像实时修好：补洞、超分、去噪、调色。同时它面向 VR/AR 头显，保证左右眼一致和时间稳定。由此确立了“几何负责大体正确、网络负责最后一公里”的思路。一作 Martin-Brualla 也是 Project Starline 的作者之一。",
+  "contributions_zh": "(1) 在采集阵列上加装只用于训练的“见证相机”（witness cameras），拍摄更高质量的图像作为真值，因此训练是自监督的，不需要人工标注。(2) 基于语义分割的重建损失，重点照顾人脸等关键部位。(3) 显著性重加权，剔除离群像素。(4) 显式最小化相邻帧之间的差异以提高时间稳定性，并兼顾左右眼一致。(5) 在两个真实系统上验证：单 RGB-D 上半身，以及 360° 全身捕捉。在 Titan V 上，生成一对立体图从 92 ms（TensorFlow）降到 47 ms（TensorRT FP32），再到 29 ms（FP16）。",
+  "anchor_link_zh": "Ha et al. 用的是同一种思路：“几何引导 + 轻量 CNN 融合”。TSDF 负责一致的几何，4 层 U-Net 预测融合权重和背景图。Ha 的融合网络从 65 ms 经 TensorRT 降到 23 ms，与 LookinGood 的 92 → 29 ms 是同一条加速路径。LookinGood 留出见证相机作真值，对应 Ha 和 Quark 评测时“留出阵列里一台相机作测试视角”的做法。LookinGood 显式加了时间损失，而 Ha 的损失函数里没有任何时间项，这是一个值得注意的对比。",
+  "concept_ids": [
+   "l-cnn",
+   "l-loss",
+   "v-temporal",
+   "i-warping",
+   "v-perception"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "Deep Appearance Models for Face Rendering",
+  "authors": "Stephen Lombardi, Jason Saragih, Tomas Simon, Yaser Sheikh (Facebook Reality Labs)",
+  "year": 2018,
+  "venue": "ACM TOG (SIGGRAPH 2018)",
+  "url": "https://arxiv.org/abs/1808.00362",
+  "citations": 331,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-fusion-capture",
+  "influence_zh": "它是 Codec Avatars 路线的开山之作。它用深度 VAE 联合编码人脸几何（网格顶点）和视角相关纹理，得到一个紧凑的潜码：发送端只传潜码，接收端解码后渲染。临场由此从“传像素或几何”变成“传语义编码”。头像可以由 VR 头显内置相机驱动，并在 VR 中以 90 Hz 实时渲染。Pixel Codec Avatars、MVP 和 Codec Avatar Studio 都沿着这条思路发展。",
+  "contributions_zh": "(1) 用 40 台相机做多视角人脸采集。(2) VAE 把网格和平均纹理编码为潜码 z；解码器以相机视角为条件，输出视角相关纹理，因此能表达高光，还能用外观弥补几何误差，例如睫毛、口腔这类难重建的区域。(3) 结果以“平光动态纹理”的形式接入常规渲染引擎，可实时运行。(4) 无监督域适应：先用图像渲染合成出头显相机视角的图像，再用另一个 VAE 学习真实与合成头显图像的公共潜空间，并回归到 z，从而由头显相机驱动头像。",
+  "anchor_link_zh": "它提供了第三条路，可与 Ha/Quark 的“几何 + 输入图像混合”对照：用以视角为条件的解码器直接生成视角相关外观。Quark 在局限性中承认，blend weights 只是输入颜色的凸组合，无法准确表示视角相关材质。DAM 的“视角条件纹理”就是解决这个问题的一种思路，代价是必须逐人采集和训练，无法泛化到任意场景。",
+  "concept_ids": [
+   "r-appearance",
+   "l-cnn",
+   "n-dynamic"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "The Relightables: Volumetric Performance Capture of Humans with Realistic Relighting",
+  "authors": "Kaiwen Guo, Peter Lincoln, ..., Paul Debevec, Shahram Izadi (Google)",
+  "year": 2019,
+  "venue": "ACM TOG (SIGGRAPH Asia 2019)",
+  "url": "https://doi.org/10.1145/3355089.3356571",
+  "citations": 250,
+  "citations_source": "OpenAlex",
+  "theme": "t-fusion-capture",
+  "influence_zh": "它第一次把 Light Stage 式的反射率采集与全身体积表演捕捉结合，输出可以重新打光的高质量体积视频，使体积内容能自然融入任意光照的 AR/VR 场景。以往体积捕捉系统输出的纹理都预先烘焙了拍摄时的光照，这篇工作是可重打光体积捕捉的主要参照。",
+  "contributions_zh": "测地球形舞台上有 331 盏自制彩色 LED 灯、58 台 RGB 相机和 32 台 IR 相机（16 组主动深度传感器），以 60 Hz 录制。(1) 新型主动深度传感器，输出 12.4 MP 深度图。(2) 几何与机器学习混合的重建流水线，处理高分辨率输入并输出体积视频。(3) 用两幅交替的彩色梯度照明图像，为动态表演者估计时间一致的反射率图，从而可以重新打光。(4) 最终输出 30 fps 的可重打光模型。",
+  "anchor_link_zh": "与锚点没有直接继承关系。Ha et al. 与 Quark 都假设输入颜色可以直接混合，也就是把光照“烤”进了像素。Quark 的局限性里提到，输入之间曝光不一致会导致边缘伪影和闪烁。Relightables 说明，要把光照和材质分开需要多少额外硬件（331 盏灯 + 梯度照明）。这有助于理解为什么在线临场系统普遍放弃了重打光。",
+  "concept_ids": [
+   "r-appearance",
+   "d-sensors",
+   "d-stereo",
+   "g-rig"
+  ],
+  "difficulty": "专家",
+  "must_read": false,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "Neural Volumes: Learning Dynamic Renderable Volumes from Images",
+  "authors": "Stephen Lombardi, Tomas Simon, Jason Saragih, Gabriel Schwartz, Andreas Lehrmann, Yaser Sheikh (Facebook Reality Labs)",
+  "year": 2019,
+  "venue": "ACM TOG (SIGGRAPH 2019)",
+  "url": "https://arxiv.org/abs/1906.07751",
+  "citations": 681,
+  "citations_source": "OpenAlex",
+  "theme": "t-fusion-capture",
+  "influence_zh": "早于 NeRF，它首次用“可微体渲染 + 编码器-解码器”，从多视角二维图像端到端地学出动态、半透明的体积表示，不需要显式重建或跟踪。它能表示头发、烟雾、半透明物体等网格难以表达的现象。NeRF 论文把它列为最相关的前作之一；它也是 MVP 和 Meta 体积头像的前身。",
+  "contributions_zh": "(1) 体积表示为 \\( V(x)=(V_{rgb}(x),V_\\alpha(x)) \\)，其中 V_α 是非负的“微分不透明度”。(2) 编码器输入部分相机的图像，得到潜码 z；3D 反卷积解码出 RGBα 体，128³ 版本约 22 Hz，32³ 版本约 90 Hz。(3) 累积式光线步进：\\( d\\alpha=\\min(I_\\alpha+\\Delta V_\\alpha,1)-I_\\alpha \\)，\\( I_{rgb}\\mathrel{+}=V_{rgb}\\,d\\alpha \\)，不透明度累积到 1 就停止，最后与估计的背景图合成。(4) 用逆向 warp 场（多个仿射 warp 的混合）让模板体可以“变形”，提高表观分辨率，减少网格状伪影和运动抖动。(5) 用 34 台 4096×2668@30 Hz 相机采集；在潜空间插值可以生成训练中没见过的新动作序列。",
+  "anchor_link_zh": "两篇锚点的渲染核心都是 alpha 累积合成。Quark 第 6 步把 LDM 各层按 density 由后向前做 over 合成。Ha et al. 用 3DGS rasterizer 输出每个视角的累积 alpha α_k，再按 \\( I=(1-w_{BG})I_{FG}+w_{BG}I_{BG} \\) 与背景图合成。Neural Volumes 的“累积不透明度 + 与背景合成”，是这两处公式最直接的学习式先例。不理解它，就很难明白：Quark 为什么学的是每层的 density 而不是直接学颜色；Ha 为什么要单独预测一张背景图来补遮挡洞。",
+  "concept_ids": [
+   "r-volume",
+   "r-alpha",
+   "r-raymarch",
+   "n-dynamic",
+   "l-cnn"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "Mixture of Volumetric Primitives for Efficient Neural Rendering",
+  "authors": "Stephen Lombardi, Tomas Simon, Gabriel Schwartz, Michael Zollhöfer, Yaser Sheikh, Jason Saragih (Facebook Reality Labs)",
+  "year": 2021,
+  "venue": "ACM TOG (SIGGRAPH 2021)",
+  "url": "https://arxiv.org/abs/2103.01954",
+  "citations": 374,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-fusion-capture",
+  "influence_zh": "它把 Neural Volumes 的单个大体积拆成数百到数千个可移动的小体积基元，只覆盖被占据的空间。这样既保留了体积表示的完整性（能表示头发、半透明），又获得了基元式渲染（点、网格）的效率，实现了实时、高质量的动态人体渲染。“大量小的、可移动的体积基元 + 可微渲染”这一思想，常被看作 3D Gaussian Splatting 的思想前身之一。",
+  "contributions_zh": "(1) 基元附着在解码出的粗糙引导网格上，并可在此基础上学习平移、旋转和缩放的偏移，以弥补引导网格的不足。(2) 解码器用 2D 反卷积一次输出所有基元的体素“切片”，共享计算。(3) 空区域不花计算；按 BVH 顺序对射线命中的基元做累积步进。每帧重建一次 BVH，4096 个基元不到 0.1 ms。(4) 256 个基元、800 万体素时约 30 fps；4k 个基元、1600 万体素时约 20 fps。(5) 可以加入对应和跟踪约束，而在细小或半透明结构处又不依赖跟踪。",
+  "anchor_link_zh": "Ha et al. 第 3.1 节把每个像素变成一个完全不透明、与像素等大的各向同性 3D Gaussian 再 splat，并明确不让网络预测 Gaussian 参数。MVP 代表的是另一端：由网络预测每个基元的形状和内容。两者对比能看清 Ha 的取舍：用解析常数换来速度和稳定，代价是无法靠基元形变去补洞。Quark 的 LDM 也可以看作少量（6–8 层）、与目标视角对齐的半透明基元。",
+  "concept_ids": [
+   "r-volume",
+   "r-alpha",
+   "r-reps",
+   "n-dynamic",
+   "n-3dgs"
+  ],
+  "difficulty": "专家",
+  "must_read": false,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "Project Starline: A High-Fidelity Telepresence System",
+  "authors": "Jason Lawrence, Dan B Goldman, ..., Steven M. Seitz, Kevin Tong (Google)",
+  "year": 2021,
+  "venue": "ACM TOG 40(6) (SIGGRAPH Asia 2021)",
+  "url": "https://doi.org/10.1145/3478513.3480490",
+  "citations": 116,
+  "citations_source": "OpenAlex",
+  "theme": "t-fusion-capture",
+  "influence_zh": "这是第一个用行为科学实验证明“明显优于 2D 视频会议”的三维临场系统。117 名参与者在 9 个月里用它开了 308 次真实会议；与 2D 相比，在临场感、注意力、判读对方反应等评分上更高，会议内容记得更多，点头、挑眉等非语言行为也更多。它把头部跟踪裸眼 3D 显示、高分辨率三维采集、压缩传输和空间音频集成进一个舱体，后来产品化为 Google Beam（HP Dimension），是当前临场研究的标杆。",
+  "contributions_zh": "显示端是 65 英寸、8K、60 Hz 的头部跟踪裸眼立体屏。采集端有 3 个同步立体 RGBD pod（屏幕上方两个、下方一个），外加一台对准面部的长焦 RGB 相机；深度来自 NIR 散斑主动时空立体，图案以 180 Hz 采集，每 60 Hz 输出一次深度。4 路彩色和 3 路深度用 H.265 压缩（深度 10-bit），经 WebRTC 传输，带宽 30–100 Mbit/s。接收端逐帧渲染，不使用时间历史，关键是 image-based TSDF 融合：沿射线把采样点投影到 3 张深度图，得到有符号距离 s_j；融合为 \\( s=\\sum_j w_j\\,\\mathrm{clamp}(s_j,-T,T) \\)，T=2 cm，s_j<−T 时 w_j=0；以 0.8·s 为步长前进直到变号，再做 3 步二分。权重 \\( w_j=\\min(0.001/\\sigma_i,1) \\)，σ 是 7×7 邻域内的深度标准差。渲染一帧总共要做 6 次光线投射（4 张阴影图 + 左右眼），图像空间融合把总耗时从体素版的 10.0 ms 降到 1.5 ms（每帧预算 16.6 ms）。颜色按法线与相机夹角余弦的平方加权混合，可见性由阴影图判断。端到端延迟平均 105.8 ms。",
+  "anchor_link_zh": "Ha et al. 附录 A.1 的 image-based TSDF 几乎原样沿用了 Starline：τ=0.02 m，s_k<−τ 时权重为 0，置信常数 0.001，7×7 邻域方差，0.8·s 步长，3 步二分，全部出自这里。Starline 面向约 1 m 远、坐着的上半身，2 cm 的截断是按这个尺度定的。Ha 做了两点扩展：一是从 3 个 RGBD pod 推广到 K 个 RAFT-Stereo 深度、一般动态场景；二是加入颜色差分掩码时间滤波和上一帧深度回灌，因为 Starline 明确是“逐帧处理，无时间历史”。Quark 的分析也把 Starline / Google Beam 这类固定舱体（8 路以内、基线 ≤30 cm）视为它的舒适区。不读 Starline，就看不懂 Ha 附录里这些常数从何而来、物理意义是什么。",
+  "concept_ids": [
+   "d-tsdf",
+   "r-raymarch",
+   "i-blending",
+   "v-codec",
+   "v-perception",
+   "d-stereo"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "VirtualCube: An Immersive 3D Video Communication System",
+  "authors": "Yizhong Zhang, Jiaolong Yang, ..., Xin Tong, Baining Guo (Microsoft Research Asia)",
+  "year": 2022,
+  "venue": "IEEE TVCG (IEEE VR 2022)",
+  "url": "https://arxiv.org/abs/2112.06730",
+  "citations": 69,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-fusion-capture",
+  "influence_zh": "它把三维视频会议做成了标准化的积木：统一规格的隔间（VirtualCube）配 6 台 Azure Kinect 和三面环绕屏，可以任意拼成一个虚拟会议室。系统能正确保持多方之间的相互注视（眼神接触、知道谁在看谁），还支持并排讨论和共享工作内容。算法上，它是第一批在临场系统里用 CNN 按 ULR 原则学习混合权重（Lumi-Net）的工作，代表学习式 IBR 融合进入临场系统。",
+  "contributions_zh": "(1) VirtualCube 抽象：隔间尺寸、相机和屏幕布局都标准化，全部用现成硬件。每个隔间 6 台 Azure Kinect，RGB 和 640×576 深度均为 30 fps，统一对齐缩放到 1280×960。(2) V-Cube View 渲染算法分两步。先在 1/4 分辨率做虚拟视点深度预测：以 Kinect 深度为初值，用多视角立体细化。再做 Lumi-Net 渲染：把输入图 warp 到目标视角，以 ULR 的两条原则作为 CNN 的输入先验。一是“分辨率敏感”，用深度差 \\( \\Delta D_i=D_i^w-D \\) 表示；二是“最小角偏差”，用视线方向差表示。共享 CNN 据此预测逐像素混合权重，最后在全分辨率混合，并用轻量 CNN 做后处理；训练时对人脸区域加感知损失。(3) 发送端为远端观看者渲染出肖像视频（RGB + alpha），压缩后传输，约 7 Mbps。三方圆桌会议端到端约 300 ms（采集 60 + 渲染 40 + 压缩 30 + 网络 100 + 解码显示 40 ms）；三方 23 fps，两人 30 fps。",
+  "anchor_link_zh": "Ha et al. 第 3 阶段的融合网络，在思想上几乎就是 Lumi-Net 的再实现。Ha 给 U-Net 的相机特征（输入射线与目标方向的点积、相机间距离、输入与目标视线方向的点积）对应 Lumi-Net 的“最小角偏差”先验。Ha 的 L_Depth 约束权重合成的深度去复现 TSDF 深度，与 Lumi-Net 的深度差先验一样，表达的都是“几何上一致的视角应得更大权重”。VirtualCube 还给出了 Ha 没有回答的系统问题的一种答案：在发送端为每个远端观看者渲染，再传 2D 视频（约 7 Mbps、约 300 ms），而不是传多路原始视频。",
+  "concept_ids": [
+   "i-blending",
+   "d-mvs",
+   "l-cnn",
+   "v-codec",
+   "v-perception",
+   "d-sensors"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "Function4D: Real-time Human Volumetric Capture from Very Sparse Consumer RGBD Sensors",
+  "authors": "Tao Yu, Zerong Zheng, Kaiwen Guo, Pengpeng Liu, Qionghai Dai, Yebin Liu (Tsinghua / Google)",
+  "year": 2021,
+  "venue": "CVPR 2021",
+  "url": "https://arxiv.org/abs/2105.01859",
+  "citations": 419,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-fusion-capture",
+  "influence_zh": "它是第一个用极稀疏（最少 3 台）消费级 RGB-D 传感器实现实时人体体积捕捉的系统。做法是把时间体积融合与深度隐式函数（PIFu 类）结合：融合负责降噪和时间连续，学习负责补全看不到的表面和纹理。相比之下，Fusion4D 和 Motion2Fusion 需要定制的高端深度传感器和最多 9 块高端 GPU。它标志着体积捕捉从定制硬件走向消费级硬件。",
+  "contributions_zh": "(1) 动态滑动融合（Dynamic Sliding Fusion）：不再融合全部历史帧，只在一个滑动窗口内做非刚性跟踪和 TSDF 融合。窗口是前一帧 t−1、当前帧 t 和后一帧 t+1，因此允许 1 帧延迟。其中包括拓扑感知的节点图初始化，以及“观测一致”的 TSDF 融合，即只在跟踪误差小时才更新。结果是去噪且拓扑一致的当前帧观测。(2) 保细节的深度隐式函数：以 RGB-D 为输入的像素对齐隐式函数，预测 SDF 和颜色，既保留深度里的几何细节，又补全看不到的区域。(3) 实时实现：用深度图剔除空体素，再用八叉树由粗到细推理（64³ → 256³），TensorRT 混合精度。整体 25 fps：滑动融合 21 ms，隐式重建 17 ms（3 视角），Marching Cubes 2 ms。",
+  "anchor_link_zh": "它的“短窗口融合”与 Ha et al. 的时间设计是同一个思路：不维护长期模型（避免漂移和拓扑失败），只用最近的历史来降噪。Ha 只回灌上一帧的目标视角深度，并用差分掩码在运动区关掉回灌；Function4D 同时用 t−1 和 t+1 两个邻帧，代价是 1 帧延迟。两者对比揭示了在线临场的一个关键旋钮：多等一帧能换来更好的时间一致性，但在 30 fps 下要多约 33 ms 延迟。",
+  "concept_ids": [
+   "d-tsdf",
+   "n-dynamic",
+   "v-temporal",
+   "d-sensors"
+  ],
+  "difficulty": "专家",
+  "must_read": false,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "Tele-Aloha: A Low-budget and High-authenticity Telepresence System Using Sparse RGB Cameras",
+  "authors": "Hanzhang Tu, Ruizhi Shao, ..., Boyao Zhou, Yebin Liu (Tsinghua / BOE / HIT)",
+  "year": 2024,
+  "venue": "SIGGRAPH 2024 (Conference Papers)",
+  "url": "https://arxiv.org/abs/2405.14866",
+  "citations": 20,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-fusion-capture",
+  "influence_zh": "它证明高质量的双向临场可以只用 4 台 RGB 相机、1 块消费级 GPU（RTX 4090）和 1 块裸眼 3D 屏实现：2048×2048、30 fps，局域网内端到端延迟低于 150 ms，把 Starline 级别体验的成本大幅降了下来。它代表新一代临场算法栈：稀疏 RGB + 学习式立体 + 可泛化 Gaussian splatting + 高分辨率混合。Ha et al. 引用了它，作为稀疏 RGB 相机临场系统的代表。",
+  "contributions_zh": "(1) 系统：屏幕左、右、上方共 4 台硬件同步的全局快门相机（4096×3000@30 Hz）。上方两台组成窄基线立体对，另一对为宽基线；颜色用 ColorChecker 校正。4 路图像裁成方形后拼成一张 6000×6000 的图，经 NVENC H.265 编码、WebRTC 传输，约 100 Mbit/s。接收端做抠像、虹膜三维跟踪，再合成新视角。(2) 级联视差估计：先用 RAFT-Stereo 算窄基线对的视差，作为宽基线对的初值，以应对上半身近距离的大视差。(3) 可泛化的 Gaussian splatting：把潜在特征（不是 RGB，这是与 GPS-Gaussian 的区别）投到目标视角，在较低分辨率下解码。(4) 按表面可见性对高分辨率输入图做加权混合，把解码结果细化到 2K。",
+  "anchor_link_zh": "这是与 Ha et al. 最接近的系统。两者都用 RAFT-Stereo 从 RGB 相机估深度，都用 Gaussian splatting 做前向投影，最后都回到对高分辨率输入图的加权混合来保留细节。区别在于：Tele-Aloha 只处理上半身人像，并实测了端到端延迟和带宽；正文没有设计专门的时间一致性模块。Ha 面向一般动态场景，显式做了时间滤波和 TSDF 回灌，却没有系统层面的数字。两篇对照阅读，可以用 Tele-Aloha 补上 Ha 缺失的系统量级：100 Mbit/s、低于 150 ms、单块 RTX 4090 上 30 fps 以上。",
+  "concept_ids": [
+   "d-stereo",
+   "n-3dgs",
+   "n-generalizable",
+   "i-blending",
+   "v-codec",
+   "v-perception"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "FlowNet: Learning Optical Flow with Convolutional Networks",
+  "authors": "Alexey Dosovitskiy, Philipp Fischer 等（Freiburg + TU München）",
+  "year": 2015,
+  "venue": "ICCV 2015",
+  "url": "https://arxiv.org/abs/1504.06852",
+  "citations": 4735,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "它第一次证明，光流这种逐像素的对应问题可以交给 CNN 做端到端的监督学习。文中的“相关层”（correlation layer）把两张图的特征按不同位移逐一做点积，后来的 PWC-Net、RAFT、DispNetC、RAFT-Stereo 以及 MVS 代价体都从这里演化而来。它还用合成的 Flying Chairs 数据集开创了一种做法：只在合成数据上训练，然后直接泛化到真实数据。",
+  "contributions_zh": "论文提出两种编解码结构。FlowNetS 把两张图直接拼接后输入网络；FlowNetC 用共享权重的编码器分别提取两张图的特征，再经过相关层。相关层的直觉是：特征越相似，两个像素越可能是同一个点。公式为 \\(c(\\mathbf x_1,\\mathbf x_2)=\\langle f_1(\\mathbf x_1),f_2(\\mathbf x_2)\\rangle\\)，其中 \\(f_1,f_2\\) 是两张图在像素 \\(\\mathbf x_1,\\mathbf x_2\\) 处的特征向量，⟨·,·⟩ 表示内积；原文在一个小 patch 内对内积求和，并且只比较有限的位移范围，以控制计算量。作者合成了约 2.3 万对 Flying Chairs 图像（椅子贴图在背景图前飞过），训练出的网络在 Sintel 和 KITTI 上精度有竞争力，速度为 5–10 fps。",
+  "anchor_link_zh": "两篇锚点都没有直接使用 FlowNet，关系是间接的。Ha et al. 的深度来自 RAFT-Stereo，而 RAFT-Stereo“先建相关体、再迭代更新”的结构可以追溯到 FlowNet 的相关层。弄懂“特征内积就是匹配代价”这一步，才能理解 Ha 的输入深度是怎么算出来的，以及它为什么会在高光、弱纹理区域失败：这些区域的匹配代价没有明显的峰值。",
+  "concept_ids": [
+   "d-flow",
+   "d-stereo",
+   "l-cnn",
+   "f-image"
+  ],
+  "difficulty": "入门",
+  "must_read": false,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "FlowNet 2.0: Evolution of Optical Flow Estimation with Deep Networks",
+  "authors": "Eddy Ilg 等（Univ. Freiburg）",
+  "year": 2017,
+  "venue": "CVPR 2017",
+  "url": "https://arxiv.org/abs/1612.01925",
+  "citations": 3436,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "它让学习式光流第一次在精度上追平传统变分方法，并确立了一种级联精化思路：把多个网络堆叠起来，每一级先用当前光流 warp 第二张图，再估计剩下的残差。它发现的训练数据调度规律（先 Chairs 后 Things3D）被此后几乎所有光流和立体网络沿用。2017–2020 年间，它是视频处理里最常用的现成光流器，例如 Consistent Video Depth 就用它建立帧间对应。",
+  "contributions_zh": "论文有三项主要贡献。(1) 数据调度：先在简单的 FlyingChairs 上训练，再在 FlyingThings3D 上微调，效果明显好于直接混合训练。(2) 堆叠架构：在 FlowNetC 之后串接若干个 FlowNetS。每一级的输入除了原图，还有“按当前光流 warp 过来的第二张图”和“亮度误差图”，所以后一级只需要预测修正量。(3) 专门处理小位移的子网络 FlowNet-SD，与大位移分支融合。整体误差比 FlowNet 降低 50% 以上，速度只略慢；更快的变体可达 140 fps，精度与原版 FlowNet 相当。",
+  "anchor_link_zh": "它和 Quark 的 render-and-refine 在结构上是同一个套路，但这只是帮助理解的类比：Quark 没有引用 FlowNet2，其思想直接来自 DeepView。FlowNet2 的每一级都是“用当前估计 warp 图像 → 与目标比较 → 预测修正量”。Quark 的每个 Update & Fuse 步是“把当前 LDM 渲染到各输入视角得到 Ĩ → 与输入特征比较 → 更新特征体”，一共 5 步。先把 warp 加残差的级联搞懂，再去看 Quark Fig. 1 的迭代流程会顺畅得多。",
+  "concept_ids": [
+   "d-flow",
+   "i-warping",
+   "l-iterative",
+   "l-cnn"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "PWC-Net: CNNs for Optical Flow Using Pyramid, Warping, and Cost Volume",
+  "authors": "Deqing Sun 等（NVIDIA）",
+  "year": 2018,
+  "venue": "CVPR 2018",
+  "url": "https://arxiv.org/abs/1709.02371",
+  "citations": 2922,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "它把传统光流的三条经典原则——金字塔（由粗到细）、warping、代价体——做进了一个紧凑的可学习网络。模型比 FlowNet2 小 17 倍，精度反而更高。2018–2020 年间，它是光流、场景流和视频插帧的默认骨干。“每一级先用上一级的估计 warp 特征，再建局部代价体”也因此成为由粗到细几何网络的标准模板。",
+  "contributions_zh": "网络在可学习的特征金字塔上逐级工作。每一级先把上一级光流上采样，用它把第二张图的特征 warp 到第一张图，然后只在很小的搜索半径内建立局部代价体（相关），由 CNN 解码出本级光流，最后用 context 网络精化。直觉例子：真实位移是 100 像素时，在 1/32 分辨率上只有约 3 像素，小范围搜索就够了，之后逐级放大并修正残差。它在 MPI Sintel final pass 和 KITTI 2015 上领先，1024×436 分辨率下约 35 fps。",
+  "anchor_link_zh": "它在概念上对应 Quark 的两个设计（Quark 未引用 PWC-Net，这里是类比）。第一，Quark 的输入编码也是 K 级特征金字塔（288×480、144×240、72×120、36×60），Update & Fuse 则从 36×64 逐级升到 288×512。第二，每一级都“用当前估计把信息投到另一视角再做比较”。区别在于估计对象：PWC-Net 估计的是 2D 位移，Quark 估计的是目标视锥内各层的 depth、density 和 blend weights。",
+  "concept_ids": [
+   "d-flow",
+   "f-image",
+   "i-warping",
+   "l-iterative",
+   "l-cnn"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "RAFT: Recurrent All-Pairs Field Transforms for Optical Flow",
+  "authors": "Zachary Teed, Jia Deng（Princeton）",
+  "year": 2020,
+  "venue": "ECCV 2020（Best Paper）",
+  "url": "https://arxiv.org/abs/2003.12039",
+  "citations": 4222,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "RAFT 用“全对相关体 + 共享权重的循环更新算子”取代了由粗到细的级联，精度、跨数据集泛化和训练效率同时大幅领先。此后的光流（GMA、FlowFormer）、立体（RAFT-Stereo、CREStereo、IGEV）、SLAM（DROID-SLAM）和点跟踪等工作大量沿用“相关查找 + GRU 迭代”这套骨架，“学习式迭代细化”也由此成为 3D 视觉的主流范式。",
+  "contributions_zh": "网络在 1/8 分辨率提取 256 维特征，计算所有像素对之间的 4D 相关体 \\(C_{ijkl}=\\sum_h g_{ijh}\\,g'_{klh}\\)，其中 g、g' 是两张图的特征，(i,j) 和 (k,l) 分别是两张图中的像素坐标，h 是通道下标；再对后两维做池化，得到 4 级相关金字塔。每次迭代以当前光流对应的位置为中心，在半径 r=4 的邻域内查找相关值（最粗一级相当于原图 256 像素的范围），和上下文特征一起送入卷积 GRU，输出增量 Δf，然后更新 f←f+Δf。训练时展开 12 次，推理时可以迭代任意次，100 次以上也不会发散。全分辨率光流用学习到的 3×3 凸组合上采样得到。损失是各次迭代 L1 误差的指数加权和 \\(\\sum_i\\gamma^{N-i}\\lVert f_{gt}-f_i\\rVert_1\\)，其中 γ=0.8，N 是迭代次数，越靠后的迭代权重越大。结果：KITTI F1-all 5.10%，Sintel final EPE 2.855，分别比此前最好结果降低 16% 和 30%。",
+  "anchor_link_zh": "Ha et al. 的输入深度来自 RAFT-Stereo，也就是 RAFT 在立体匹配上的版本（相关体只沿极线一维计算）。理解了 RAFT 的相关查找和 GRU 迭代，就能明白 Ha 的深度为什么是逐帧独立的，以及为什么还要额外用颜色差分掩码做时间滤波。对 Quark 来说，RAFT 是“学习式迭代细化”最知名的例子：Quark 的 5 步 render-and-refine（源自 DeepView）同样按固定步数展开、每步预测修正。不同之处在于，Quark 各步的分辨率、层数和注意力头数都不同（A4→A2→A1），各自是独立模块，而 RAFT 每次迭代共享同一个 GRU。另外，Ha 的时序评测没有使用基于光流 warping 的误差指标，要补做这类评测就需要一个光流网络，例如 RAFT。",
+  "concept_ids": [
+   "d-flow",
+   "l-iterative",
+   "d-stereo",
+   "v-temporal",
+   "a-learned-stereo"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "Computing the Stereo Matching Cost with a Convolutional Neural Network (MC-CNN)",
+  "authors": "Jure Žbontar, Yann LeCun（NYU）",
+  "year": 2015,
+  "venue": "CVPR 2015（扩展版 JMLR 2016）",
+  "url": "https://arxiv.org/abs/1409.4326",
+  "citations": 830,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "这是第一个靠深度学习登上 KITTI 立体榜首的方法。它证明学出来的匹配代价明显好于 census、SAD 等手工代价，由此开启了深度立体匹配时代。它采用的是混合流程：CNN 负责算代价，SGM 等经典方法负责聚合和后处理。后来的端到端网络（DispNetC、GC-Net）要取代的正是这套流程。",
+  "contributions_zh": "作者训练一个孪生 CNN，判断两个小图像块是否是同一处的投影，把它的输出当作每个像素在每个候选视差上的匹配代价。之后接一串经典步骤：cross-based 代价聚合、半全局匹配（SGM）、左右一致性检查（剔除遮挡区的错误），以及亚像素增强。KITTI 误差为 2.61%，2014 年 8 月排名第一。JMLR 扩展版还提出“fast”结构，直接用两块特征的余弦相似度作为代价，以少量精度损失换来大幅加速。",
+  "anchor_link_zh": "与两篇锚点没有直接引用关系。间接的联系是：Ha 所用 RAFT-Stereo 的相关体，本质上就是把“学习特征的点积 = 匹配代价”在整条极线上稠密地算一遍，这个思想由 MC-CNN（fast 版）确立。理解了“代价就是特征相似度”，也更容易读懂 Quark 的 Update Block 从输入特征和渲染结果中提取的“匹配线索”指的是什么。",
+  "concept_ids": [
+   "d-stereo",
+   "g-epipolar",
+   "l-cnn",
+   "f-optim",
+   "a-learned-stereo"
+  ],
+  "difficulty": "入门",
+  "must_read": false,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "A Large Dataset to Train Convolutional Networks for Disparity, Optical Flow, and Scene Flow Estimation (SceneFlow / DispNet)",
+  "authors": "Nikolaus Mayer 等（Univ. Freiburg）",
+  "year": 2016,
+  "venue": "CVPR 2016",
+  "url": "https://arxiv.org/abs/1512.02134",
+  "citations": 3092,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "论文发布了 FlyingThings3D、Monkaa、Driving 三个大规模合成立体视频数据集（统称 SceneFlow），带稠密的视差、光流和场景流真值。此后近十年，几乎所有深度立体网络（GC-Net、PSMNet、RAFT-Stereo、IGEV 等）都先在 SceneFlow 上预训练，“在 SceneFlow 上训练、在 KITTI/Middlebury/ETH3D 上零样本测试”也成了标准评测协议。同文提出的 DispNet/DispNetC 首次实现了端到端的实时视差估计。",
+  "contributions_zh": "(1) 用渲染软件合成三套数据：随机物体飞行、动画短片、驾驶场景。这是第一批足以训练大网络的场景流数据。(2) DispNet 用 FlowNet 式编解码结构直接回归视差；DispNetC 把相关层改为只沿水平极线计算的 1D 相关，把立体匹配的几何约束直接写进网络。(3) 把光流网络和视差网络联合训练，首次用 CNN 估计场景流。",
+  "anchor_link_zh": "Ha et al. 用 RAFT-Stereo 生成 DyNeRF 和 Google Spaces 的逐视角深度，而 RAFT-Stereo 论文里的跨数据集泛化实验都是在 SceneFlow 上训练、在真实数据上测试。Ha 没有说明具体用的是哪份权重，所以这里只能说其深度先验很可能大量来自合成数据。这也是理解 Ha 自述局限的一个可能视角（属于推测，论文未验证）：合成数据较少覆盖高光和镜面，而正是这些区域的深度错误破坏了 TSDF 引导，使结果在视角和时间上不一致（Ha Fig. 9）。",
+  "concept_ids": [
+   "d-stereo",
+   "d-flow",
+   "l-loss",
+   "a-learned-stereo"
+  ],
+  "difficulty": "入门",
+  "must_read": false,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "End-to-End Learning of Geometry and Context for Deep Stereo Regression (GC-Net)",
+  "authors": "Alex Kendall 等（Skydio）",
+  "year": 2017,
+  "venue": "ICCV 2017",
+  "url": "https://arxiv.org/abs/1703.04309",
+  "citations": 1561,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "GC-Net 第一次把三件事组合成端到端的立体网络：带几何含义的 4D 代价体、3D 卷积正则化、可微的 soft argmin。这套组合成为 2017–2020 年立体和 MVS 网络的标准范式，PSMNet、GA-Net、MVSNet、CasMVSNet 都直接继承了它。soft argmin 能从离散假设上的概率分布回归出亚像素的连续值，这个技巧在深度估计、MVS 和可泛化 NeRF 中随处可见。",
+  "contributions_zh": "对每个候选视差 d，把左图特征与右移 d 个像素后的右图特征拼接起来，得到“高×宽×视差×特征”的 4D 代价体。与相关层不同，它不把特征维压成一个数，因此保留了更多信息。随后用 3D 卷积编解码器在空间维和视差维上聚合上下文。最后做 soft argmin：\\(\\hat d=\\sum_{d=0}^{D_{\\max}} d\\cdot\\mathrm{softmax}(-c_d)\\)，其中 \\(c_d\\) 是该像素在视差 d 上的代价（越小越匹配），softmax 在全部候选视差上归一化，\\(D_{\\max}\\) 是最大视差（论文取 192）。数值例子：若 d=10 和 d=11 的 softmax 概率分别为 0.6 和 0.4，其余接近 0，则 \\(\\hat d=10.4\\)，得到亚像素视差。",
+  "anchor_link_zh": "Quark 的 LDM 层按等视差（逆深度）间隔放置 anchor，δ=(ℓ−0.5)/L，这和立体代价体沿视差均匀采样是同一个做法。离散假设最终都要变成连续的亚像素几何：GC-Net 用 soft argmin；Quark 让每层深度用 tanh 在自己的视差带内连续偏移；Ha 的 image-based TSDF 沿射线找到零交叉后，再做 3 步二分细化。此外，soft argmin 按概率加权求期望深度，和体渲染按权重求期望深度的形式一样，可以借此理解 Quark 如何按 density 合成各层。",
+  "concept_ids": [
+   "d-stereo",
+   "g-depth",
+   "i-psv",
+   "r-volume",
+   "l-cnn",
+   "a-learned-stereo"
+  ],
+  "difficulty": "入门",
+  "must_read": true,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "Pyramid Stereo Matching Network (PSMNet)",
+  "authors": "Jia-Ren Chang, Yong-Sheng Chen（台湾交通大学）",
+  "year": 2018,
+  "venue": "CVPR 2018",
+  "url": "https://arxiv.org/abs/1803.08669",
+  "citations": 1853,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "PSMNet 在 GC-Net 框架上加入空间金字塔池化（SPP）和堆叠沙漏 3D CNN，大幅改善了弱纹理、反光、遮挡等病态区域的匹配，2018 年 3 月前在 KITTI 2012/2015 排名第一。它的开源代码简洁，此后几年一直是立体网络最常用的基线和改进起点。",
+  "contributions_zh": "(1) SPP 模块在多个尺度上池化特征，引入全局上下文，再拼接成 4D 代价体。(2) 三个堆叠的沙漏形 3D CNN 配合中间监督，对代价体反复做自顶向下和自底向上的正则化。(3) 仍用 soft argmin 回归视差，损失为 smooth L1。论文要传达的结论是：单靠局部匹配不够，弱纹理区域需要大感受野的上下文推理来补全。",
+  "anchor_link_zh": "与锚点没有直接引用关系。它的价值在于解释了一个失败模式：纯局部匹配为什么在弱纹理和高光区域失效、需要上下文推理。这正是 Ha et al. 输入深度的主要问题。Ha 在局限部分承认，高光区域深度错误会让 TSDF 引导失效，结果在视角和时间上都不再一致。",
+  "concept_ids": [
+   "d-stereo",
+   "l-cnn",
+   "a-learned-stereo"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "RAFT-Stereo: Multilevel Recurrent Field Transforms for Stereo Matching",
+  "authors": "Lahav Lipson, Zachary Teed, Jia Deng（Princeton）",
+  "year": 2021,
+  "venue": "3DV 2021",
+  "url": "https://arxiv.org/abs/2109.07547",
+  "citations": 731,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "它把 RAFT 的迭代更新范式搬到立体匹配上，跨数据集泛化很强：只在 SceneFlow 上训练，就能在 Middlebury 和 ETH3D 上表现出色。因此在 2021–2024 年，它是最常被直接调用的“现成”立体深度模型，大量 NVS、重建和机器人工作都在用。CREStereo、IGEV-Stereo 以及 FoundationStereo 等后续方法也都沿用它的迭代骨架。",
+  "contributions_zh": "(1) 只计算同一行像素之间的相关，得到 3D 相关体，而不是 RAFT 那样的 4D 全对相关，并在其上构建相关金字塔。(2) 多级卷积 GRU 同时在 1/8、1/16、1/32 分辨率维护隐状态，彼此交叉连接，让信息在大片弱纹理区域里传播得更快。(3) 用凸组合上采样得到全分辨率视差。结果：Middlebury 排名第一，1px 误差比第二名低 29%；实时变体在 KITTI 分辨率（1248×384）下约 26 FPS。",
+  "anchor_link_zh": "它是 Ha et al. 的直接深度来源。Sec. 3 和附录 A.5 写明：DyNeRF 与 Google Spaces 的逐视角深度 D_n^t 由 RAFT-Stereo 在“人工挑选的图像对”上估计，ScanNet 则用传感器深度；立体深度的耗时没有计入 Table 4 约 39 ms 的运行时间。RAFT-Stereo 逐帧独立推理，不保证时间一致，所以 Ha 需要颜色差分掩码递归滤波（λ_t=0.7、β=0.6）和 TSDF 融合。它在高光区域的失败也是 Ha 自述的首要局限（Fig. 9）。",
+  "concept_ids": [
+   "d-stereo",
+   "l-iterative",
+   "g-epipolar",
+   "g-depth",
+   "a-learned-stereo"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ }
+]

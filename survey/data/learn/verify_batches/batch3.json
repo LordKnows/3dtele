@@ -1,0 +1,503 @@
+[
+ {
+  "title": "FoundationStereo: Zero-Shot Stereo Matching",
+  "authors": "Bowen Wen 等（NVIDIA）",
+  "year": 2025,
+  "venue": "CVPR 2025",
+  "url": "https://arxiv.org/abs/2501.09898",
+  "citations": 285,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "它把“基础模型”的思路带进了立体匹配：用大规模合成数据加上单目深度基础模型的先验，实现强零样本泛化，不再需要针对每个域微调。发表后很快成为新的首选现成立体模型之一，标志着立体匹配进入 foundation model 阶段。",
+  "contributions_zh": "(1) 构建 100 万对高真实感的合成立体数据，并用自动自筛选流程剔除有歧义的样本。(2) Side-Tuning Adapter：把 ViT 单目深度模型（Depth Anything V2）的特征从旁路接入立体网络，缓解合成数据到真实数据的域差。(3) Attentive Hybrid Cost Filtering：一方面把 3D 卷积拆成空间向和视差向两部分（Axial-Planar Convolution），另一方面用 Disparity Transformer 在整个视差维上做自注意力，为代价滤波提供长程上下文。(4) 最后仍用 GRU 迭代细化视差。",
+  "anchor_link_zh": "它可以直接替换 Ha et al. 里的 RAFT-Stereo。Ha 依赖“人工挑选立体对 + RAFT-Stereo”，换成零样本更稳的模型，有望改善它自述的高光和弱纹理区域深度失败。但 FoundationStereo 仍是逐帧模型，解决不了时间一致性，Ha 的差分掩码滤波和上一帧 TSDF 回灌照样需要。它的推理开销也必须算进真实系统的延迟预算，而 Ha 的 39 ms 并不含深度估计。",
+  "concept_ids": [
+   "d-stereo",
+   "d-mono",
+   "l-attention",
+   "a-learned-stereo"
+  ],
+  "difficulty": "专家",
+  "must_read": false,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "MVSNet: Depth Inference for Unstructured Multi-view Stereo",
+  "authors": "Yao Yao 等（HKUST）",
+  "year": 2018,
+  "venue": "ECCV 2018",
+  "url": "https://arxiv.org/abs/1804.02505",
+  "citations": 1724,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "这是第一个真正实用的端到端学习式多视角立体网络。它把平面扫描（plane sweep）做成可微的单应 warp，并用方差把任意数量视角的特征聚合成代价体，确立了学习式 MVS 的标准流水线：R-MVSNet、CasMVSNet、PatchmatchNet、TransMVSNet 都由此出发。它的“视锥内扫描体”后来也被 MVSNeRF、ENeRF 等可泛化 NeRF 直接借用。",
+  "contributions_zh": "(1) 可微单应 warp：在参考相机视锥里取 D 个与相机正对的深度平面，用平面诱导单应把每个源视角的特征 warp 到参考视角，\\(\\mathbf H_i(d)=\\mathbf K_i\\mathbf R_i\\big(\\mathbf I-\\tfrac{(\\mathbf t_1-\\mathbf t_i)\\,\\mathbf n_1^{\\top}}{d}\\big)\\mathbf R_1^{\\top}\\mathbf K_1^{-1}\\)。其中 K 是内参，R、t 是外参，下标 1 表示参考视角，\\(\\mathbf n_1\\) 是参考相机主轴方向，d 是假设深度（原文把 \\(\\mathbf K_1^{-1}\\) 误印为 \\(\\mathbf K_1^{T}\\)）。(2) 方差代价：\\(\\mathbf C=\\frac1N\\sum_{i=1}^{N}(\\mathbf V_i-\\bar{\\mathbf V})^2\\)，其中 \\(\\mathbf V_i\\) 是第 i 个视角 warp 后的特征体，\\(\\bar{\\mathbf V}\\) 是它们的均值。各视角在正确深度上特征一致，方差就小；而且这种聚合对视角数量和顺序都不敏感。(3) 3D CNN 正则化后用 soft argmin 回归深度，再用参考图精化。在 DTU 上，深度假设在 425–935 mm 之间按 2 mm 间隔均匀取 256 个；在 Tanks and Temples 上不做微调即排名第一（2018 年 4 月）。",
+  "anchor_link_zh": "在学习式 MVS 里，它与 Quark 的关系最直接。Quark Sec. 3.2.2 明确写道：Update Block 反投影回层空间得到的逐视角特征 Δ“与平面扫描体有相似之处”，但 Δ 还额外编码了“渲染 vs 观测”的可见性信息。两者的差别有三点。其一，Quark 的层建在目标视锥中并按等视差分布，而 MVSNet 在 DTU 上的平面建在参考视锥中、按等深度分布。其二，在跨视角聚合上，Quark Sec. 2.2 把均值/方差统计评为“简单、与顺序无关，但表达力有限”，改用 One-to-many attention。其三，Quark 的消融显示，把注意力退化为均值后，PSNR 从 30.41 降到 29.73。读过 MVSNet，就能看清 Quark 在这些地方改进了什么。",
+  "concept_ids": [
+   "d-mvs",
+   "g-epipolar",
+   "i-psv",
+   "l-cnn",
+   "a-learned-mvs"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "Cascade Cost Volume for High-Resolution Multi-View Stereo and Stereo Matching (CasMVSNet)",
+  "authors": "Xiaodong Gu 等（Alibaba）",
+  "year": 2020,
+  "venue": "CVPR 2020（Oral）",
+  "url": "https://arxiv.org/abs/1912.06378",
+  "citations": 995,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "代价体方法的核心瓶颈是内存和时间随分辨率呈三次方增长。CasMVSNet 用级联代价体解决了这个问题：由粗到细地逐级缩小深度搜索范围，使高分辨率的学习式 MVS 和立体匹配变得可行。它由此成为后来 MVS 网络的标准配置，也被可泛化渲染用来做深度引导采样：ENeRF 就是在目标视角构建级联代价体，预测深度概率分布来决定采样区间。",
+  "contributions_zh": "网络在特征金字塔上分三级构建代价体。第一级在低分辨率下用宽深度范围和较多假设平面粗略定位表面。之后每一级以上一级的深度为中心，缩小搜索范围和平面间隔，同时提高空间分辨率。具体配置为：三级的深度假设数依次是 48、32、8，深度间隔分别是 MVSNet 的 4、2、1 倍。套用在 MVSNet 上，DTU 结果提升 23.1%，显存减少 50.6%，运行时间减少 74.2%；这套方法同样适用于立体匹配网络。",
+  "anchor_link_zh": "它和 Quark 的多尺度设计高度同构（属于概念类比，Quark 没有引用 CasMVSNet）。Quark 先在 36×64 的低分辨率下用 24 层密集覆盖深度，然后逐级把空间分辨率翻倍，并用 Layer Collapse 把层数减半：24 层 36×64 → 24 层 72×128 → 12 层 144×256 → 6 层 288×512。每层深度只允许在自己的视差带内移动，也就是先粗定位表面，再在表面附近用少量层精修。Quark 的消融显示，去掉 layer collapse 后质量只略有提升（PSNR 30.56 对 30.41），运行时间却增加 115%，这和 CasMVSNet“省显存、省时间而不掉精度”的结论一致。此外，两篇锚点共同的主要对手 ENeRF 用的也是级联代价体。",
+  "concept_ids": [
+   "d-mvs",
+   "g-depth",
+   "i-psv",
+   "i-layered",
+   "a-learned-mvs",
+   "a-generalizable-ibr"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "Multi-view Depth Estimation using Epipolar Spatio-Temporal Networks (ESTDepth)",
+  "authors": "Xiaoxiao Long 等（HKU + MPI Informatik）",
+  "year": 2021,
+  "venue": "CVPR 2021",
+  "url": "https://arxiv.org/abs/2011.13118",
+  "citations": 60,
+  "citations_source": "OpenAlex",
+  "theme": "t-deep-geometry",
+  "influence_zh": "它是较早在学习式多视角深度中显式处理视频帧间几何与时间一致性的工作。引用量不高，之所以收入本表，是因为 Ha et al. 直接采用了它的一致性评测做法；理解锚点的评测离不开它。",
+  "contributions_zh": "方法从单目视频估计多视角深度。它先用一个混合网络逐帧估计深度：2D 上下文网络负责上下文，3D 匹配网络负责视差线索，这种受 Mixture-of-Experts 启发的拆分降低了全 3D 卷积正则化的开销。然后用 Epipolar Spatio-Temporal (EST) Transformer 沿极线关联相邻帧的几何与时间信息，输出时间一致的深度序列。与当时的 SOTA 相比，精度更高，速度也明显更快。",
+  "anchor_link_zh": "Ha et al. Sec. 4.3 写明，SDT 和 SDV 两个指标的计算“following Long et al. [42]”。SDT 是所有帧上 L1 误差的标准差，用来衡量时间一致性；SDV 是所有视角上 L1 误差的标准差，用来衡量视角一致性。要注意，这两个量刻画的是误差的离散程度，而不是帧与帧之间的变化本身，所以读 Ha 的 Table 1 时要和 TCC、STED 放在一起看。ESTDepth 本身走的是“用网络从源头产生时间一致深度”的路线，可以和 Ha 的“差分掩码 + TSDF 回灌”启发式做对照。",
+  "concept_ids": [
+   "d-mvs",
+   "v-temporal",
+   "v-metrics",
+   "l-attention",
+   "a-temporal-video",
+   "a-learned-mvs"
+  ],
+  "difficulty": "专家",
+  "must_read": false,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "Unsupervised Monocular Depth Estimation with Left-Right Consistency (Monodepth)",
+  "authors": "Clément Godard, Oisin Mac Aodha, Gabriel J. Brostow（UCL）",
+  "year": 2017,
+  "venue": "CVPR 2017（Oral）",
+  "url": "https://arxiv.org/abs/1609.03677",
+  "citations": 3292,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "它开创了“用视图合成做自监督”来训练深度网络的思路：不需要深度真值，只要双目视频。做法是用预测的视差把另一只眼的图像 warp 过来，再用重建误差做监督。这种光度重建损失和左右一致性约束成为自监督深度（SfMLearner、Monodepth2 等）的基石，和 NVS 用留出视角做监督也是同一个思想。",
+  "contributions_zh": "网络只看左图，同时预测左、右两张视差图。用可微的双线性采样，按左视差把右图 warp 成左图，反之亦然。损失由三项组成：SSIM+L1 的外观重建项、边缘感知的视差平滑项、左右视差一致性项。在 KITTI 上超过了当时部分有监督方法。数值例子：视差与深度的关系是 \\(d=f\\,b/Z\\)，其中 f 是像素焦距，b 是基线，Z 是深度。KITTI 的 b≈0.54 m、f≈720 px，所以 Z=10 m 时 d≈39 px，Z=40 m 时只剩约 10 px，远处深度因此更难估准。",
+  "anchor_link_zh": "人物关联：第一作者 Clément Godard 是 Quark 的共同作者，现在 Google 从事 Project Starline 相关的实时三维重建与神经渲染。技术关联：Quark 的训练本质上也是“用视图合成做监督”，即在留出的目标视角上用 10·L1+LPIPS 比较渲染图和真实图像，不需要深度真值。Ha 的损失 0.8·L1+0.2·SSIM 在形式上也与 Monodepth 的外观项相近，都是 SSIM 和 L1 的加权组合。理解了 warp 重建损失，就能明白为什么 NVS 网络会顺带学到几何，也能看出 Ha 在 L_Depth 中额外约束几何的必要性。",
+  "concept_ids": [
+   "d-mono",
+   "g-depth",
+   "i-warping",
+   "l-loss",
+   "g-epipolar"
+  ],
+  "difficulty": "入门",
+  "must_read": false,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "Towards Robust Monocular Depth Estimation: Mixing Datasets for Zero-shot Cross-dataset Transfer (MiDaS)",
+  "authors": "René Ranftl 等（Intel + ETH Zürich）",
+  "year": 2020,
+  "venue": "IEEE TPAMI（2020 年在线发表）",
+  "url": "https://arxiv.org/abs/1907.01341",
+  "citations": 2803,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "MiDaS 证明，单目深度能否泛化，关键在于两点：混合多源数据，以及使用对尺度和平移不变的损失。它首次做到了可靠的零样本跨数据集单目深度。它提出的 scale-and-shift invariant loss 和“用 3D 电影做训练数据”的做法被 DPT、Depth Anything 等后续基础模型直接继承，是单目深度基础模型谱系的起点。",
+  "contributions_zh": "不同数据集的深度在尺度、偏移甚至表示形式（绝对深度、视差、相对顺序）上互不兼容。MiDaS 的办法是在视差（逆深度）空间做预测，并对每张图先求出最佳的尺度 s 和平移 t，再计算误差：\\((s,t)=\\arg\\min_{s,t}\\sum_i (s\\,d_i+t-d_i^*)^2\\)，损失为 \\(\\mathcal L_{ssi}=\\frac1{2M}\\sum_{i=1}^{M}\\rho\\big(s\\,d_i+t-d_i^*\\big)\\)。其中 \\(d_i\\) 是预测视差，\\(d_i^*\\) 是真值视差，M 是有效像素数，ρ 是误差函数；论文还给出用中位数和平均绝对偏差归一化的鲁棒版本。训练用多目标优化混合 5 个数据集，其中包括新构建的 3D 电影数据，并以零样本跨数据集迁移作为评测标准。",
+  "anchor_link_zh": "它能帮助理解锚点对“度量尺度”的依赖。MiDaS 这类模型只输出相对的（仿射不变的）逆深度。而 Ha et al. 的 image-based TSDF 用公制截断 τ=0.02 m，Quark 用 SfM 点来设定近/远平面，二者都需要度量尺度，至少也要和相机位姿的尺度一致。如果想用单目深度替换 Ha 的 RAFT-Stereo，就必须逐帧、并且在时间上一致地估计 s 和 t，否则各视角的深度无法在 TSDF 中对齐融合。两篇锚点都没有使用单目深度。",
+  "concept_ids": [
+   "d-mono",
+   "g-depth",
+   "l-loss",
+   "f-optim"
+  ],
+  "difficulty": "入门",
+  "must_read": true,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "Vision Transformers for Dense Prediction (DPT)",
+  "authors": "René Ranftl, Alexey Bochkovskiy, Vladlen Koltun（Intel）",
+  "year": 2021,
+  "venue": "ICCV 2021",
+  "url": "https://arxiv.org/abs/2103.13413",
+  "citations": 3100,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "DPT 是第一个系统地把 ViT 用作稠密预测骨干的工作。它证明 Transformer 的全局感受野在数据充足时能给出更细致、全局更一致的深度和分割。它的 reassemble + 融合解码头后来成为几何基础模型的标准输出头，MiDaS v3、Depth Anything V1/V2、DUSt3R、VGGT 都采用 DPT 式头。",
+  "contributions_zh": "从 ViT 的不同层取出 token，按各自对应的图像 patch 位置重新排成几种分辨率的类图像特征图（reassemble），再用卷积解码器逐级融合，输出全分辨率预测。单目深度相对当时最好的全卷积网络最多提升 28%，ADE20K 语义分割达到 49.02% mIoU。",
+  "anchor_link_zh": "与两篇锚点没有直接关系。间接意义有两点。一是 Quark 用的是“特征金字塔 + 由粗到细的 UNet 式解码”，DPT 给出了这类结构的 Transformer 版本。二是如果以后想把 DUSt3R、VGGT 或 Depth Anything 的深度接入 Ha 式管线，需要知道这些模型的输出头和输出分辨率都来自 DPT 的设计。",
+  "concept_ids": [
+   "d-mono",
+   "l-attention",
+   "l-cnn"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "Depth Anything: Unleashing the Power of Large-Scale Unlabeled Data",
+  "authors": "Lihe Yang 等（HKU + TikTok）",
+  "year": 2024,
+  "venue": "CVPR 2024",
+  "url": "https://arxiv.org/abs/2401.10891",
+  "citations": 2160,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "它用“数据引擎 + 自训练”把单目深度的训练数据扩展到约 6200 万张无标注图像，零样本相对深度因此鲁棒到可以直接用于任意图像。V1 和 V2 发布后，它成为 3D 视觉中最常被调用的深度先验之一，被用于前馈 3DGS、立体基础模型、视频深度，以及深度条件的 ControlNet 等。",
+  "contributions_zh": "(1) 先用 150 万张有标注图像训练教师模型，给约 6200 万张无标注图像打伪标签，再用两者联合训练学生模型。(2) 对无标注图像施加强颜色扰动和 CutMix，迫使学生学到更鲁棒的表示。(3) 用特征对齐损失继承 DINOv2 的语义先验。网络由 DINOv2 编码器和 DPT 解码器组成，仿射不变损失沿用 MiDaS；另外在 NYUv2 和 KITTI 上用度量深度微调，得到度量模型。后续的 Depth Anything V2（NeurIPS 2024）改用合成数据训练更大的教师模型，细节更锐利，提供 25M 到 1.3B 参数的多个规模。",
+  "anchor_link_zh": "两篇锚点都没有使用单目深度，但它已经是锚点方向上的常用组件：FoundationStereo 把 Depth Anything V2 作为旁路先验，DepthSplat 用预训练单目深度特征做前馈 3DGS 的多视角深度，Video Depth Anything 在它之上加了时序头。对 Ha et al. 来说，它是 RAFT-Stereo 之外的候选深度源（Ha 没有做深度来源的鲁棒性实验），但要先解决两个问题：输出只是相对尺度，而且逐帧推理会闪烁。",
+  "concept_ids": [
+   "d-mono",
+   "l-attention",
+   "l-loss",
+   "a-geo-fm",
+   "a-ff-3dgs"
+  ],
+  "difficulty": "入门",
+  "must_read": true,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "Consistent Video Depth Estimation",
+  "authors": "Xuan Luo 等（Univ. Washington + Facebook）",
+  "year": 2020,
+  "venue": "ACM TOG 39(4) / SIGGRAPH 2020",
+  "url": "https://arxiv.org/abs/2004.15021",
+  "citations": 420,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "它首次系统地把单图深度网络的学习先验，与 SfM 和光流提供的多帧几何约束结合起来，得到几何一致、几乎不闪烁的视频深度。它开启了“测试时优化求一致视频深度”这条路线（后续有 Robust CVD 等），也是视频特效和视频 3D 化的重要基础。",
+  "contributions_zh": "先用 COLMAP 求出相机位姿，再用 FlowNet2 在多对帧之间计算稠密对应。测试时，以这些对应为约束去微调一个单图深度网络（初始模型为 Mannequin Challenge 深度网络），约束分两项：空间损失要求对应点反投影到世界坐标后位置重合；视差损失要求对应点的视差一致。微调完成后，网络对整段视频输出一致的深度。代价是只能离线处理：一段 244 帧、708 对光流的视频，测试时训练约需 40 分钟。",
+  "anchor_link_zh": "人物关联：第一作者 Xuan Luo 是 Quark 的共同作者，现为 Google 研究科学家，从事 Project Beam 的新视角合成。技术关联：它和 Ha et al. 解决的是同一个问题，即逐帧估计的深度在时间上不一致。Ha 用的是在线、廉价的启发式：颜色差分掩码 M=min(|ΔI|/λ_t+β,1) 驱动的递归滤波，加上上一帧 TSDF 深度回灌。CVD 用的是离线方案：光流和 SfM 约束加测试时训练。对比两者可以看清 Ha 的取舍：为了约 39 ms 的在线预算，它放弃了基于对应的时间约束，代价是只能在静止区域平滑深度，运动区域仍依赖逐帧深度。",
+  "concept_ids": [
+   "d-mono",
+   "d-flow",
+   "g-sfm",
+   "v-temporal",
+   "a-temporal-video"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "Video Depth Anything: Consistent Depth Estimation for Super-Long Videos",
+  "authors": "Sili Chen 等（ByteDance）",
+  "year": 2025,
+  "venue": "CVPR 2025",
+  "url": "https://arxiv.org/abs/2501.12375",
+  "citations": 261,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "它把单目深度基础模型扩展到任意长度的视频，同时保持时间一致，最小的模型能以 30 FPS 实时运行。它代表了 2025 年“前馈、在线、时间一致深度”这一方向的较好实践，是替代“逐帧深度 + 启发式滤波”的有力候选。",
+  "contributions_zh": "以 Depth Anything V2 为骨干，把输出头换成高效的时空头，在时间维上交换信息。损失方面，提出直接约束相邻帧深度时间梯度的时序一致性损失，不需要光流或位姿先验。训练数据是视频深度数据与无标注图像的联合。推理时用基于关键帧的策略处理长达数分钟的视频。",
+  "anchor_link_zh": "它直接对应 Ha et al. 的“时间一致深度”环节。Ha 对 RAFT-Stereo 的逐帧深度做 EMA 式的颜色差分掩码滤波，由于 β=0.6，静止区域每帧最多只保留 40% 的旧深度。Video Depth Anything 则是在网络内部学习时间一致性。如果用它替换 Ha 的深度前端，需要注意两点：它默认输出仿射不变的相对深度，与 Ha 的公制 TSDF 截断 τ=0.02 m 不能直接兼容；它是单目模型，用不上相机阵列的多视角约束。",
+  "concept_ids": [
+   "d-mono",
+   "v-temporal",
+   "l-attention",
+   "a-temporal-video",
+   "a-geo-fm"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "SuperPoint: Self-Supervised Interest Point Detection and Description",
+  "authors": "Daniel DeTone 等（Magic Leap）",
+  "year": 2018,
+  "venue": "CVPR Workshops 2018",
+  "url": "https://arxiv.org/abs/1712.07629",
+  "citations": 3725,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "它是第一个被广泛采用的自监督深度特征点，把检测和描述做在同一个网络里，并在 SfM、SLAM 和定位流水线中取代了 SIFT/ORB。它提出的 Homographic Adaptation 自监督方式影响了后续许多特征学习工作。它与 SuperGlue 的组合是 2020 年前后视觉定位与 SfM 的事实标准。",
+  "contributions_zh": "一个全卷积网络在整张图上做一次前向，同时输出关键点热图和描述子。关键点头在 1/8 分辨率上对每个 8×8 cell 做 65 类分类，即 64 个位置加一个“无关键点”类。训练分两步：先在合成几何图形上训练出 MagicPoint；再用 Homographic Adaptation，对同一张真实图像（MS-COCO）施加大量随机单应并聚合检测结果，生成伪真值来自监督训练。在 HPatches 的单应估计上优于 LIFT、SIFT 和 ORB。",
+  "anchor_link_zh": "关系是间接的。两篇锚点都假设相机已经标定：Ha et al. 用 COLMAP 对固定阵列做一次标定（附录又说使用数据集提供的参数），Quark 用 SfM 点来确定近/远平面。SuperPoint（常与 SuperGlue 一起）经常被用来替换 COLMAP 里的 SIFT，在弱纹理和大视角差的条件下得到更稳的匹配和位姿。阵列标定的精度直接决定两篇方法中投影、反投影和 TSDF 融合能否对齐。Ha 也承认，标定误差会让前向投影错位，导致结果模糊。",
+  "concept_ids": [
+   "g-sfm",
+   "g-epipolar",
+   "g-rig",
+   "l-cnn"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "SuperGlue: Learning Feature Matching with Graph Neural Networks",
+  "authors": "Paul-Edouard Sarlin 等（ETH Zürich + Magic Leap）",
+  "year": 2020,
+  "venue": "CVPR 2020（Oral）",
+  "url": "https://arxiv.org/abs/1911.11763",
+  "citations": 2971,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "它把特征匹配从“最近邻 + 比率测试”变成了可学习的全局推理问题：用带自注意力和交叉注意力的图网络，加上可微最优传输，同时找出对应并拒绝不可匹配的点，大幅提升了大视角、弱纹理条件下的位姿估计。它是注意力机制在几何匹配中最早的成功案例之一，直接启发了 LoFTR、LightGlue 以及后来的多视角 Transformer。",
+  "contributions_zh": "输入是两组关键点，每个点有位置、置信度和描述子；关键点编码器用 MLP 把位置信息融入描述子。注意力图网络交替做图内自注意力和图间交叉注意力，共 L 层。得到得分矩阵后，再加一行一列“dustbin”，表示该点没有匹配，然后用 Sinkhorn 算法迭代地做行列归一化，求出部分分配矩阵，即可微的最优传输。在室内外位姿估计上达到 SOTA，并能在 GPU 上实时运行。",
+  "anchor_link_zh": "与锚点有两处关联。(1) 标定：和 SuperPoint 一样，它是获取阵列位姿的更稳健工具，而 Ha 的 COLMAP 标定和 Quark 用 SfM 点定近/远平面都依赖稳健的特征匹配。(2) 注意力：SuperGlue 用交叉注意力让一个视角的特征去查询另一个视角；Quark 的 One-to-many attention 则让 LDM 特征体作为单一 query，去查询 M 个视角的 Δ。对比这两者，就能理解 Quark 为什么可以把 K/V 投影折叠进 Q 投影和输出投影：只有一个 query 时，对每个视角做 K/V 投影是冗余的。这样在 d_k=32、N=8、h=1 时，FLOPs 约为标准交叉注意力的 1/8.1。",
+  "concept_ids": [
+   "g-sfm",
+   "l-attention",
+   "f-optim",
+   "g-rig"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "LoFTR: Detector-Free Local Feature Matching with Transformers",
+  "authors": "Jiaming Sun 等（浙江大学 + SenseTime）",
+  "year": 2021,
+  "venue": "CVPR 2021",
+  "url": "https://arxiv.org/abs/2104.00680",
+  "citations": 2091,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "它开创了不依赖关键点检测器（detector-free）的半稠密匹配：先用 Transformer 的自注意力和交叉注意力在粗尺度上为所有像素建立匹配，再细化到亚像素。在弱纹理和重复纹理区域，它远胜基于关键点的方法，并催生了 MatchFormer、ASpanFormer、Efficient LoFTR 等一系列稠密匹配器。",
+  "contributions_zh": "CNN 提取 1/8 和 1/2 两个尺度的特征。在 1/8 尺度上，自注意力层和交叉注意力层交替变换两张图的特征，并用线性注意力（linear transformer）降低复杂度，使每个描述子同时以两张图为条件。然后用对偶 softmax（或最优传输）得到置信矩阵，选出互为最近邻的高置信匹配。最后在 1/2 尺度的局部窗口里用相关性细化到亚像素。发表时在两项视觉定位基准上排名第一。",
+  "anchor_link_zh": "与两篇锚点没有直接引用关系。间接意义有两点。其一，“先在低分辨率上做全局注意力，再在高分辨率上做局部精化”，与 Quark“把重计算放在低分辨率、高分辨率只做轻量操作”是同一种效率策略。其二，线性注意力降低复杂度的思路，可以和 Quark 的 One-to-many attention 对照着看。实践中，它也可以用于阵列标定时弱纹理区域的匹配。",
+  "concept_ids": [
+   "g-sfm",
+   "l-attention",
+   "d-flow",
+   "g-epipolar"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "DUSt3R: Geometric 3D Vision Made Easy",
+  "authors": "Shuzhe Wang, Vincent Leroy 等（Naver Labs Europe + Aalto）",
+  "year": 2024,
+  "venue": "CVPR 2024",
+  "url": "https://arxiv.org/abs/2312.14132",
+  "citations": 1903,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "它提出了“直接回归点图（pointmap）”的新范式：不需要任何相机内外参，一个 Transformer 直接从两张图输出两者在同一坐标系下的逐像素 3D 点。这把单目/双目深度、匹配、相对位姿、SfM 等任务统一了起来，开启了 MASt3R、Spann3R、CUT3R、VGGT、π3 等前馈 3D 几何基础模型的浪潮，也让大量无位姿 NVS/3DGS 方法成为可能。",
+  "contributions_zh": "对图像 \\(I^1,I^2\\)，网络输出点图 \\(X^{1,1},X^{2,1}\\in\\mathbb R^{W\\times H\\times 3}\\) 和置信图 C。上标 \\(v,1\\) 表示第 v 张图的每个像素在相机 1 坐标系下的 3D 点。结构为共享权重的 ViT 编码器，加上两个通过交叉注意力持续交换信息的 Transformer 解码器，再接回归头，并利用 CroCo 预训练。回归损失是按平均距离归一化后的 3D 点欧氏误差，再用置信度加权：\\(\\mathcal L=\\sum_i C_i\\,\\ell_i-\\alpha\\log C_i\\)，其中 \\(C_i\\) 是像素置信度，\\(\\ell_i\\) 是回归误差，α 是正则系数；\\(-\\alpha\\log C_i\\) 这一项防止网络把所有置信度都压到 0。输入多于两张图时，用全局对齐把各对点图拼到同一个坐标系。结果只确定到相差一个尺度因子。",
+  "anchor_link_zh": "它与锚点的关键差异正好落在锚点的前提上。Quark 和 Ha et al. 都假设有已标定的固定阵列（Ha 用 COLMAP 标定，Quark 用 SfM 点定近/远平面）；DUSt3R 则说明位姿和深度可以直接从图像前馈得到。锚点后继中的 AnySplat、LiveStre4m 等免标定方法所处的，正是这一范式推动的方向。另一个值得对照的点：DUSt3R 明确假设每条射线只击中一个 3D 点，忽略半透明情况；而 Quark 的 LDM 在每条射线上保留多层 depth/density，正是为了处理遮挡边界和半透明。这是点图与分层表示的本质区别。",
+  "concept_ids": [
+   "a-geo-fm",
+   "g-sfm",
+   "g-pinhole",
+   "d-mvs",
+   "l-attention",
+   "r-reps"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "Grounding Image Matching in 3D with MASt3R",
+  "authors": "Vincent Leroy, Yohann Cabon, Jérôme Revaud（Naver Labs Europe）",
+  "year": 2024,
+  "venue": "ECCV 2024",
+  "url": "https://arxiv.org/abs/2406.09756",
+  "citations": 1169,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "它把 DUSt3R 从“鲁棒但不够精确”推进到可以用于精确匹配和定位：在点图回归之外增加稠密局部特征头，并提出快速的互为最近邻匹配。这让以 3D 为基础的匹配在极端视角变化下明显超过 2D 匹配器。MASt3R-SfM、MASt3R-SLAM 等后续系统都以它为核心。",
+  "contributions_zh": "在 DUSt3R 网络上新增一个输出稠密局部描述子的头，用 InfoNCE 式的匹配损失训练。提出快速互为最近邻（reciprocal）匹配方案，把稠密匹配的二次复杂度降低了几个数量级，并给出理论保证。在 Map-free 定位数据集上，VCRE AUC 比已发表的最好方法绝对提升 30%。",
+  "anchor_link_zh": "与锚点没有直接引用关系。对 telepresence 的意义在于：它能在宽基线、弱纹理条件下提供稳健的对应，可用于多相机阵列的自动标定或标定校验。两篇锚点都假设标定准确，Ha 也没有做同步误差和标定误差的鲁棒性实验。",
+  "concept_ids": [
+   "a-geo-fm",
+   "g-sfm",
+   "g-rig",
+   "l-attention"
+  ],
+  "difficulty": "专家",
+  "must_read": false,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "VGGT: Visual Geometry Grounded Transformer",
+  "authors": "Jianyuan Wang 等（Oxford VGG + Meta AI）",
+  "year": 2025,
+  "venue": "CVPR 2025（Best Paper）",
+  "url": "https://arxiv.org/abs/2503.11651",
+  "citations": 1806,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-deep-geometry",
+  "influence_zh": "VGGT 用一个约 12 亿参数、几乎不带 3D 归纳偏置的 Transformer，一次前向就能从 1 张到数百张图同时预测相机内外参、深度图、点图和点轨迹，在多项任务上优于依赖 bundle adjustment 等后处理的方法。它把前馈几何基础模型推进到了多视角、秒级、可直接作为下游骨干的阶段，其特征已被用于前馈 NVS。",
+  "contributions_zh": "图像先由 DINO 切块成 token，每帧再附加一个相机 token。主干是 L=24 层交替注意力（Alternating-Attention）：帧内自注意力和跨所有帧的全局自注意力交替进行，不设专门的交叉注意力模块。相机头输出内外参，DPT 头输出深度图、点图及不确定度，另有一个跟踪头。训练时以第一帧的相机为坐标系，并用所有 3D 点到原点的平均距离来归一化尺度，所以输出不是公制尺度。在 RealEstate10K 和 CO3Dv2 的位姿估计上（10 帧，单张 H100），前馈约 0.2 s，而 VGGSfM 通常需要 10 s 以上。",
+  "anchor_link_zh": "它最能启发对 Quark 跨视角融合设计的理解。VGGT 的全局注意力让所有帧的所有 token 两两交互，计算量随视角数平方增长。Quark 刻意回避了 O(M²) 的跨视角自注意力（Sec. 2.2 批评 NerFormer 正是因为这一点），改用单 query 的 One-to-many attention，使融合代价近似与视角数无关：h=4 时，输入从 4 个增加到 64 个，标准注意力的开销涨 13.0 倍，Quark 只涨 1.9 倍。对 Ha et al. 而言，VGGT 一次前向就能同时给出阵列位姿和逐视角深度，理论上可以替代“COLMAP 标定 + RAFT-Stereo”；但它的输出尺度必须先与 Ha 的公制 TSDF 截断（τ=0.02 m）对齐，而且同样没有时间一致性保证。",
+  "concept_ids": [
+   "a-geo-fm",
+   "g-sfm",
+   "g-pinhole",
+   "l-attention",
+   "d-mvs"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-deep-geometry"
+  ]
+ },
+ {
+  "title": "DeepStereo: Learning to Predict New Views from the World's Imagery",
+  "authors": "John Flynn et al. (Google)",
+  "year": 2016,
+  "venue": "CVPR 2016",
+  "url": "https://arxiv.org/abs/1506.06825",
+  "citations": 709,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-neural-rendering",
+  "influence_zh": "一般认为这是第一篇用深度网络端到端完成真实场景新视角合成的工作。它的输入组织方式是：先把各输入视角按目标相机的一组深度平面重投影，得到平面扫描体（plane sweep volume, PSV），再交给网络判断每个像素的深度与颜色。StereoMag、LLFF、DeepView、MVSNeRF、ENeRF 等方法都沿用了这种“先用几何对齐，再让网络判断”的做法，因此它是学习式/可泛化 NVS 的起点。",
+  "contributions_zh": "(1) PSV 输入：每个目标视角取 5 张邻近输入图，各自按 96 个深度平面单应变换到目标相机，得到逐平面对齐的颜色栈。(2) 双塔结构：selection tower 对每个像素在 96 个平面上输出 softmax 概率 s_{i,j,z}，color tower 输出每个平面的候选颜色 c_{i,j,z}，最终像素为 \\(\\sum_z s_{i,j,z}\\,c_{i,j,z}\\)，可以理解为“软深度选择 + 逐平面选色”。深度不确定的区域因此会变模糊，而不是出现错位的撕裂。(3) 训练数据来自 Google Street View 的带位姿图像，用留一法自监督，不需要深度真值。局限：训练后输入视角数固定为 5，且推理很慢，在多核工作站上按 patch 渲染一张 512×512 图约需 12 分钟。",
+  "anchor_link_zh": "这是 Quark 一作 John Flynn 的早期工作。Quark 的 Update Block 把每视角的更新特征按当前深度反投影回 LDM 层空间，得到 Δ（锚点笔记称其“类似 plane-sweep volume”）；Learned Initialization 阶段则把图像特征 back-project 到等视差 anchor 平面上，这两处都是 PSV 思想的延续。DeepStereo 在每个平面上的 softmax 选择，可以看作 Quark 每层 density σ 和每层 blend weights 的前身。如果不熟悉 PSV，就很难理解 Quark 为什么先在固定视差平面上收集多视角特征。Ha et al. 走的是另一条路：不构建 PSV，直接使用外部立体深度（RAFT-Stereo）。两条路线的分歧在这篇论文里就能看出来。",
+  "concept_ids": [
+   "i-psv",
+   "g-depth",
+   "g-epipolar",
+   "l-cnn",
+   "i-blending",
+   "a-generalizable-ibr"
+  ],
+  "difficulty": "入门",
+  "must_read": false,
+  "themes": [
+   "t-neural-rendering"
+  ]
+ },
+ {
+  "title": "Stereo Magnification: Learning View Synthesis using Multiplane Images",
+  "authors": "Tinghui Zhou et al. (Google / UC Berkeley)",
+  "year": 2018,
+  "venue": "ACM TOG 37(4) / SIGGRAPH 2018",
+  "url": "https://arxiv.org/abs/1805.09817",
+  "citations": 436,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-neural-rendering",
+  "influence_zh": "这篇论文提出了多平面图像（MPI）：在参考相机前放 D 个按视差等距的正对平面，每个平面是一张 RGBA 图；渲染新视角只需逐平面做单应 warp，再用 over 算子合成。它确立了“网络预测一次，之后可实时渲染附近任意视角”的分层表示，DeepView、LLFF、NeX、Immersive LF Video 都在此基础上展开。论文同时发布了 RealEstate10K：约 1500 个 YouTube 房产视频，切成约 7000 段、约 75 万帧，每帧带 SfM 位姿。它后来成为单图/双图 NVS 和前馈 3D 重建的标准训练数据之一。",
+  "contributions_zh": "(1) MPI 表示：D=32 个平面，近、远平面分别为 1 m 和 100 m，平面按视差（逆深度）等距放置。(2) 精简的颜色参数化：每个平面的颜色为 \\(C_d = w_d \\odot I_1 + (1-w_d) \\odot \\hat I_b\\)，也就是参考图 I_1 与网络预测的一张“背景图” \\(\\hat I_b\\) 的逐像素混合。网络只需输出每个平面的 alpha、混合权重 w_d 和一张全局背景图，输出维度因此大幅降低。(3) 输入是参考图与第二张图的 PSV 拼接；通过可微的单应 warp 和 over 合成在目标视角上计算损失，损失为 VGG-19 多层特征匹配（感知损失）。(4) 消融：平面数从 8 到 16 再到 32，质量单调上升，受显存限制最多只用了 32 层。",
+  "anchor_link_zh": "Quark 的 LDM 是 MPI 家族的直接后代。每层同样有 density（相当于 alpha），同样由后向前 over 合成；层的 anchor 同样按等视差放置，δ=(ℓ−0.5)/L。区别在于 Quark 允许每层深度在自己的视差带内移动（见锚点“深度参数化”），不再是固定平面。Flynn 是本文共同作者。Ha et al. 的最终合成式 I=(1−w_BG)·I_FG + w_BG·I_BG，与 StereoMag 的“前景直接用输入像素、背景用网络预测图、按像素权重混合”思路相同：可见区域直接拷贝观测像素，遮挡区域交给网络预测的背景图去补。读懂 StereoMag 的公式 (1)，就能看懂 Ha 融合网络为什么要多输出一张 I_BG 和一个 w_BG。",
+  "concept_ids": [
+   "i-layered",
+   "r-alpha",
+   "i-psv",
+   "g-depth",
+   "g-epipolar",
+   "l-loss",
+   "a-layered-nvs"
+  ],
+  "difficulty": "入门",
+  "must_read": true,
+  "themes": [
+   "t-neural-rendering"
+  ]
+ },
+ {
+  "title": "Deep Blending for Free-Viewpoint Image-Based Rendering",
+  "authors": "Peter Hedman et al. (UCL / Inria / UNC)",
+  "year": 2018,
+  "venue": "ACM TOG 37(6) / SIGGRAPH Asia 2018",
+  "url": "https://doi.org/10.1145/3272127.3275084",
+  "citations": 922,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-neural-rendering",
+  "influence_zh": "IBR 中最依赖手工启发式的一步，是如何混合多张 warp 到目标视角的输入图。这篇论文把这一步交给 CNN 学习，并证明只用留出（held-out）的真实照片就能监督混合权重。“几何代理 + 重投影 + 学习式融合权重”这一范式，直接影响了 FVS/SVS、FWD 以及 Ha et al. 这类实时 IBR 方法。论文发布的场景（Playroom、DrJohnson 等）后来成为 3DGS 等方法的标准评测集。",
+  "contributions_zh": "(1) 把两种 MVS 重建组合起来：一种更准确，一种更完整，两者互补，为 CNN 提供足够可靠的几何。(2) 为了把学习嵌入交互式 IBR 系统，渲染器按排序把输入视角生成固定数量的层（mosaics），CNN 为每层预测逐像素混合权重，再加权得到新视角。(3) 训练时逐一留出每张输入照片作为真值；网络结构和损失函数在追求画质的同时也专门抑制时间闪烁（temporal flickering）。(4) 实现了交互式自由视点漫游，在远离输入相机的视角上优势尤其明显。",
+  "anchor_link_zh": "Ha et al. Sec. 3.3 的融合网络基本就是现代版 Deep Blending。输入是 K 张前向 splat 图，加上深度、alpha 和相机特征，送入 4 层 U-Net，输出逐像素权重 w_k 和背景权重 w_BG。一个值得对照的差别是：Ha 的训练损失里没有任何时间项（锚点笔记），时间一致性完全依靠输入端的颜色差分深度滤波和 TSDF；而 Deep Blending 在 2018 年就把闪烁放进了训练损失。Quark 在 Deep Blending 的 Playroom 场景上只有 23.61 dB，远低于 3DGS-30K 的 30.04。原因是只用最近 8 个视角时覆盖不足，这也说明自由漫游式 IBR 场景对视角选择很敏感。",
+  "concept_ids": [
+   "i-blending",
+   "i-warping",
+   "d-mvs",
+   "l-cnn",
+   "v-temporal",
+   "a-generalizable-ibr"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-neural-rendering"
+  ]
+ },
+ {
+  "title": "Local Light Field Fusion: Practical View Synthesis with Prescriptive Sampling Guidelines",
+  "authors": "Ben Mildenhall et al. (UC Berkeley / Fyusion)",
+  "year": 2019,
+  "venue": "ACM TOG 38(4) / SIGGRAPH 2019",
+  "url": "https://arxiv.org/abs/1905.00889",
+  "citations": 1331,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-neural-rendering",
+  "influence_zh": "LLFF 把全光函数的采样理论（plenoptic sampling）和学习式 MPI 结合起来，给出了一条可以直接照做的采集准则：相邻采集视角之间，最近物体的视差不超过 D 像素（D 为 MPI 平面数）。论文证明所需视角数随 D 呈二次下降，最多可比 Nyquist 采样少约 64²≈4000 倍。它发布的真实前向场景后来被 NeRF 称为 Real Forward-Facing（RFF/LLFF），成为 NeRF 及其后几乎所有可泛化方法的标准评测集。",
+  "contributions_zh": "(1) 局部光场扩展：每个采样视角和它的 4 个最近邻共 5 张图，各自构建按视差线性采样的 PSV，再由 3D CNN 预测该视角的 MPI。(2) 新视角由最近 5 个 MPI 分别渲染后加权混合，权重 \\(w \\propto \\exp(-\\gamma\\,\\ell)\\)，ℓ 是相机平移距离。每张渲染图再乘以它的累积 alpha，这样某个 MPI 看不到的遮挡区可以由其他 MPI 补上，消除简单平均时的拉伸伪影。(3) 扩展 plenoptic sampling 理论，得出采样上界；实验中，当视差不超过 D 像素后，再增加平面数不再带来提升。(4) 提供了引导用户采集的手机 AR App，以及桌面端和移动端的实时查看器。",
+  "anchor_link_zh": "Quark 的训练集包含 RFF（LLFF），主表在 RFF 上的结果为 26.03/0.850/0.137（1024×768），ENeRF 为 23.71。与 Ha et al. 的联系体现在混合公式上：Ha 的 I_FG = Σ_k 𝓘_k·α_k·w_k / Σ_k α_k·w_k，也用每个视角前向渲染的累积 alpha α_k 去调制混合权重，这正是 LLFF 用 accumulated alpha 让一个视角填补另一个视角空洞的做法。不理解这一点，就不容易看出 Ha 公式中 α_k 的作用：没有被该视角覆盖的像素会自动降权。",
+  "concept_ids": [
+   "i-lightfield",
+   "i-layered",
+   "i-psv",
+   "r-alpha",
+   "f-image",
+   "i-blending",
+   "a-layered-nvs"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-neural-rendering"
+  ]
+ }
+]

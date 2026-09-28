@@ -1,0 +1,520 @@
+[
+ {
+  "title": "Mip-Splatting: Alias-free 3D Gaussian Splatting",
+  "authors": "Zehao Yu et al. (University of Tübingen)",
+  "year": 2024,
+  "venue": "CVPR 2024",
+  "url": "https://arxiv.org/abs/2311.16493",
+  "citations": 935,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-neural-rendering",
+  "influence_zh": "Mip-Splatting 发现，3DGS 在采样率变化（改变焦距或相机距离）时会出现严重伪影，根源有两个：缺少 3D 频率约束，以及屏幕空间使用固定的 2D 膨胀滤波。它依据采样定理提出了 3D 平滑滤波加 2D Mip 滤波，成为 3DGS 抗锯齿的标准做法。",
+  "contributions_zh": "(1) 3D 平滑滤波：一个像素间隔回投到世界空间约为 d/f（d 为深度，f 为以像素为单位的焦距）。据此由训练视角推出每个 Gaussian 能被重建的最高采样频率，在 3D 空间给 Gaussian 卷积一个低通滤波，限制它的最小尺寸，消除放大时的高频伪影。(2) 2D Mip 滤波：用一个近似盒滤波的 2D Gaussian 替换 3DGS 的屏幕空间膨胀，缓解缩小时的走样和结构变粗。(3) 在“单尺度训练、多尺度测试”的设置下验证了有效性。",
+  "anchor_link_zh": "Ha et al. 给每个像素 Gaussian 设定的解析尺度，使它在源视角中恰好覆盖 1 个像素，对应的世界尺度约为“深度/焦距”，这与 Mip-Splatting 的采样间隔 d/f 是同一个量。当目标相机与源相机的焦距或到物体的距离不同时，这些 Gaussian 在目标图上就不再恰好是 1 个像素。Mip-Splatting 的频域分析可以帮助判断，Ha 所说的“比传统点溅射走样更少”在什么范围内成立，在哪里会失效。",
+  "concept_ids": [
+   "n-3dgs",
+   "f-image",
+   "r-raster",
+   "g-pinhole",
+   "a-3dgs-ext"
+  ],
+  "difficulty": "专家",
+  "must_read": false,
+  "themes": [
+   "t-neural-rendering"
+  ]
+ },
+ {
+  "title": "2D Gaussian Splatting for Geometrically Accurate Radiance Fields",
+  "authors": "Binbin Huang et al. (ShanghaiTech / Tübingen)",
+  "year": 2024,
+  "venue": "SIGGRAPH 2024 Conference Papers",
+  "url": "https://arxiv.org/abs/2403.17888",
+  "citations": 1638,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-neural-rendering",
+  "influence_zh": "2DGS 指出 3D Gaussian 渲染出的深度在不同视角间不一致，于是改用 2D 有向平面 Gaussian 面元来表示表面，并通过射线与面元求交实现透视正确的 splatting。它在保持实时渲染和相近画质的同时显著提升了几何精度，是 Gaussian 表面重建的代表方法。",
+  "contributions_zh": "(1) 把 3D 体积塌缩为一组 2D 有向圆盘 Gaussian，每个面元天然带有法线。(2) ray-splat intersection：在面元的局部坐标系中精确求射线交点，替代 3DGS 的仿射近似投影，对细薄表面更稳定。(3) 两个正则项：深度 distortion 正则把同一射线上的面元聚拢，法线一致性正则让面元法线与渲染深度的梯度一致。(4) 网格提取：渲染各训练视角的中位深度，用 Open3D 做 TSDF 融合（体素 0.004，截断 0.02，场景归一化单位）。",
+  "anchor_link_zh": "2DGS 的“渲染多视角深度，再用 TSDF 融合出一致几何”，与 Ha et al. 的“逐视角深度经 image-based TSDF 融合出目标视角的一致深度”（τ=0.02 m）思路同源。区别在于 2DGS 是离线建体素网格，Ha 则不建网格，只沿目标射线实时融合。2DGS 对“3D Gaussian 深度在多视角间不一致”的分析，有助于理解 Ha 的分工：像素级 Gaussian 只负责搬运颜色，跨视角一致的几何交给 TSDF 融合。",
+  "concept_ids": [
+   "n-3dgs",
+   "r-raster",
+   "d-tsdf",
+   "r-reps",
+   "a-3dgs-ext"
+  ],
+  "difficulty": "专家",
+  "must_read": false,
+  "themes": [
+   "t-neural-rendering"
+  ]
+ },
+ {
+  "title": "PIFu: Pixel-Aligned Implicit Function for High-Resolution Clothed Human Digitization",
+  "authors": "Shunsuke Saito, Zeng Huang, Ryota Natsume, Shigeo Morishima, Angjoo Kanazawa, Hao Li (USC ICT、早稻田大学、UC Berkeley、Pinscreen)",
+  "year": 2019,
+  "venue": "ICCV 2019",
+  "url": "https://arxiv.org/abs/1905.05172",
+  "citations": 1449,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "PIFu 提出“像素对齐隐式函数”：把任意 3D 点投影回输入图像，在投影位置双线性采样 CNN 特征，再连同这个点的深度一起送进 MLP，判断它在表面内还是外。以前的做法把整张图压成一个全局向量；像素对齐的局部特征既保留了高分辨率细节，又能表达任意拓扑（长发、裙摆），还能自然扩展到多视角。“投影—采样—聚合”这一步后来成了 pixelNeRF、IBRNet、ENeRF、GPS-Gaussian 等可泛化方法的共同骨架，也直接催生了 PIFuHD、Function4D 等稀疏视角实时人体捕捉工作。",
+  "contributions_zh": "(1) 表示：\\( f(F(x), z(X)) = s \\)。X 是 3D 点，x=π(X) 是它的 2D 投影，F(x) 是全卷积编码器（stacked hourglass）在 x 处双线性采样得到的特征，z(X) 是相机坐标系下的深度，s∈[0,1] 是占据概率。表面取 0.5 等值面，用 Marching Cubes 抽取。论文假设弱透视相机。(2) Tex-PIFu：用同样的像素对齐结构回归表面点的 RGB，能推断背面等不可见区域的纹理。(3) 多视角扩展：把 f 拆成 f = f2∘f1。f1 对每个视角 i 编码 (F_i(π_i(X)), z_i(X))，得到 Φ_i；对所有视角取平均 Φ̄ = mean({Φ_i})，再由 f2 输出占据。这样结果与视角数目和顺序都无关。(4) 用 RenderPeople、BUFF 等扫描数据渲染出训练图像；比体素表示省内存，能从 DeepFashion 的真实照片重建穿衣人体。",
+  "anchor_link_zh": "两篇锚点都不直接使用 PIFu，但它是理解“跨视角聚合”的最简单模型。Quark Sec. 2.2 专门梳理了这条设计谱系：mean（pixelNeRF）和 variance（IBRNet）这类统计量简单、与顺序无关，但表达力有限；DeepView 用重复 max-pool；Quark 自己用 One-to-many attention，让 LDM 特征作为唯一 query，对 M 个视角的 Δ 做 cross-attention（pipeline 第 3 阶段）。PIFu 的平均池化就是这条谱系的起点。Ha 的 baseline GPS-Gaussian 也是像素对齐思想，每个前景像素回归一个 Gaussian。读懂“投影—采样—聚合”，Quark 的 back-projection（Bp）和 Ha 的逐视角 forward-splat 就容易理解了。",
+  "concept_ids": [
+   "g-pinhole",
+   "l-cnn",
+   "n-generalizable",
+   "r-reps",
+   "a-human-capture"
+  ],
+  "difficulty": "入门",
+  "must_read": false,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "D-NeRF: Neural Radiance Fields for Dynamic Scenes",
+  "authors": "Albert Pumarola, Enric Corona, Gerard Pons-Moll, Francesc Moreno-Noguer (IRI CSIC-UPC、MPI Informatics)",
+  "year": 2021,
+  "venue": "CVPR 2021",
+  "url": "https://arxiv.org/abs/2011.13961",
+  "citations": 2103,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "D-NeRF 是最早把 NeRF 推广到动态场景的工作之一。它确立了动态神经渲染的基本范式“规范空间（canonical space）+ 变形场（deformation field）”：一个网络把 t 时刻的点映射回 t=0 的规范位置，另一个静态 NeRF 在规范位置查询颜色和密度。论文发布的 8 个合成动态场景（D-NeRF dataset）至今仍是 HexPlane、4DGS、Deformable 3DGS 等方法的标准单目测试集。Nerfies、HyperNeRF 以及 4DGS 的变形网络都可以看作这一结构的改进。",
+  "contributions_zh": "(1) 两个 8 层 ReLU MLP。变形网络 Ψt(x,t) = Δx，并约定 Ψt(x,0)=0，即以第一帧为规范空间；规范网络 Ψx(x+Δx, d) = (c, σ)。(2) 渲染时，射线上每个采样点先加上 Δx 再查询 Ψx，之后照常做体渲染。两个网络只靠光度 MSE 联合训练，不需要对应点，也不需要几何真值。(3) 训练技巧：按时间戳给输入排序，做课程学习，逐步加入更晚时刻的图像。(4) 数据集含 8 个路径追踪场景（Hell Warrior、Mutant、Hook、Bouncing Balls、Lego、T-Rex、Stand Up、Jumping Jacks），每个场景 100–200 张 800×800 图像，每个时刻只有一个视角。(5) 对照组 T-NeRF 直接把 t 作为第 6 维输入。在 Hell Warrior 上，NeRF 为 13.52 dB，T-NeRF 为 23.19 dB，D-NeRF 为 25.02 dB；但在 Lego 上 D-NeRF（21.64）反而不如 T-NeRF（23.82），说明变形场也会失败。训练用 400×400 分辨率、800k 次迭代，单张 GTX 1080 约 2 天。",
+  "anchor_link_zh": "Quark Sec. 2.3（Single-view Methods）把 D-NeRF 与 NSFF、Nerfies、HyperNeRF 归为“利用随时间变化的多个视角”的单目方法，明确不做比较，并认为多相机方法目前质量“显著更高”。D-NeRF 因此是理解两篇锚点定位的反面参照。D-NeRF 类方法要为每个场景离线优化数天，并把整段视频压进同一个规范空间；Quark 和 Ha 则面向同步多相机阵列，逐帧前馈推理，既不需要规范空间，也不需要逐场景训练。反过来，规范空间天然提供了跨帧记忆，而这正是 Ha 缺少的；后来的流式方法（3DGStream、IGS）就是在这两者之间寻找折中。",
+  "concept_ids": [
+   "n-dynamic",
+   "n-nerf",
+   "r-volume",
+   "d-flow",
+   "a-dynamic-4d"
+  ],
+  "difficulty": "入门",
+  "must_read": true,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "Nerfies: Deformable Neural Radiance Fields",
+  "authors": "Keunhong Park, Utkarsh Sinha, Jonathan T. Barron, Sofien Bouaziz, Dan B Goldman, Steven M. Seitz, Ricardo Martin-Brualla (华盛顿大学、Google Research)",
+  "year": 2021,
+  "venue": "ICCV 2021",
+  "url": "https://arxiv.org/abs/2011.12948",
+  "citations": 1548,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "Nerfies 第一个做到用手机随手拍的自拍照片或视频，重建出可自由视点渲染的可变形 NeRF。它把变形场从 D-NeRF 的平移场升级为稠密 SE(3) 场，并提出两个后来被广泛沿用的优化技巧：一是借鉴几何处理与物理仿真的弹性正则（elastic regularization），二是对位置编码频带做由粗到细的退火（coarse-to-fine annealing），后者也被位姿优化等其他方向借用。它还认真设计了评测协议：用两台同步手机组成的验证 rig，拍摄同一时刻的另一个视角作为真值。",
+  "contributions_zh": "(1) 每帧有一个 8 维形变潜码 ω_i 和一个 8 维外观潜码 ψ_i。变形场 W:(x, ω_i) → SE(3) 把观测空间的点变换到规范 NeRF 中。(2) 弹性正则：对变形的 Jacobian J_T 做 SVD 分解 J_T = UΣVᵀ，惩罚奇异值对数偏离 0 的程度 \\( \\|\\log\\Sigma\\|_F^2 \\)，即局部偏离刚体变换的程度；外面再套一层 Geman–McClure 鲁棒函数（c=0.03），允许表情等处的局部拉伸。(3) 由粗到细：第 j 个频带的权重为 w_j(α)=(1−cos(π·clamp(α−j,0,1)))/2，α 在 80K 次迭代内从 0 线性增加到 m=6。这样模型先拟合头部整体转动，再拟合微笑等细节；只用 4 个或 8 个固定频带都只能捕捉其中之一。(4) 背景正则：约束静态背景点不移动。(5) 训练代价：全高清模型在 8 张 V100 上约需一周，半分辨率模型约需 16 小时。",
+  "anchor_link_zh": "Quark Sec. 2.3 把 Nerfies 和 HyperNeRF 一起列为不做比较的“单目 + 多时刻”路线。对读锚点来说，它有两点价值。第一，“逐场景优化 + 潜码”的代价（8 张 V100 训练一周）直观说明了 Quark 和 Ha 为什么坚持前馈推理。第二，它的弹性/刚性正则后来在 Dynamic 3D Gaussians 的局部刚性损失中再次出现。Ha 则完全不建模运动，只用颜色差分掩码 M（λ_t=0.7、β=0.6）在静态区域对深度做递归滤波来获得时间稳定性。两者分别代表“显式运动模型”和“不建模运动的时域滤波”两种思路。",
+  "concept_ids": [
+   "n-dynamic",
+   "n-nerf",
+   "l-encoding",
+   "f-optim",
+   "f-linalg",
+   "a-dynamic-4d"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "Neural Scene Flow Fields for Space-Time View Synthesis of Dynamic Scenes",
+  "authors": "Zhengqi Li, Simon Niklaus, Noah Snavely, Oliver Wang (Cornell Tech、Adobe Research)",
+  "year": 2021,
+  "venue": "CVPR 2021",
+  "url": "https://arxiv.org/abs/2011.13084",
+  "citations": 1051,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "NSFF 走了与 D-NeRF 相反的路：不设规范空间，而是让时变辐射场在每个时刻直接预测前向和后向的 3D 场景流，相当于把 2D 光流提升到 3D。它的核心监督是时间光度一致性：沿场景流把采样点 warp 到相邻时刻，再做体渲染，结果应与当前帧一致。论文系统处理了运动造成的去遮挡（disocclusion）歧义，并引入静态/动态分解以及单目深度、光流等数据驱动先验，首次让含细结构和视角相关效果的真实视频也能做时空视图合成。它是 DynIBaR、DyCheck 等后续工作的直接基线。",
+  "contributions_zh": "(1) 动态模型 \\( (c_i,\\sigma_i,\\mathcal{F}_i,\\mathcal{W}_i)=F^{dy}_{\\Theta}(x,d,i) \\)。其中 F_i=(f_{i→i+1}, f_{i→i−1}) 是前后向 3D 场景流，W_i 是去遮挡权重；假设相邻两帧之间做线性运动。(2) 时间光度一致性：沿射线把每个采样点按 f_{i→j} 平移到时刻 j，查询 (c_j, σ_j) 并体渲染得到 Ĉ_{j→i}，与观测 C_i 求 MSE；在去遮挡区域用 W_i 降低权重。(3) 正则项：场景流循环一致和平滑约束，以及 L_data = L_geo + β_z·L_z，即用预训练光流约束 3D 位移的投影，用单视角深度约束几何。(4) 另训一个静态 NeRF，再用无监督的 3D 混合权重 v 线性混合静态与动态两部分的 RGBσ。(5) 在 Nvidia Dynamic Scenes 数据集上（12 台同步相机，通过轮换相机模拟单目）Full PSNR 为 28.19，NeRF 为 24.90，Yoon et al. 为 21.78。代价是每个场景用 2 张 V100 训练约 2 天，渲染一帧 512×288 约需 6 秒。",
+  "anchor_link_zh": "Quark Sec. 2.3 引用了 NSFF，把它归为单目多时刻方法并排除在比较之外。NSFF 与 Ha 的关系更实质。Ha 的时间一致性全部来自对输入的时域处理：先用颜色差分掩码 M_n^t 判断哪里是动态区域，对静态区域的深度做递归平均，再把上一帧目标视角的深度 𝒟^{t−1} 作为额外输入送进 TSDF。这可以看作 NSFF 静态/动态分解的简化版，只判断动或静，不估计场景流。Ha 的附录没有说明目标相机移动时 𝒟^{t−1} 如何重投影，而 NSFF 的“按场景流 warp 后再渲染”正是完整做法的模板。理解 NSFF 也有助于看懂 Ha 用到的 STED、TCC 等时间一致性指标在衡量什么。",
+  "concept_ids": [
+   "n-dynamic",
+   "d-flow",
+   "v-temporal",
+   "n-nerf",
+   "d-mono",
+   "a-dynamic-4d",
+   "a-temporal-video"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "HyperNeRF: A Higher-Dimensional Representation for Topologically Varying Neural Radiance Fields",
+  "authors": "Keunhong Park, Utkarsh Sinha, Peter Hedman, Jonathan T. Barron, Sofien Bouaziz, Dan B Goldman, Ricardo Martin-Brualla, Steven M. Seitz (华盛顿大学、Google Research)",
+  "year": 2021,
+  "venue": "SIGGRAPH Asia 2021 (ACM TOG 40(6))",
+  "url": "https://arxiv.org/abs/2106.13228",
+  "citations": 353,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "HyperNeRF 指出了变形场方法的根本局限：变形场是连续映射，无法表达拓扑变化，例如张嘴、切开的柠檬、被捏扁的玩具。受水平集方法启发，它把规范 NeRF 提升到一个“超空间”，即 3 个空间维再加若干环境维 w；每张输入图对应超空间中的一个切片，拓扑变化就变成了切片位置的连续移动。“增加维度来绕开不连续”这个思路影响了后续许多动态表示。它发布的 HyperNeRF 数据集（vrig/interp）也成为 4DGS、Deformable 3DGS 常用的真实单目基准。",
+  "contributions_zh": "(1) 映射 (x, ω_i) → (x′, w)：一个 MLP 给出变形后的空间坐标 x′；另一个 MLP，即可变形切片面（Deformable Slicing Surface）H(x, ω_i)，给出环境坐标 w。两者拼接成 (x′, w)，与视角方向和外观潜码一起送入模板 NeRF。(2) 与轴对齐的切片平面不同，可变形切片面允许不同空间位置引用超空间的不同部分，让不同形状之间共享信息，环境面也更简单。(3) 所有实验统一使用 W=2 个环境维。(4) 与 Nerfies 相比，LPIPS 在“时刻插值”任务上降低 4.1%，在固定时刻的新视角合成上降低 8.6%。(5) 在 4 块 TPU v4 上训练 250k 次迭代，约需 8 小时。",
+  "anchor_link_zh": "Quark Sec. 2.3 同样把 HyperNeRF 列为不做比较的单目多时刻方法。对锚点读者来说，重点是它提出的“拓扑变化”问题本身。Quark 每帧重新生成 LDM，Ha 每帧重新做 forward-splat 和 TSDF，两者都是逐帧重建，天然不受拓扑变化困扰。反过来，任何想给 Quark 或 Ha 加上跨帧持久表示的方案（例如 3DGStream 那样逐帧变换高斯）都要面对 HyperNeRF 指出的难题：新出现或消失的物体无法靠连续变形得到。3DGStream 为此专门设计了“自适应新增高斯”这一阶段。",
+  "concept_ids": [
+   "n-dynamic",
+   "n-nerf",
+   "r-reps",
+   "a-dynamic-4d"
+  ],
+  "difficulty": "专家",
+  "must_read": false,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "Neural Body: Implicit Neural Representations with Structured Latent Codes for Novel View Synthesis of Dynamic Humans",
+  "authors": "Sida Peng, Yuanqing Zhang, Yinghao Xu, Qianqian Wang, Qing Shuai, Hujun Bao, Xiaowei Zhou (浙江大学、香港中文大学、康奈尔大学)",
+  "year": 2021,
+  "venue": "CVPR 2021",
+  "url": "https://arxiv.org/abs/2012.15838",
+  "citations": 891,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "Neural Body 是极稀疏视角（4 台相机）人体新视角合成的奠基工作，这个问题本身是病态的。它的关键思想是把不同帧的观测绑到同一组潜码上，这组潜码锚定在 SMPL 网格顶点上，于是不同帧、不同姿态下的观测可以自然融合，网格同时提供几何引导。论文还发布了 ZJU-MoCap 数据集（21 台同步相机），此后成为 HumanNeRF 等大量人体 NeRF/高斯方法的标准基准。它开创了“参数化人体先验 + 神经场”这条主流路线。",
+  "contributions_zh": "(1) 在 SMPL 的 6890 个顶点上各定义一个 16 维潜码 Z={z_1,…,z_6890}，所有帧共享；每一帧按从多视角图像估计出的 SMPL 姿态 S_t 移动潜码的位置。(2) 用 SparseConvNet 把稀疏的顶点潜码扩散成连续的潜码体积，任意 3D 点通过插值取码。(3) 以潜码为条件的 MLP 回归密度和颜色，用体渲染训练。(4) ZJU-MoCap 用 21 台同步相机拍摄，序列长 60–300 帧；训练只用 4 个均匀分布的视角。(5) 平均 PSNR 为 28.10，明显高于 Neural Volumes 的 21.39、Neural Textures 的 23.77 和 NHR 的 23.90。训练帧数从 1 帧增加到 300 帧时，PSNR 从 25.64 升到 30.66，说明跨帧融合确实有用。四视角、300 帧的视频在 4 张 2080 Ti 上训练约 14 小时。",
+  "anchor_link_zh": "Quark Sec. 2.3 引用了 Neural Body，把使用人体显式先验的方法划为另一类问题，明确不做比较，因为 Quark 面向通用场景，不假设人体模板。Ha 同样面向“静态环境中的动态演员”，也不用 SMPL。对照 Neural Body 能看清锚点的取舍：人体先验让 4 个视角就足够，但遇到手持物体、宽松衣物、多人交互或需要重建背景时就会失效；Quark（8 路输入）和 Ha（K=4 路加深度）则用更多相机和通用的几何/IBR 管线换来场景通用性。GPS-Gaussian、Tele-Aloha 等 telepresence 方法介于两者之间：用人体数据训练先验，但不绑定参数化模型。",
+  "concept_ids": [
+   "n-dynamic",
+   "n-nerf",
+   "g-rig",
+   "r-reps",
+   "a-human-capture"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "Neural 3D Video Synthesis from Multi-view Video",
+  "authors": "Tianye Li, Mira Slavcheva, Michael Zollhöfer, Simon Green, Christoph Lassner, Changil Kim, Tanner Schmidt, Steven Lovegrove, Michael Goesele, Richard Newcombe, Zhaoyang Lv (Meta Reality Labs Research、南加州大学等)",
+  "year": 2022,
+  "venue": "CVPR 2022 (Oral)",
+  "url": "https://arxiv.org/abs/2103.02597",
+  "citations": 516,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "DyNeRF 是多视角动态场景神经渲染的奠基论文。它用“时间条件 NeRF + 每帧一个紧凑潜码”表示 10 秒、30 FPS 的多视角视频，并发布了 Neural 3D Video 数据集（又称 N3DV、DyNeRF 或 Plenoptic Video）：18–21 台 GoPro，2.7K 分辨率，厨房场景里有火焰、透明杯子、切肉等难点。此后 K-Planes、HexPlane、4DGS、Spacetime Gaussians、3DGStream、IGS 以及两篇锚点都把它作为主要的动态评测集。评测协议“裁到 300 帧、以第 0 号相机为测试视角、每 10 帧评一次”也被后续工作沿用。",
+  "contributions_zh": "(1) 表示为 F(x, d, z_t) → (c, σ)。z_t ∈ R^1024 是可学习的逐帧潜码，从 N(0, 0.01/√D) 初始化，学习率是网络参数的 10 倍；MLP 前 8 层宽 512。对潜码插值可以渲染中间时刻。(2) 分层训练：先只在相隔 K=30 帧的关键帧上训练，再用它初始化中间帧，然后在全序列上精调。(3) 射线重要性采样：按像素颜色与其全局中位数的差（ISG），或与相邻帧的差（IST），给射线加权，让训练集中在动态区域。ISG 恢复细节快但会抖，IST 平滑但偏糊，组合策略 IS⋆ 兼顾两者。(4) 紧凑：18 路、10 秒的视频只需 28 MB；若逐帧训练 NeRF，估计需要约 15,000 GPU 小时和 1 GB 存储。(5) flame salmon 上 PSNR 为 29.58（NeRF-T 28.45，LLFF 23.24，Neural Volumes 22.80），但训练需要 8 张 V100 约一周，约合 1344 GPU 小时。",
+  "anchor_link_zh": "两篇锚点的主要动态评测都用这个数据集。Quark（表 1）沿用本文协议：裁到 300 帧，每 10 帧评一次，以第 0 号相机为目标。在 1024×768 下 Quark 为 31.57 / 0.942 / 0.127，ENeRF 为 29.86。Ha 把 DyNeRF 作为主数据集：1352×1014，K=4，测 Sear Steak 和 Flame Steak 前 100 帧，共 9 个测试视角；PSNR 31.17，ENeRF 29.51。Ha 用同一厨房的另外 3 个场景训练，深读笔记指出这带来了域内优势。Ha 的深度来自在“人工挑选的图像对”上运行 RAFT-Stereo。Ha 强调在线处理，正是针对本文“每个场景训练一周”的离线代价。另外，Ha 的作者之一 Changil Kim 也是本文作者。",
+  "concept_ids": [
+   "n-dynamic",
+   "n-nerf",
+   "g-rig",
+   "v-metrics",
+   "l-loss",
+   "a-dynamic-4d"
+  ],
+  "difficulty": "入门",
+  "must_read": true,
+  "themes": [
+   "t-dynamic-human",
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "HumanNeRF: Free-viewpoint Rendering of Moving People from Monocular Video",
+  "authors": "Chung-Yi Weng, Brian Curless, Pratul P. Srinivasan, Jonathan T. Barron, Ira Kemelmacher-Shlizerman (华盛顿大学、Google Research)",
+  "year": 2022,
+  "venue": "CVPR 2022 (Oral)",
+  "url": "https://arxiv.org/abs/2201.04127",
+  "citations": 666,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "HumanNeRF 把自由视点人体渲染推进到只需一段单目视频，甚至是 YouTube 上的视频。它在规范 T-pose 下优化一个体积表示，再用一个运动场把它 backward-warp 到每一帧；运动场由骨骼刚性运动和非刚性运动两部分组成。这篇论文展示了强人体先验能把单目视频的信息整合成 360° 可看的数字人，之后常被单目人体 NeRF 和高斯方法用作基线。",
+  "contributions_zh": "(1) 运动场 = 骨骼运动 T_skel + 非刚性残差 T_NR。T_skel 是逆线性混合蒙皮，K=24 根骨骼的混合权重体积由 CNN 从一个常数潜码生成；T_NR 是 MLP。(2) 位姿修正：对 SPIN 等方法估计的身体姿态做残差优化，减轻位姿误差造成的模糊。(3) 延迟优化：训练前期关闭非刚性运动，在 ZJU-MoCap 上从第 10K 次迭代到第 50K 次迭代逐步开启，防止非刚性分支抢走本该由骨骼运动解释的部分而导致过拟合。(4) 损失为 MSE 加 LPIPS。(5) ZJU-MoCap 上只用 camera 1 作输入，其余 22 台相机用于评测；以 377 号为例，LPIPS*（LPIPS×10³）为 24.06，而 Neural Body 为 40.95。训练 400K 次迭代，在 4 张 2080 Ti 上约 72 小时。",
+  "anchor_link_zh": "HumanNeRF 与锚点的关系较远。Quark Sec. 2.3 把“显式人体先验”和“单目多时刻”都视为不同的问题，而 HumanNeRF 两者兼有。它的价值在于标出锚点的适用边界。两篇锚点都要求同步、已标定的多相机阵列（Quark 8 路，Ha K=4 路加深度），换来的是不需要人体模板，也不需要为每个人单独训练；HumanNeRF 则用约 72 小时的逐人优化，换来只需一台相机。telepresence 系统如果想减少相机数量，就必然要借助 HumanNeRF 这类先验。",
+  "concept_ids": [
+   "n-dynamic",
+   "n-nerf",
+   "f-linalg",
+   "f-optim",
+   "a-human-capture"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "Monocular Dynamic View Synthesis: A Reality Check",
+  "authors": "Hang Gao, Ruilong Li, Shubham Tulsiani, Bryan Russell, Angjoo Kanazawa (UC Berkeley、CMU、Adobe Research)",
+  "year": 2022,
+  "venue": "NeurIPS 2022",
+  "url": "https://arxiv.org/abs/2210.13445",
+  "citations": 230,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "这是一篇“拆台”式的评测论文。它指出 D-NeRF、Nerfies、HyperNeRF、NSFF 等单目动态方法的实验协议实际上泄漏了多视角信号：要么相机在多台相机之间“瞬移”（teleport），要么场景几乎不动。论文提出有效多视角因子（EMF）来量化这种泄漏，并给出只在共视区域计算的掩码指标和对应点精度指标，迫使整个领域重新审视“单目”结论。",
+  "contributions_zh": "(1) 定义两个 EMF：完整 EMF Ω 是相机运动幅度与场景运动幅度之比；角度 EMF ω 是相机绕注视点的角速度，更容易计算。数值越大，序列中的多视角线索越多。(2) 用这两个指标检查发现，现有数据集的 EMF 都很大，实际上处于“有效多视角”区间。(3) 新指标：只在训练帧中可见的像素上计算 PSNR/SSIM/LPIPS（共视掩码指标，如 mPSNR），以及关键点转移正确率 PCK-T。(4) 新的 iPhone 数据集：每段 8–15 秒，其中 7 段带多视角评测相机，7 段只有单视角，并附带 LiDAR 深度。(5) 去掉瞬移后，最先进方法的 mPSNR 下降 1–2 dB；在复杂运动上再下降 4–5 dB，PCK-T 下降约 30%。",
+  "anchor_link_zh": "这篇论文解释了两篇锚点为什么坚持使用同步多相机阵列：真正的单目动态重建远比论文数字显示的难。它也提醒读者审视锚点自己的评测。Ha 的测试视角全部是从阵列中留出的相机（DyNeRF 9 个，ENeRF-Outdoor 3 个，D3DMV 4 个），只测视角内插，不测外推；Quark 在 N3DV 上以第 0 号相机为目标。深读笔记指出 Ha 的训练集与测试集拍摄于同一个厨房，这与 DyCheck 批评的“评测协议泄漏信息”属于同一类问题。共视掩码的思路也可以用来单独评估 Quark 和 Ha 在遮挡区域的补洞质量。",
+  "concept_ids": [
+   "v-metrics",
+   "n-dynamic",
+   "d-mono",
+   "g-rig",
+   "a-dynamic-4d"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "K-Planes: Explicit Radiance Fields in Space, Time, and Appearance",
+  "authors": "Sara Fridovich-Keil, Giacomo Meanti, Frederik Rahbæk Warburg, Benjamin Recht, Angjoo Kanazawa (UC Berkeley、意大利理工学院 IIT、丹麦技术大学)",
+  "year": 2023,
+  "venue": "CVPR 2023",
+  "url": "https://arxiv.org/abs/2301.10241",
+  "citations": 1018,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "K-Planes 给出了一种简洁、可解释的 d 维辐射场分解：用 C(d,2) 个二维特征平面表示 d 维场。d=3 时就是静态的三平面，d=4 时是动态的六平面。它说明 4D 体积不必存成 4D 网格，六个平面相乘就能表达；而且空间平面与时空平面分开，天然就把场景分成了静态和动态两部分。K-Planes 与同期的 HexPlane 把动态 NeRF 的训练从“8 张卡一周”降到“单卡两小时”，此后成为 4DGS（Wu et al.）、4K4D 等方法中时空特征编码的常用组件。",
+  "contributions_zh": "(1) 4D 点 q=(x,y,z,t) 投影到 xy、xz、yz、xt、yt、zt 六个平面上，分别双线性插值得到 f(q)_c，再逐元素相乘（Hadamard 积）：\\( f(q)=\\prod_{c} f(q)_c \\)。乘法能“选中”特定空间区域，因此线性解码器也够用，加法则做不到。(2) 空间平面是多尺度的，例如 64、128、256、512。(3) 先验：空间平面上加全变分；时间维上用一维拉普拉斯平滑 \\( \\|P^{t-1}-2P^{t}+P^{t+1}\\|_2^2 \\) 惩罚“加速度”；时空平面初始化为 1（乘法单位元），并加 ℓ1 正则 ‖1−P_c‖₁，使静态内容不占用时间平面。(4) 两种解码器：学习颜色基的纯显式线性解码器，或者使用小 MLP 的混合版本；全部用纯 PyTorch 实现。(5) 4D 体积只需 200 MB，同分辨率的完整 4D 网格需要 300 GB 以上，压缩约 1000 倍。DyNeRF 数据上，混合版 PSNR 31.63，单卡训练 1.8 小时；DyNeRF 为 29.58，约 1344 GPU 小时。",
+  "anchor_link_zh": "Quark Sec. 2.1 把 K-Planes 列为“加速体渲染”的代表之一，同时指出这类方法仍要离线逐场景重建，只有 ENeRF 能让“重建 + 渲染”合计达到交互速度。Ha Sec. 2 把 K-Planes、HexPlane、DyNeRF、HyperReel、4K4D 归为“扩展到 4D 的体渲染方法”，理由同样是逐场景训练代价高、不适合在线使用。读 K-Planes 能看清锚点放弃了什么：K-Planes 通过时间平滑先验和静/动分离，几乎“免费”得到时间一致性；Ha 则要用差分掩码和 TSDF 回灌手工补回这种一致性；Quark 完全没有这一机制，其局限一节也承认逐帧重建会闪烁。",
+  "concept_ids": [
+   "n-dynamic",
+   "r-reps",
+   "n-nerf",
+   "f-optim",
+   "v-temporal",
+   "a-dynamic-4d",
+   "a-nerf-fast"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "HexPlane: A Fast Representation for Dynamic Scenes",
+  "authors": "Ang Cao, Justin Johnson (密歇根大学)",
+  "year": 2023,
+  "venue": "CVPR 2023",
+  "url": "https://arxiv.org/abs/2301.09632",
+  "citations": 823,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "HexPlane 与 K-Planes 同期、独立地提出用六个特征平面显式表示动态场景，并把 TensoRF 的向量-矩阵低秩分解推广到时空。它用极简的结构证明，动态场景不一定需要变形场：直接分解 4D 体积，在 DyNeRF 上只用约百分之一的训练时间就能达到同等质量。4DGS（Wu et al.）直接用 HexPlane 式的六平面编码作为高斯变形场的特征编码器。",
+  "contributions_zh": "(1) 六个平面分成三对，每对由一个空间平面和一个与之正交的时空平面组成：XY–ZT、XZ–YT、YZ–XT。每对特征逐元素相乘，三对的结果拼接起来，再乘以矩阵 V^{RF} 得到最终特征：\\( [P^{XY}\\odot P^{ZT};\\,P^{XZ}\\odot P^{YT};\\,P^{YZ}\\odot P^{XT}]\\,V^{RF} \\)。(2) 一次查询只需 6 次双线性插值和一次向量-矩阵乘法，内存为 O(N²R + NTR + RF)，其中 N 是空间分辨率，T 是时间分辨率，R 是秩，F 是特征维数。(3) 后接一个小 MLP 回归颜色，用体渲染和光度损失训练；沿用 DyNeRF 的分层训练和重要性采样，空间网格 512，时间网格 300。(4) flame salmon 上训练 650k 次迭代，PSNR 29.47、LPIPS 0.078，用时 12 GPU 小时，而 DyNeRF 需要 1344 小时，加速 112 倍；只训练 100k 次迭代的版本 PSNR 29.26，用时 2 小时，加速 672 倍。(5) 在全部公开场景（排除一个未同步的场景）上平均 PSNR 为 31.71。",
+  "anchor_link_zh": "Ha Sec. 2 直接引用 HexPlane，作为“体渲染扩展到 4D、需要逐场景训练、不适合在线”的代表。HexPlane 在 DyNeRF 上评测时排除了未同步的场景（据 4DGS 与 Spacetime Gaussians 的表注，即 coffee martini）。这与 Ha 局限一节的说法相呼应：Ha 需要严格同步、已标定的相机，ENeRF-Outdoor 就因为同步和颜色标定问题，只能在 480×270 分辨率下计算指标。同步误差对任何多相机方法都是硬伤。另外，HexPlane 的渲染只有约 0.2–0.56 FPS（数据来自 4DGS 和 4DGS-Yang 的对比表），远低于 Quark 1080p/30fps 或 Ha 约 39 ms/帧的实时水平。",
+  "concept_ids": [
+   "n-dynamic",
+   "r-reps",
+   "n-nerf",
+   "f-linalg",
+   "g-rig",
+   "a-dynamic-4d",
+   "a-nerf-fast"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "DynIBaR: Neural Dynamic Image-Based Rendering",
+  "authors": "Zhengqi Li, Qianqian Wang, Forrester Cole, Richard Tucker, Noah Snavely (Google Research、Cornell Tech)",
+  "year": 2023,
+  "venue": "CVPR 2023 (Award Candidate)",
+  "url": "https://arxiv.org/abs/2211.11082",
+  "citations": 292,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "DynIBaR 把图像基渲染（IBR）的思想带进了动态场景。它不再把整段视频编码进 MLP 的权重，而是像 IBRNet 那样，在渲染时从时间上相邻的源帧中聚合特征；不同之处在于，动态点不满足极线约束，所以聚合位置要按场景运动修正。这样一来，时间长、运动复杂、相机轨迹不受控的手机视频也能合成出清晰的新视角。它是动态 NeRF 与 IBR 融合的代表作，也说明直接借用输入像素比把外观记进网络更能保住细节。",
+  "contributions_zh": "(1) 运动轨迹场：MLP G_MT(γ(x), γ(i)) 输出 L=6 个运动基的系数 φ^l_i(x)，另有一组全局可学习的时间基 h^l，先用 DCT 基初始化再微调。轨迹为 \\( \\Gamma_{x,i}(j)=\\sum_{l} h^l_j\\,\\varphi^l_i(x) \\)，查询一次 MLP 就能得到 x 在任意邻近帧 j 中的对应位置。(2) 按对应位置把点投影到时间半径 r=3 以内的源帧上取特征，送入 IBRNet 式的 ray transformer 聚合，再做体渲染。(3) 跨时间渲染一致性损失：用运动轨迹把时刻 i 的场景搬到时刻 j 渲染，再与观测比较。(4) 基于 IBR 的贝叶斯运动分割，把场景分为静态模型和动态模型。(5) Nvidia 数据集上 PSNR 30.86、LPIPS 0.027，NSFF 为 28.90 / 0.062；UCSD 数据集上 PSNR 36.47。代价是一段 10 秒视频要在 8 张 A100 上优化约 2 天，渲染一帧 768×432 约需 20 秒。",
+  "anchor_link_zh": "DynIBaR 与两篇锚点有同一个核心判断：优先用 IBR。Quark 在 LDM 的每层每个像素上用 M 维 blend weights 对全分辨率输入图像做凸组合；Ha 用 U-Net 预测 K 张前向渲染图的融合权重。三者都是借用输入像素，而不是由网络生成颜色。区别在于聚合的维度：DynIBaR 在时间上聚合，从邻近帧取，靠运动轨迹找对应；两篇锚点在空间上聚合，从同一时刻的不同相机取，靠几何找对应。IBR 的弱点也相同：Quark 的局限一节承认 blend weights 无法表示输入中不存在的视角相关效果，DynIBaR 则依赖运动估计的准确性。它的 ray transformer 解决的，也正是 Quark Sec. 2.2 讨论的跨视角聚合器（mean/variance、max-pool、attention）问题。",
+  "concept_ids": [
+   "i-blending",
+   "n-generalizable",
+   "d-flow",
+   "n-dynamic",
+   "l-attention",
+   "a-generalizable-ibr",
+   "a-dynamic-4d"
+  ],
+  "difficulty": "专家",
+  "must_read": false,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "HumanRF: High-Fidelity Neural Radiance Fields for Humans in Motion",
+  "authors": "Mustafa Işık, Martin Rünz, Markos Georgopoulos, Taras Khakhulin, Jonathan Starck, Lourdes Agapito, Matthias Nießner (Synthesia、UCL、慕尼黑工业大学)",
+  "year": 2023,
+  "venue": "SIGGRAPH 2023 (ACM TOG 42(4))",
+  "url": "https://arxiv.org/abs/2305.06356",
+  "citations": 241,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "HumanRF 把多视角人体 4D 重建推向“制作级”分辨率。它发布了 ActorsHQ 数据集（160 台 12MP 相机），并提出一种适合长序列、高分辨率的 4D 表示：时空矩阵-向量分解加哈希网格，再把时间轴自适应地切成若干段分别建模。它是高保真人体体积视频（volumetric video）的重要数据与方法基准，也展示了分辨率提高后在标定、同步和存储上出现的新问题。",
+  "contributions_zh": "(1) 把 4D 特征网格分解为四个 3D 哈希网格与四个 1D 稠密网格之积的和：\\( T_{xyzt}=T_{xyz}\\odot T_t+T_{xyt}\\odot T_z+T_{xzt}\\odot T_y+T_{yzt}\\odot T_x \\)。(2) 自适应时间分段：切分时让各段的并集占据体积大致相同，因此运动剧烈处段短、运动平缓处段长。训练时只需把少数几段放进显存，可以处理任意长的序列。(3) 实验表明，400 帧只用一段，或者每帧一个 3D 哈希网格，效果都差；段长在 3–100 帧之间时最好，自适应分段接近最优段长的效果。(4) ActorsHQ：8 名演员、16 段序列，共 39,765 帧；160 台 12MP Ximea 相机以 25 fps 拍摄，420 颗 LED 与快门同步，快门 650 µs；提供逐帧网格重建。(5) 在单张 RTX 3090 上每秒 8–12 次迭代，1000 帧的序列约需一天。",
+  "anchor_link_zh": "HumanRF 代表 telepresence 的“离线上限”路线：160 台相机，每段序列约一天计算，得到压缩后的高保真人体 4D 表示。Quark（8 路）和 Ha（K=4 路）代表“在线下限”路线：相机少，逐帧前馈，不训练。二者在分辨率上的差距很能说明问题：Quark 输出 1080p，但内部 LDM 最高只有 288×512，再上采样 3.75 倍；Ha 在 1352×1014 下评测；HumanRF 直接在 12MP 上工作。HumanRF 的时间分段思想，也对应 IGS 每隔 w=5 帧设一个关键帧的做法：长序列都要在“共享表示”和“局部刷新”之间取折中。Quark 和 Ha 每帧完全刷新，处在另一个极端，代价是闪烁。",
+  "concept_ids": [
+   "n-dynamic",
+   "r-reps",
+   "g-rig",
+   "v-codec",
+   "a-human-capture",
+   "a-dynamic-4d"
+  ],
+  "difficulty": "专家",
+  "must_read": false,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "Dynamic 3D Gaussians: Tracking by Persistent Dynamic View Synthesis",
+  "authors": "Jonathon Luiten, Georgios Kopanas, Bastian Leibe, Deva Ramanan (CMU、RWTH Aachen、Inria)",
+  "year": 2024,
+  "venue": "3DV 2024",
+  "url": "https://arxiv.org/abs/2308.09713",
+  "citations": 1000,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "这是 3DGS 出现后最早的动态扩展之一，也是物理意味最强的一个。同一组高斯的颜色、不透明度和尺寸在各时刻保持不变，只有位置和旋转随时间变化，并用局部刚性等先验约束运动。这样，“持久的动态新视角合成”就自然带出了稠密的 6-DoF 跟踪。它逐时刻在线优化，每一帧都用上一帧的结果初始化，是 3DGStream 等流式高斯方法的直接前身。它也把“表示跨帧持久，就能同时得到时间一致性和对应关系”这一观点带进了 4D 重建。",
+  "contributions_zh": "(1) 每个高斯有随时刻变化的中心 (x_t,y_t,z_t) 和旋转四元数，而尺度、颜色、不透明度和背景 logit 在所有时刻共享。(2) 在线重建：一次只重建一个时刻，用上一时刻的结果初始化；第一帧用于初始化，之后除运动参数外的属性全部冻结。(3) 局部刚性损失：对每个高斯 i 的 k=20 个近邻 j，要求 \\( (\\mu_{j,t-1}-\\mu_{i,t-1}) \\approx R_{i,t-1}R_{i,t}^{-1}(\\mu_{j,t}-\\mu_{i,t}) \\)，即 j 相对于 i 的位移服从 i 自身坐标系的刚体变换。权重 w_ij=exp(−λ_w‖μ_{j,0}−μ_{i,0}‖²)，λ_w=2000，对应标准差约 2.2 cm。另有局部旋转相似损失和长期局部等距损失。(4) 在 CMU Panoptic Studio 上（27 台训练相机、4 台测试相机、150 个时刻），PSNR 28.7，渲染 850 FPS；单张 RTX 3090 训练约 2 小时，每个场景 20–30 万个高斯。(5) 3D 跟踪平均误差 2.21 cm，2D 跟踪误差 1.57 个归一化像素，比此前最好的方法约好一个数量级。",
+  "anchor_link_zh": "Ha Sec. 2 引用了本文，把它与其他动态 3DGS 一起归为“需要昂贵的逐场景优化”。但本文恰好提供了 Ha 和 Quark 都缺少的东西：跨帧持久的 3D 表示。Quark 每帧生成 LDM 后立即丢弃，局限一节承认会闪烁；Ha 不跟踪任何点，只靠差分掩码滤波和上一帧深度回灌维持时间一致。本文表明，只要让同一批高斯跨帧移动，就能自然得到时间一致性和稠密对应，代价是每帧约 48 秒的优化（2 小时 / 150 帧）。后来的 3DGStream（约 12 秒/帧）和 IGS（约 2.7 秒/帧）就在压缩这个开销。它的高斯靠优化得到，恰好与 Ha 附录 A.3 那种“逐帧解析放置、不做优化”的像素级高斯相对。",
+  "concept_ids": [
+   "n-3dgs",
+   "n-dynamic",
+   "v-temporal",
+   "f-linalg",
+   "f-optim",
+   "a-dynamic-4d",
+   "a-3dgs-ext"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "4D Gaussian Splatting for Real-Time Dynamic Scene Rendering",
+  "authors": "Guanjun Wu, Taoran Yi, Jiemin Fang, Lingxi Xie, Xiaopeng Zhang, Wei Wei, Wenyu Liu, Qi Tian, Xinggang Wang (华中科技大学、华为)",
+  "year": 2024,
+  "venue": "CVPR 2024",
+  "url": "https://arxiv.org/abs/2310.08528",
+  "citations": 1630,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "这是本主题中引用最多的动态高斯方法。它把 D-NeRF 式的“规范空间 + 变形场”搬到了 3DGS 上：只存一套规范 3D 高斯，用 HexPlane 式的多分辨率时空平面编码加一个小型多头 MLP，预测每个高斯在时刻 t 的位置、旋转和尺度偏移，然后用原版光栅器渲染。“规范高斯 + 平面编码变形场”这个模板结构简单、存储小，单目和多视角都能用，成为大量后续工作的默认基线。Ha 在 ENeRF-Outdoor 上也拿它做了定性对比。",
+  "contributions_zh": "(1) 高斯变形场网络 F 由时空结构编码器 H 和多头解码器 D={φ_x, φ_r, φ_s} 组成。H 用 6 个多分辨率平面 R_l(i,j)（以 HexPlane 方式分解 4D 神经体素），为每个高斯中心在时刻 t 取特征；D 的三个头分别输出 Δx、Δr、Δs，得到变形后的高斯 G′ = G + ΔG。(2) 只维护一套规范高斯，存储不会随帧数线性增长。(3) D-NeRF 合成数据集上，PSNR 34.05，800×800 下 82 FPS（RTX 3090），训练 8 分钟，模型 18 MB。(4) N3DV（1352×1014）上，PSNR 31.15，30 FPS，训练 40 分钟，模型 90 MB；HyperNeRF vrig 上 25.2 dB，34 FPS。(5) 消融显示只预测位置不够：人体关节运动会拉伸、扭转表面，需要同时调整高斯的尺度和旋转。",
+  "anchor_link_zh": "Ha 与本文有两处直接交集。一是 Ha Sec. 2 把本文列为需要逐场景优化、不适合在线使用的动态 3DGS；二是 Ha Fig. 12 在 ENeRF-Outdoor 上把本文与 4K4D、MVSplat 做了定性比较（深读笔记指出这里只有定性结果，没有定量数字）。本文 N3DV 的评测分辨率 1352×1014 也与 Ha 的 DyNeRF 设定相同。数字上，本文在 N3DV 上达到 31.15 dB、30 FPS，但需要 40 分钟逐场景训练；Quark 在 N3DV 上 31.57 dB，完全不需要训练（1024×768，协议和分辨率不同，不能直接比较）。Ha 用的也是原版 3DGS 光栅器，但它的高斯由深度逐帧解析放置，不做优化；本文的高斯则由可训练的变形场驱动。同一个光栅器，对应两种获取高斯的方式。",
+  "concept_ids": [
+   "n-3dgs",
+   "n-dynamic",
+   "r-reps",
+   "r-raster",
+   "a-dynamic-4d",
+   "a-3dgs-ext"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "Real-time Photorealistic Dynamic Scene Representation and Rendering with 4D Gaussian Splatting",
+  "authors": "Zeyu Yang, Hongye Yang, Zijie Pan, Li Zhang (复旦大学)",
+  "year": 2024,
+  "venue": "ICLR 2024",
+  "url": "https://arxiv.org/abs/2310.10642",
+  "citations": 628,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "这篇论文代表与“变形场”相对的“原生 4D 基元”路线。它把时空作为一个整体，用能在 4D 中任意旋转的各向异性 4D 高斯直接拟合时空体积。渲染某一时刻时，先对 4D 高斯做条件化得到一个 3D 高斯，再乘以时间上的边缘概率。它在 N3DV 上首次同时做到最高质量和 100 FPS 以上，把高斯的概率解释推广到了时间维，是原生 4D 表示中最常被引用的工作之一。",
+  "contributions_zh": "(1) 4D 高斯的协方差为 Σ = R S Sᵀ Rᵀ，4D 旋转由左右两个单位四元数 (q_l, q_r) 参数化。4D 旋转能表达运动：在 x–t 平面上的倾斜就是速度。(2) 渲染时刻 t 时，把 4D 高斯分解为条件分布 p(x,y,z | t) 和边缘分布 p(t)。前者仍是 3D 高斯，均值随 t 线性移动，按 3DGS 投影成 2D splat；后者是 1D 高斯，作为时间不透明度乘到 α 上。p(t) < 0.05 的高斯直接剔除。(3) 4D 球柱谐函数（spherindrical harmonics）：球谐函数乘以时间上的傅里叶级数，表示随视角和时间变化的颜色。(4) 默认训练 3 万次迭代，batch 为 4，其余超参数沿用 3DGS；N3DV 用首帧的 COLMAP 点云初始化，点的时间戳在整段时长内均匀分布。(5) Plenoptic Video（N3DV）上 PSNR 32.01、LPIPS 0.055、114 FPS；HexPlane 为 31.70（0.56 FPS），4DGS（Wu et al.）在其测试子集上为 31.02（36 FPS）。",
+  "anchor_link_zh": "两篇锚点都不用这种原生 4D 表示，但对照它，可以看清 Ha 的时间策略处在谱系的哪一端。在 4D 高斯里，一个基元只在一段时间内“存在”，由 p(t) 控制，因此天然平滑地淡入淡出。Ha 的软差分掩码 \\( M=\\min(|I^t-I^{t-1}|/\\lambda_t+\\beta,\\,1) \\) 则在输入端决定每个像素在多大程度上采用新深度，是一种手工设计的一阶时间滤波。Quark 在 N3DV 上逐帧重建，没有任何时间状态。若要在 telepresence 中使用这类 4D 表示，必须拿到整段视频后离线训练，这与两篇锚点“在线、逐帧”的定位直接冲突；Ha Sec. 2 对动态 3DGS“需要逐场景优化”的批评同样适用于本文。",
+  "concept_ids": [
+   "n-3dgs",
+   "n-dynamic",
+   "f-prob",
+   "r-appearance",
+   "r-alpha",
+   "a-dynamic-4d",
+   "a-3dgs-ext"
+  ],
+  "difficulty": "专家",
+  "must_read": false,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "Deformable 3D Gaussians for High-Fidelity Monocular Dynamic Scene Reconstruction",
+  "authors": "Ziyi Yang, Xinyu Gao, Wen Zhou, Shaohui Jiao, Yuqing Zhang, Xiaogang Jin (浙江大学、字节跳动)",
+  "year": 2024,
+  "venue": "CVPR 2024",
+  "url": "https://arxiv.org/abs/2309.13101",
+  "citations": 1019,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "这是与 4DGS（Wu et al.）同期、结构最简单的“规范高斯 + 变形 MLP”方案：直接用一个 MLP，以位置编码后的 (x, t) 为输入，预测每个高斯的 Δx、Δr、Δs。它结构极简、效果好、代码容易修改，SC-GS 等后续单目动态高斯工作都在它的基础上扩展，是入门动态高斯最直接的读物。",
+  "contributions_zh": "(1) 变形网络为 \\( (\\delta x,\\delta r,\\delta s)=F_\\theta(\\gamma(\\mathrm{sg}(x)),\\gamma(t)) \\)，其中 γ 是位置编码，sg 表示对规范位置停止梯度。变形后的高斯 G(x+δx, r+δr, s+δs, σ) 送入 3DGS 的 tile 光栅器。(2) 预热：前 3k 次迭代只训练静态 3D 高斯，不优化变形场；总共训练 40k 次迭代。(3) 退火平滑训练（AST）：给时间输入加上幅度线性衰减的高斯噪声，减轻真实数据中位姿不准造成的时间插值抖动，而且没有额外开销。(4) 在 D-NeRF 合成数据、HyperNeRF 和 NeRF-DS 真实数据上，质量和速度都超过此前的方法，并能实时渲染；实验在 RTX 3090 上完成。",
+  "anchor_link_zh": "Ha Sec. 2 引用了本文，与 Dynamic 3D Gaussians、4DGS、Spacetime Gaussians、3DGStream 等并列，作为“3DGS 扩展到动态场景、但需要逐场景优化”的代表。它与 Ha 的对照很清楚：两者都把高斯送进同一个原版光栅器，但本文的高斯靠梯度下降和变形 MLP 得到，Ha 的高斯则由输入深度逐像素解析放置（各向同性、完全不透明、投影后恰好覆盖 1 个像素），完全跳过优化。AST 在时间输入上加噪来平滑时间插值，Ha 用差分掩码做递归滤波，两者都是为了时间平滑而引入的低通机制，可以对照着理解。",
+  "concept_ids": [
+   "n-3dgs",
+   "n-dynamic",
+   "l-encoding",
+   "f-optim",
+   "a-dynamic-4d",
+   "a-3dgs-ext"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "Spacetime Gaussian Feature Splatting for Real-Time Dynamic View Synthesis",
+  "authors": "Zhan Li, Zhang Chen, Zhong Li, Yi Xu (OPPO US Research Center、波特兰州立大学)",
+  "year": 2024,
+  "venue": "CVPR 2024",
+  "url": "https://arxiv.org/abs/2312.16812",
+  "citations": 468,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "Spacetime Gaussians 在多视角动态视频（N3DV、Google Immersive、Technicolor）上，把质量、速度和存储三项同时推到新高度。每个高斯带有时间不透明度、多项式运动和多项式旋转；颜色不用球谐，而是用可以 splat 的神经特征加一个小 MLP。它的 lite 版能在 RTX 4090 上以约 60 FPS 渲染 8K 6-DoF 视频，是沉浸式视频方向最常被比较的离线 4D 高斯强基线之一。",
+  "contributions_zh": "(1) 时间不透明度用一维时间径向基函数表示：\\( \\sigma_i(t)=\\sigma^{s}_i\\exp(-s^{\\tau}_i|t-\\mu^{\\tau}_i|^2) \\)。μ^τ 是该高斯最显著的时刻，s^τ 控制持续时长，σ^s 是与时间无关的空间不透明度；这样可以表达突然出现或消失的内容。(2) 多项式运动 \\( \\mu_i(t)=\\sum_{k=0}^{3} b_{i,k}(t-\\mu^{\\tau}_i)^k \\)（n_p=3），旋转也用多项式表示；长而复杂的运动由多个短时高斯分段拼接而成。(3) Splatted feature rendering：每个高斯存 9 维特征 [f_base, f_dir, (t−μ^τ)·f_time]，光栅化成特征图后，I = F_base + Φ(F_dir, F_time, r)，其中 Φ 是 2 层 MLP，r 是视线方向。比球谐更省存储，还能表达随视角和时间变化的外观。(4) 用训练误差和粗深度作引导，在难以收敛的区域采样新高斯。(5) N3DV 上 PSNR 32.05、LPIPS 0.044，1352×1014 下 140 FPS，300 帧总共 200 MB。作者承认该方法不能边采集边训练（on-the-fly）。",
+  "anchor_link_zh": "Ha Sec. 2 引用了本文，作为需要逐场景优化的动态 3DGS。在视角相关外观上，本文与两篇锚点形成三种对照。本文用神经特征加 MLP 显式建模随视角和时间变化的颜色。Quark 用输入图像的凸组合（blend weights），局限一节承认无法准确表示视角相关材质，只能靠逐视角优化权重和射线编码去近似。Ha 的 U-Net 融合权重同样只能在 K 个输入颜色之间插值。本文局限一节承认不能 on-the-fly 训练，而这正是 Quark 和 Ha 追求在线前馈、3DGStream 和 IGS 追求流式处理的动机。",
+  "concept_ids": [
+   "n-3dgs",
+   "n-dynamic",
+   "r-appearance",
+   "r-alpha",
+   "a-dynamic-4d",
+   "a-3dgs-ext"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ }
+]

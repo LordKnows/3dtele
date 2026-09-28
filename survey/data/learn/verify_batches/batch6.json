@@ -1,0 +1,483 @@
+[
+ {
+  "title": "3DGStream: On-the-Fly Training of 3D Gaussians for Efficient Streaming of Photo-Realistic Free-Viewpoint Videos",
+  "authors": "Jiakai Sun, Han Jiao, Guangyuan Li, Zhanjie Zhang, Lei Zhao, Wei Xing (浙江大学)",
+  "year": 2024,
+  "venue": "CVPR 2024 (Highlight)",
+  "url": "https://arxiv.org/abs/2403.01444",
+  "citations": 210,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "3DGStream 是把动态高斯从“整段视频离线训练”改为“逐帧在线训练”的代表性工作，目标是自由视点视频（FVV）的流式传输。每来一帧多视角图像，它只花约 12 秒训练一个小网络，把上一帧的高斯搬到当前帧，再为新出现的物体补少量高斯。它确立了流式动态高斯“变换缓存 + 自适应新增”的两阶段范式，也是 IGS 等可泛化流式方法的直接比较对象。",
+  "contributions_zh": "(1) 初始化：用第 0 帧的多视角图像训练一个标准 3DGS。(2) 阶段 1：训练神经变换缓存（Neural Transformation Cache, NTC）。NTC 由多分辨率哈希编码和一个浅层 fully-fused MLP 组成，对每个高斯中心输出 7 维结果（3 维平移 + 4 维旋转四元数），把上一帧的高斯变换到当前帧；损失为 L1 加 D-SSIM。NTC 先以单位变换为目标预热一次，预热后的参数用作所有帧的初始化。(3) 阶段 2：在视空间位置梯度大的高斯附近生成额外高斯（尺度取原高斯的 80%，不透明度初始化为 0.1），只优化这些新高斯，再剪掉不透明度低于 0.01 的；新增高斯只属于当前帧。(4) 每帧阶段 1 训练 150 次迭代，阶段 2 训练 100 次。(5) N3DV 上（RTX 3090）PSNR 31.67，每帧 7.6 MB，每帧训练 0.20 分钟（约 12 秒），渲染 215 FPS；StreamRF 为 30.68、17.7 MB、0.25 分钟、8.3 FPS。局限：继承了 3DGS 对初始点云的依赖；为了速度限制了迭代次数，也就限制了对剧烈运动的建模能力。",
+  "anchor_link_zh": "Ha Sec. 2 引用了本文；深读笔记指出，Ha 缺少与 3DGStream、IGS 这类流式 4DGS 方法的定量比较。两者的“在线”含义不同。Ha 每帧约 39 ms（TensorRT，不含 RAFT-Stereo 深度估计），不需要训练，但每次只输出一个目标视角的图像。3DGStream 每帧约 12 秒在线训练，得到一个持久的 3D 表示，可以从任意视角以 215 FPS 渲染。Quark 与 Ha 更接近，每帧为每个目标视角重建一次 LDM，然后丢弃。从 telepresence 的角度看，3DGStream 是“传一次表示、在接收端渲染多个视角”，每帧 7.6 MB 仍然偏大；Ha 和 Quark 是“传图像、在接收端重建”，延迟更低。Quark 作者参与的后续工作 Fuse-and-Refine 支持带历史记忆的动态场景在线重建，可以看作在尝试把这两条路线结合起来。",
+  "concept_ids": [
+   "n-3dgs",
+   "n-dynamic",
+   "v-codec",
+   "v-temporal",
+   "l-encoding",
+   "a-dynamic-4d",
+   "a-telepresence-sys"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "4K4D: Real-Time 4D View Synthesis at 4K Resolution",
+  "authors": "Zhen Xu, Sida Peng, Haotong Lin, Guangzhao He, Jiaming Sun, Yujun Shen, Hujun Bao, Xiaowei Zhou (浙江大学、Image Derivative Inc.、蚂蚁集团)",
+  "year": 2024,
+  "venue": "CVPR 2024",
+  "url": "https://arxiv.org/abs/2310.11448",
+  "citations": 134,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "4K4D 把动态场景的渲染速度推到了 4K 分辨率下实时。几何用 4D 点云加 K-Planes 特征网格表示，渲染用硬件光栅化加可微深度剥离（depth peeling）；外观由两部分组成，一是从输入图像取色的 IBR 项，二是连续的球谐项。它出自 ENeRF 的同一团队（浙大 ZJU3DV），说明“点基元 + 图形管线 + IBR”可以比体渲染快一个数量级。它也是 Ha 做定性对比时选用的逐场景优化方法之一。",
+  "contributions_zh": "(1) 几何：每帧先用 space carving（视觉外壳）得到初始点云；点的半径、密度和球谐系数由 K-Planes 式的 4D 特征网格加 MLP 预测。特征网格让点天然带有正则，优化更稳定。(2) 混合外观 c = c_ibr + c_sh。c_ibr 把点投影到按视线方向选出的 N′=4 个最近输入视图上取色，\\( c_{ibr}=\\sum_{i=1}^{N'} w_i\\,c^{i}_{img} \\)；权重 w_i 由 MLP 根据点特征和 2D CNN 图像特征预测，与视角无关。由于近邻视图的选择是离散的，再加上连续的球谐残差 c_sh 来补足视角变化。(3) 可微深度剥离：用自定义 shader 做 K 遍光栅化（训练时 K=15，推理时 12），每一遍取下一个更远的点；每个点在像素 u 处的不透明度为 α(u,x)=σ·max(1−‖π(x)−u‖²/r², 0)，再按体渲染公式合成。(4) 推理加速：预先算好点属性和混合权重，异步上传到显存，并使用 FP16。200 帧的序列在单张 RTX 4090 上训练约 24 小时。(5) DNA-Rendering 上 PSNR 31.17、203.6 FPS（RTX 3090），ENeRF 为 28.11、6.0 FPS；ENeRF-Outdoor 上 25.82、141.7 FPS，ENeRF 为 25.45、11.3 FPS；N3DV 上 32.86、110 FPS。在 RTX 4090 上，1080p 超过 400 FPS，4K 约 80 FPS。",
+  "anchor_link_zh": "4K4D 与两篇锚点关系紧密，体现在三点。(a) Ha Fig. 12 在 ENeRF-Outdoor 上把 4K4D（逐场景优化，使用 K=17 个输入视角）与 4DGS、MVSplat 做了定性比较，声称自己更锐利，但没有给出定量数字。本文在该数据集上的 PSNR 25.82 高于 ENeRF 的 25.45（960×540）；而 Ha 在该数据集上恰恰输给了 ENeRF（24.01 对 25.79，480×270，协议不同）。(b) 本文的 c_ibr 与 Quark 的 blend weights 本质相同，都是对输入像素颜色做凸组合。Quark 局限一节说凸组合无法表示视角相关效果，本文正是用 SH 残差来弥补这一点。(c) 深度剥离“逐层取最近的点再合成”，与 Quark 的 LDM 分层 over 合成是同一思想，前者作用于点云，后者作用于层表示。",
+  "concept_ids": [
+   "r-raster",
+   "i-blending",
+   "r-alpha",
+   "n-dynamic",
+   "r-appearance",
+   "a-dynamic-4d",
+   "a-generalizable-ibr"
+  ],
+  "difficulty": "专家",
+  "must_read": true,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "GPS-Gaussian: Generalizable Pixel-wise 3D Gaussian Splatting for Real-time Human Novel View Synthesis",
+  "authors": "Shunyuan Zheng, Boyao Zhou, Ruizhi Shao, Boning Liu, Shengping Zhang, Liqiang Nie, Yebin Liu (哈尔滨工业大学、清华大学)",
+  "year": 2024,
+  "venue": "CVPR 2024 (Highlight)",
+  "url": "https://arxiv.org/abs/2312.02155",
+  "citations": 221,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "GPS-Gaussian 是第一个面向人体、达到实时（2K@25FPS）的前馈（feed-forward）3DGS 新视角合成方法。它在源视图上定义逐像素的“高斯参数图”，用立体匹配得到的深度把 2D 参数图提升到 3D，不做任何针对个人的优化。它把 3DGS 的渲染速度与可泛化网络结合起来，开启了像素对齐高斯在 telepresence 中的应用。Ha 把它与作者有重叠的 Tele-Aloha 一起列为“扩展到动态人体的前馈高斯模型”，同时把它作为重点对比和批评的 baseline。",
+  "contributions_zh": "(1) 相机布置：8 台相机围成一圈，相邻两台约相隔 45°。对每个目标视角，选相邻的两台源相机并做立体校正。(2) 深度：用 RAFT-Stereo 式的迭代视差估计，由视差得到深度 D，作为位置图 M_p。(3) 高斯参数图 G(x)={M_p, M_c, M_r, M_s, M_α}。颜色图 M_c 直接取输入像素的 RGB；旋转（归一化四元数）、尺度（Softplus）和不透明度（Sigmoid）由网络回归。两个视角的前景像素反投影后合并成一个点集，用 3DGS 光栅器渲染。(4) 训练数据由 Twindom 的 1700 个和 THuman2.0 的 526 个人体扫描渲染而成，深度模块与高斯模块联合训练。(5) 在 RTX 3090 上，源视图相关计算 27 ms，每个新视角只需 0.8 ms；同时渲染 10 个新视角共 35 ms，ENeRF 需要 1261 ms。THuman2.0 上 PSNR 25.57，ENeRF 为 24.10，IBRNet 为 23.38。实时演示接入了 6 台相机。",
+  "anchor_link_zh": "Ha 的核心设计几乎逐条回应了 GPS-Gaussian（Ha Sec. 3.1、附录 A.3、Fig. 4）。第一，不用网络预测高斯参数。Ha 观察到，在稠密像素网格上预测出的尺度、不透明度和旋转会收敛到近似常数，颜色又等于输入像素，所以直接把高斯解析地设为各向同性、完全不透明、像素大小。第二，不把所有视角一次性渲染，因为那样会产生 flying pixels 和 Z-fighting；Ha 改为每个视角单独渲染，再由 U-Net 融合。数字上，在 DyNeRF 上 Ha 的 PSNR 31.17、STED 68.76，重新训练的 GPS-Gaussian 只有 25.46、693.0，耗时 143.4 ms。Quark 没有引用 GPS-Gaussian（见锚点 lineage），但两者代表“前馈、实时、少量相机”下的两种做法：Quark 用 LDM 加 IBR，GPS-Gaussian 用像素对齐高斯。",
+  "concept_ids": [
+   "n-generalizable",
+   "n-3dgs",
+   "d-stereo",
+   "g-epipolar",
+   "a-ff-3dgs",
+   "a-human-capture",
+   "a-telepresence-sys"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "Animatable Gaussians: Learning Pose-dependent Gaussian Maps for High-fidelity Human Avatar Modeling",
+  "authors": "Zhe Li, Zerong Zheng, Lizhen Wang, Yebin Liu (清华大学等)",
+  "year": 2024,
+  "venue": "CVPR 2024",
+  "url": "https://openaccess.thecvf.com/content/CVPR2024/html/Li_Animatable_Gaussians_Learning_Pose-dependent_Gaussian_Maps_for_High-fidelity_Human_Avatar_CVPR_2024_paper.html",
+  "citations": 280,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "Animatable Gaussians 是高保真可驱动人体 avatar 的代表作。它把 3D 高斯参数化到正面和背面两张 2D 规范高斯图上，于是可以用强大的 StyleGAN 式 2D CNN，根据姿态条件回归随姿态变化的服装细节，例如褶皱和裙摆。它说明把 3D 问题转成 2D 的图像到图像回归，能充分利用 CNN 的容量。GPS-Gaussian 和 Quark 等在 2D 网格上处理 3D 问题的设计，也体现了同样的思路。",
+  "contributions_zh": "(1) 先从多视角视频学一个角色专属的参数化模板：借助 SMPL 蒙皮和 SDF 体渲染拟合规范空间的 SDF，从中抽出网格，再把蒙皮权重传递过去。这样的模板能适应裙子等宽松服装。(2) 把模板正交投影到正面和背面两个视图，模板掩码内的每个像素对应一个 3D 高斯，得到两张规范高斯图。姿态条件是模板经 LBS 变形后投影得到的位置图。(3) 用 StyleUNet（一种 StyleGAN 式条件生成器）从位置图预测随姿态变化的高斯图，再经 LBS 变换到姿态空间，用可微光栅化渲染。(4) 姿态投影：对驱动姿态的位置图做 PCA，投影回训练姿态的分布范围内，提高对新姿态的泛化。(5) 实验数据包括 THuman4.0（24 个视角）、ActorsHQ（160 个视角中取 47 个全身视角）和 AvatarReX（16 个视角）。THuman4.0 上 PSNR 28.07，PoseVocab 为 26.38；与 AvatarReX 相比为 30.61 对 23.25。在 RTX 3090 上以 1024×1024 渲染约 10 FPS（PyTorch）。",
+  "anchor_link_zh": "两篇锚点都不做可驱动 avatar，也不用人体模板；Quark Sec. 2.3 明确把依赖人体先验的方法划为另一类问题。本文的意义在于展示 telepresence 的另一条路线：先离线为每个人建好 avatar，通话时只传姿态这类低维驱动信号，由接收端生成图像。这样带宽极低，但表现不了手持物体或没见过的衣服。锚点的路线则是每帧都从多相机图像重建，什么都能表现，代价是带宽和算力开销大。设计上三者有一个共同点：本文、GPS-Gaussian 和 Ha 都把高斯组织在 2D 像素网格上，从而可以用 2D CNN 或 U-Net 来处理 3D 问题。",
+  "concept_ids": [
+   "n-3dgs",
+   "l-cnn",
+   "f-linalg",
+   "n-dynamic",
+   "a-human-capture"
+  ],
+  "difficulty": "专家",
+  "must_read": false,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "GaussianAvatars: Photorealistic Head Avatars with Rigged 3D Gaussians",
+  "authors": "Shenhan Qian, Tobias Kirschstein, Liam Schoneveld, Davide Davoli, Simon Giebenhain, Matthias Nießner (慕尼黑工业大学、Woven by Toyota、Toyota Motor Europe)",
+  "year": 2024,
+  "venue": "CVPR 2024",
+  "url": "https://arxiv.org/abs/2312.02069",
+  "citations": 358,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "GaussianAvatars 把 3D 高斯绑定到参数化人脸模型 FLAME 的三角面上，得到表情、姿态、视角都可控的照片级头部 avatar。绑定方式很简单：高斯定义在三角形的局部坐标系中，随三角形一起运动。这种做法后来被大量高斯头像和全身 avatar 以及基于网格绑定的动态高斯方法采用，也是理解“高斯跟随局部刚体运动”最直观的例子。",
+  "contributions_zh": "(1) 为每个三角形定义局部坐标系：原点 T 取三个顶点的均值；旋转矩阵 R 的三列分别是一条边的方向、面法线以及二者的叉积；尺度 k 取该边长度与其垂线长度的均值。(2) 高斯的位置、旋转、尺度都在局部空间中定义，渲染时变换到全局：r′=Rr，μ′=kRμ+T，s′=ks。乘以 k 使小三角形上的高斯每步移动得更慢，相当于自适应步长。(3) 绑定继承：3DGS 致密化产生的新高斯继承父高斯绑定的三角形，剪枝也不会破坏绑定关系，保证每个高斯始终挂在某个三角形上。(4) 端到端联合优化 FLAME 参数（由多视角光度跟踪初始化）和高斯参数，并用位置和尺度正则防止高斯远离所绑定的三角形。(5) NeRSemble（16 个视角）上，新视角合成 PSNR 31.6、LPIPS 0.065，AvatarMAV 为 29.5 / 0.152；自重演 26.0 dB；802×550 下渲染 187 FPS。",
+  "anchor_link_zh": "本文与锚点没有直接依赖，但它是 telepresence 中“模型驱动”路线的代表，目标与 Meta Codec Avatars 相同，只是建立在公开的 FLAME 模型之上。发送端只需跟踪 FLAME 的表情和姿态参数，接收端渲染高斯头像。与 Quark 和 Ha 逐帧从相机重建相比，它的带宽几乎可以忽略，但只覆盖头部，模型之外的内容（手、道具、背景）都表达不了。它的“三角形局部坐标系”，直接对应 f-linalg 中的刚体变换 [R|t]（这里多了一个尺度 k）；Dynamic 3D Gaussians 的局部刚性损失和 Animatable Gaussians 的 LBS 也都建立在同一个概念上。",
+  "concept_ids": [
+   "n-3dgs",
+   "f-linalg",
+   "r-reps",
+   "n-dynamic",
+   "a-human-capture"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "Relightable Gaussian Codec Avatars",
+  "authors": "Shunsuke Saito, Gabriel Schwartz, Tomas Simon, Junxuan Li, Giljoo Nam (Meta Codec Avatars Lab)",
+  "year": 2024,
+  "venue": "CVPR 2024 (Oral)",
+  "url": "https://arxiv.org/abs/2312.03704",
+  "citations": 163,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "这是 Meta Codec Avatars 系列进入 3D 高斯时代的代表作。它用 3D 高斯表示头部几何，能还原亚毫米级的发丝和毛孔；用“可学习的辐射传输”实现带全频率反射的实时重光照；还能由头显（HMC）相机实时驱动，并在有线连接的消费级 VR 头显上实时渲染。高保真、可重光照、可驱动是 telepresence 头像必需的三种能力，这篇论文第一次把三者同时做到实时。",
+  "contributions_zh": "(1) 采集：110 台相机，分辨率 4096×2668，460 颗白光 LED，90 Hz。每人约拍 144,000 帧，采用时间复用照明：每隔两帧插入一帧全亮以便跟踪，其余帧用 5 颗灯的分组或随机组合照明。(2) 几何：在共享的 UV 空间中，由表情潜码 z 解码出 3D 高斯参数（条件 VAE 结构）。(3) 外观：可学习的辐射传输。漫反射用考虑全局光照的球谐表示，彩色系数到 3 阶，4–8 阶为单色系数；高光用球面高斯表示。这样在点光源和连续环境光下都能高效重光照。(4) 显式眼球模型：视线可以显式控制，也能重现眼部的全频反射。(5) 在 4 张 A100 上以 batch 16 训练 200k 次迭代；演示了由头显相机实时驱动。",
+  "anchor_link_zh": "本文和 Ha 都来自 Meta，分别代表 avatar 路线和实时捕捉-重建路线。它补上了两篇锚点都没有触及的一维：光照。Quark 的 blend weights 和 Ha 的融合权重都只是在输入像素颜色之间插值，输出的外观固定在采集时的光照下。Quark 局限一节也承认，凸组合无法准确表示视角相关材质。本文则显式建模漫反射和高光，能把人重新照亮以匹配远端环境。代价是每人需要一套 110 台相机加 460 颗 LED 的采集和离线训练，也只覆盖头部。对 telepresence 研究者来说，读本文和 Ha 可以看清“先建模再驱动”与“现场捕捉再合成”之间的取舍。",
+  "concept_ids": [
+   "r-appearance",
+   "n-3dgs",
+   "g-rig",
+   "a-human-capture",
+   "a-telepresence-sys"
+  ],
+  "difficulty": "专家",
+  "must_read": false,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "Instant Gaussian Stream: Fast and Generalizable Streaming of Dynamic Scene Reconstruction via Gaussian Splatting",
+  "authors": "Jinbo Yan, Rui Peng, Zhiyan Wang, Luyang Tang, Jiayu Yang, Jie Liang, Jiahao Wu, Ronggang Wang (北京大学深圳研究生院、鹏城实验室)",
+  "year": 2025,
+  "venue": "CVPR 2025",
+  "url": "https://arxiv.org/abs/2503.16979",
+  "citations": 45,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-dynamic-human",
+  "influence_zh": "IGS 是第一个把可泛化（前馈）网络用于流式动态高斯重建的方法。它用一个在多个场景上训练好的运动网络，一次前向就预测出所有高斯从关键帧到目标帧的运动，把 3DGStream 约 12 秒/帧的开销降到约 2.7 秒/帧，并用关键帧精化抑制误差累积。它代表了 2025 年“前馈 + 流式 + 持久表示”的融合方向，处在 Quark/Ha（纯前馈、无状态）和 3DGStream（逐帧优化、有状态）之间。",
+  "contributions_zh": "(1) AGM-Net：用预训练的 GMFlow 从 V=4 个视角提取关键帧到目标帧的光流嵌入，接一个 Swin-Transformer 块微调，得到 2D 运动特征图（C=128，分辨率 128×128）。(2) 用最远点采样从高斯中选出 M=8192 个锚点，把锚点投影到各视角上取运动特征，经 4 层 Transformer 得到 3D 运动特征；每个高斯再从邻近锚点加权聚合特征，解码出自己的运动。(3) 关键帧引导的流式策略：每隔 w=5 帧设一个关键帧，300 帧共 60 个。关键帧做有界精化，IGS-s 精化 50 次迭代，IGS-l 精化 100 次；非关键帧由关键帧经一次推理直接得到。这样可以抑制误差累积。(4) 训练数据：在 N3DV 的 4 个序列上逐帧构建共 1200 个 3D 高斯场景，耗时 192 GPU 小时；每帧与前后各 5 帧配对，共 12,000 对。在 4 张 A100 上训练。(5) N3DV 测试集（cut roasted beef、sear steak）上，IGS-s PSNR 33.89，每帧 2.67 秒，渲染 204 FPS，每帧 7.90 MB；3DGStream 为 33.11，每帧约 12 秒。跨域的 Meet Room 数据集上为 29.24，3DGStream 为 28.36。",
+  "anchor_link_zh": "深读笔记把 IGS 列为 Ha 比较中缺失的重要同期 baseline：两者都发表于 CVPR 2025，都在 N3DV/DyNeRF 上做多视角在线合成，也都依赖前馈网络。区别在于，Ha 每帧约 39 ms、没有状态，时间一致性靠差分掩码和 TSDF 回灌维持；IGS 每帧约 2.7 秒、有状态（持久高斯 + 关键帧），时间一致性来自表示本身。IGS 用预训练的光流网络提取运动线索，Ha 用 RAFT-Stereo 估计深度，两者都说明 telepresence 管线越来越依赖“预训练底层视觉模型 + 轻量融合网络”。IGS 的训练数据只有 4 个 N3DV 序列，泛化能力同样有限，这与深读笔记指出的 Ha 训练集过窄是同一个问题。",
+  "concept_ids": [
+   "n-dynamic",
+   "n-3dgs",
+   "n-generalizable",
+   "d-flow",
+   "l-attention",
+   "a-ff-3dgs",
+   "a-dynamic-4d",
+   "a-temporal-video"
+  ],
+  "difficulty": "专家",
+  "must_read": false,
+  "themes": [
+   "t-dynamic-human"
+  ]
+ },
+ {
+  "title": "Image Quality Assessment: From Error Visibility to Structural Similarity",
+  "authors": "Zhou Wang et al. (NYU / UT Austin)",
+  "year": 2004,
+  "venue": "IEEE Transactions on Image Processing 13(4), 2004",
+  "url": "https://doi.org/10.1109/TIP.2003.819861",
+  "citations": 60008,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "它把图像质量评价的关注点从逐像素误差的大小（MSE/PSNR）转到局部结构有没有被保留。此后二十年，图像复原、压缩、渲染和 NVS 论文都把它当作默认的第二指标，几乎所有 NVS 结果表都是 PSNR/SSIM/LPIPS 三列。SSIM 可微，所以 1−SSIM（D-SSIM）也成了常用训练损失，例如 3DGS 用 0.8·L1 + 0.2·D-SSIM。",
+  "contributions_zh": "直觉：人眼对整体亮度偏移不敏感，对纹理和边缘结构被破坏很敏感。SSIM 在每个局部窗口（原文用 11×11、σ=1.5 的高斯窗）分别比较亮度（均值 μ）、对比度（标准差 σ）和结构（协方差 σ_xy），公式为 \\( \\mathrm{SSIM}(x,y)=\\frac{(2\\mu_x\\mu_y+C_1)(2\\sigma_{xy}+C_2)}{(\\mu_x^2+\\mu_y^2+C_1)(\\sigma_x^2+\\sigma_y^2+C_2)} \\)。其中 C1=(0.01L)²、C2=(0.03L)² 用来防止分母接近 0，L 是像素动态范围（8 位图像为 255）。对所有窗口取平均得到 MSSIM。数值例：给整幅图加 +10 的亮度偏移，MSE=100，PSNR 降到约 28.1 dB；SSIM 只有亮度项略降（均值 128 对 138 时约 0.997），对比度项和结构项仍为 1，所以总值约 0.997。反过来，轻微模糊会明显拉低结构项。",
+  "anchor_link_zh": "Ha et al. 的训练损失是 0.8·L1 + 0.2·L_SSIM，和 3DGS 的配比相同。它的时间一致性指标 TCC（式 8）直接定义为“渲染帧差图与真值帧差图之间的 SSIM”。两篇锚点的保真度表都报告 SSIM（Quark 在 RFF 上 0.850，Ha 在 DyNeRF 上 0.936）。如果不理解 SSIM 衡量的是局部结构，就看不懂 TCC 在比什么：它比的是“变化的结构”是否一致，而不是像素值本身。",
+  "concept_ids": [
+   "v-metrics",
+   "f-image",
+   "l-loss"
+  ],
+  "difficulty": "入门",
+  "must_read": true,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "The Unreasonable Effectiveness of Deep Features as a Perceptual Metric",
+  "authors": "Richard Zhang et al. (UC Berkeley / Adobe Research)",
+  "year": 2018,
+  "venue": "CVPR 2018",
+  "url": "https://arxiv.org/abs/1801.03924",
+  "citations": 20037,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "论文证明，预训练 CNN 中间特征之间的距离比 PSNR/SSIM 更贴近人类感知，并用人类判断数据标定出 LPIPS。此后神经渲染和 NVS 基本统一用 PSNR/SSIM/LPIPS 报告结果。LPIPS 本身也被大量用作训练损失（感知损失），主要作用是抑制纯 L1/L2 训练带来的模糊。",
+  "contributions_zh": "作者构建了 BAPPS 数据集：约 161k 个 64×64 图块，共 484k 条人类 2AFC（两选一）判断，失真既包括传统失真，也包括真实算法的输出。度量的计算方式：把两张图送入 AlexNet/VGG/SqueezeNet，取 L 层特征，沿通道做单位归一化得到 \\( \\hat y^l \\)；每个通道乘一个可学习权重 \\( w_l \\) 后求 L2 距离，再对空间位置和各层求平均：\\( d(x,x_0)=\\sum_l \\frac{1}{H_lW_l}\\sum_{h,w}\\| w_l\\odot(\\hat y^l_{hw}-\\hat y^l_{0,hw})\\|_2^2 \\)。骨干网络冻结，w 只做线性标定，即“lin”版本。直觉：对纹理区域做 1 像素平移，PSNR 会大幅下降，但人眼几乎看不出；LPIPS 对这种微小错位相对宽容，对模糊和细节丢失更敏感。",
+  "anchor_link_zh": "Quark 的训练损失就是 10·L1 + LPIPS，其中 LPIPS 负责保住锐利纹理。两篇锚点都报告 LPIPS。一个典型现象：Ha et al. 在 ENeRF-Outdoor 上 PSNR 24.01 输给 ENeRF 的 25.79，LPIPS 却是 0.155，好于对方的 0.167。只有分清 PSNR 偏好均值准确（哪怕模糊）、LPIPS 偏好锐利（哪怕略有错位），才能正确解读这种指标互相矛盾的结果。另外，Quark 在 Shiny 上把分辨率从 1024×768 提到 2048×1536 时，LPIPS 从 0.108 恶化到 0.174，说明 LPIPS 对高分辨率下的细节缺失很敏感。",
+  "concept_ids": [
+   "v-metrics",
+   "l-loss",
+   "l-cnn"
+  ],
+  "difficulty": "入门",
+  "must_read": true,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "FLIP: A Difference Evaluator for Alternating Images",
+  "authors": "Pontus Andersson et al. (NVIDIA / Lund University)",
+  "year": 2020,
+  "venue": "Proc. ACM on Computer Graphics and Interactive Techniques 3(2) (HPG 2020)",
+  "url": "https://doi.org/10.1145/3406183",
+  "citations": 195,
+  "citations_source": "OpenAlex",
+  "theme": "t-generative-ff",
+  "influence_zh": "这是一个面向渲染的误差评估工具。它模拟人在参考图和测试图之间来回切换（flip）时看到的差异，输出逐像素误差图，而不只是一个分数。实时渲染、降噪和路径追踪社区常用它，官方提供 C++/CUDA/Python 实现，后来还扩展出 HDR-FLIP。",
+  "contributions_zh": "FLIP 由两条通路组成。颜色通路：先在对立色空间里用对比敏感度函数（CSF）做空间滤波，滤掉在给定观看距离（像素/度）下人眼看不到的高频，再在感知均匀的颜色空间中计算色差。特征通路：检测边缘和点状特征上的差异，因为这类差异在来回切换时最显眼。两路合成为 [0,1] 范围的误差图。作者后来建议，如果只报告一个数，就取误差图的均值。直觉例子：MSE 相同时，平坦墙面上几个孤立亮点（萤火虫噪声）在 FLIP 图上的误差远高于均匀分布的轻微噪声，这与切换对比时的实际观感一致。",
+  "anchor_link_zh": "两篇锚点都没有使用 FLIP。它与临场场景的关联在于：用户转头时新视角不断替换旧视角，边缘跳变和飞点（Ha et al. Fig. 4 中的 flying pixels）会像 flip 对比一样被放大。把 FLIP 误差图和 Ha 的 SDV（跨视角误差标准差）一起看，可以更细地诊断视角一致性问题。这是一个可能的评测扩展，锚点本身没有做。",
+  "concept_ids": [
+   "v-metrics",
+   "f-image"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "Video Quality Assessment by Reduced Reference Spatio-Temporal Entropic Differencing",
+  "authors": "Rajiv Soundararajan & Alan C. Bovik (UT Austin)",
+  "year": 2013,
+  "venue": "IEEE Transactions on Circuits and Systems for Video Technology 23(4), 2013（2012 年在线发表）",
+  "url": "https://doi.org/10.1109/TCSVT.2012.2214933",
+  "citations": 374,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "论文提出 ST-RRED 系列视频质量指标。它是“部分参考”（reduced reference）指标：接收端只需要参考视频的少量统计量，就能评估失真视频的质量，而且同时考虑空间信息和时间信息（帧差）。它是 LIVE 视频质量库上的经典强基线，后来被 NVS 和视频生成论文借来量化时间一致性，也就是 STED（spatio-temporal entropic difference）。",
+  "contributions_zh": "直觉：自然视频的小波系数近似服从 Gaussian Scale Mixture 统计，失真会改变局部系数所携带的信息量（熵）。做法是在各子带的局部块上计算按局部方差加权的条件熵，再求参考与失真之间的平均差异。空间项 SRRED 对单帧计算；时间项 TRRED 对相邻帧的差分图做同样计算；两者相乘得到 STRRED，数值越小越好。“部分参考”的含义是可以只传输每个子带少量的熵值统计，不需要完整参考视频。",
+  "anchor_link_zh": "Ha et al. 的 STED 就是这个指标（§4.3 引用 [59]），也是其时间一致性主表 Table 1 的核心列。在 DyNeRF 上，Ha 为 68.76，ENeRF 为 76.14，IBRNet 为 737.7，GPS-Gaussian 为 693.0。消融中去掉 TSDF 引导后，STED 从 68.8 升到 95.4，而 PSNR 只差 0.01 dB，说明 Ha 的主要贡献几乎只体现在这一个指标上。在 ENeRF-Outdoor 上，Ha 的 STED 为 44.49，反而差于 ENeRF 的 32.31。STED 衡量的是时空信息量的差异，不是基于光流的 warping 误差，所以它对缓慢漂移和高频闪烁的敏感度与 Lai et al. 的指标不同。Quark 没有报告任何时间指标。",
+  "concept_ids": [
+   "v-metrics",
+   "v-temporal"
+  ],
+  "difficulty": "专家",
+  "must_read": false,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "Learning Blind Video Temporal Consistency",
+  "authors": "Wei-Sheng Lai et al. (UC Merced / Adobe Research)",
+  "year": 2018,
+  "venue": "ECCV 2018",
+  "url": "https://arxiv.org/abs/1808.00449",
+  "citations": 507,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "论文把“逐帧处理导致闪烁”抽象成一个与具体任务无关（blind）的后处理问题：同一个循环网络可以稳定风格迁移、上色、增强、本征分解等各种逐帧算法的输出。它提出的光流 warping error 成为衡量视频时间一致性的事实标准指标。它还确立了“短期 + 长期时间损失 + 感知损失”这一训练配方。",
+  "contributions_zh": "输入是原始视频 {I_t} 和逐帧处理的结果 {P_t}。ConvLSTM 网络输出 O_t，要求它在内容上贴近 P_t，在时间上跟随 I_t 的运动。训练时用 FlowNet2 光流把 O_{t−1}（短期）和 O_1（长期）warp 到第 t 帧，并用遮挡掩码 M 只在可见像素上惩罚差异。测试时不需要计算光流，高分辨率视频也能实时运行。评测指标是 \\( E_{warp}(V_t,V_{t+1})=\\frac{1}{\\sum_i M_t^{(i)}}\\sum_i M_t^{(i)}\\|V_t^{(i)}-\\hat V_{t+1}^{(i)}\\|_2^2 \\)：\\( \\hat V_{t+1} \\) 是按光流 warp 回第 t 帧的下一帧，M 是非遮挡掩码，i 是像素索引，最后对整段视频取平均。数值例：静止墙面上某个像素每帧随机亮度 ±5，逐帧 PSNR 几乎看不出问题，warping error 会直接把它记下来。",
+  "anchor_link_zh": "Quark 明确承认逐帧、逐视角重建会闪烁，但没有报告任何时间指标。Ha et al. 只用了 STED、TCC、SDT，没有基于光流的 warping error，这是本调研深读指出的主要评测缺口。这篇论文可以从两方面补上：一是评测，warping error 应当加入远程临场的评测方案；二是“盲”后处理，可以把 Quark 这类没有时间机制的逐帧 NVS 输出当作 P_t 来做时间稳定。它的短期/长期时间损失也是 anchor_compare 建议给 Quark 加的 temporal warping loss 的原型。",
+  "concept_ids": [
+   "v-temporal",
+   "v-metrics",
+   "d-flow",
+   "l-loss"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "Exploiting Temporal Consistency for Real-Time Video Depth Estimation",
+  "authors": "Haokui Zhang et al.",
+  "year": 2019,
+  "venue": "ICCV 2019",
+  "url": "https://arxiv.org/abs/1908.03706",
+  "citations": 144,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "这是较早把视频深度估计的时间一致性作为明确目标的工作。它用 ST-CLSTM 融合相邻帧特征，用对抗式时间一致性损失约束输出，还提出了 TCC（temporal change consistency）指标，后来被视频深度和在线 NVS 工作借用。引用量不高，但它是 Ha et al. 时间指标的直接来源。",
+  "contributions_zh": "方法：在任意单帧深度网络后面接一个空间-时间 ConvLSTM（ST-CLSTM），几乎不增加计算量，可以实时运行。训练时除了空间损失，还用一个 GAN 判别器区分预测深度序列和真值序列的时间变化，作为时间一致性损失。TCC 定义为预测序列和真值序列的“相邻帧差图”之间 SSIM 的平均：\\( \\mathrm{TCC}=\\frac{1}{T-1}\\sum_{t=1}^{T-1}\\mathrm{SSIM}(|D^t-D^{t+1}|,|G^t-G^{t+1}|) \\)，D 是预测，G 是真值，T 是帧数，越接近 1 越好。直觉：它不要求每帧都准确，只要求“哪里在变、怎么变”和真值一致。例：真值里只有人手在动，如果预测在静止墙面上也出现帧差，TCC 就会下降。",
+  "anchor_link_zh": "Ha et al. 的式 (8) TCC 就是把这里针对深度的定义改用到彩色渲染帧 ℐ^t 和真值 I^t 上。在其 Table 1 中，DyNeRF 上 Ha 为 0.872，ENeRF 为 0.867；ENeRF-Outdoor 上 Ha 为 0.897，是最高值。理解 TCC 只看帧差结构这一点，就能明白两件事：为什么完整模型和去掉 TSDF 引导的版本（0.869）差距很小；为什么这个指标只在相机固定的动态场景里有意义，因为相机固定时，真值帧差只来自场景本身的运动。",
+  "concept_ids": [
+   "v-temporal",
+   "v-metrics",
+   "d-mono"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "Large Scale Multi-view Stereopsis Evaluation",
+  "authors": "Rasmus Jensen et al. (Technical University of Denmark)",
+  "year": 2014,
+  "venue": "CVPR 2014",
+  "url": "https://doi.org/10.1109/CVPR.2014.59",
+  "citations": 1077,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "这就是 DTU 数据集。它提供了带结构光几何真值的大规模 MVS 基准，是 MVSNet 系列学习式 MVS 的标准训练和测试集，也是 pixelNeRF、MVSNeRF、ENeRF 等可泛化 NVS 方法的默认训练集。“在 DTU 上训练，再在其他数据上零样本测试”由此成为可泛化方法的标准协议。",
+  "contributions_zh": "采集方式：工业机械臂搭载结构光扫描仪，每个物体从 49 或 64 个可精确复现的位置拍摄 1600×1200 图像，并在 7 种光照（从定向光到漫射光）下各采一遍。相机内外参经过高精度标定，每张图都有对应的结构光扫描作为几何真值。数据集共 124 个场景，其中 80 个用于本文评测；IJCV 2016 的扩展版 “Large-Scale Data for Multiple-View Stereopsis” 描述了完整数据集。评测用两项点云指标：accuracy（重建点到真值的距离）和 completeness（真值点到重建的距离）。",
+  "anchor_link_zh": "两篇锚点都没有在 DTU 上评测。不过它们共同的最强基线 ENeRF 按 MVSNeRF 的协议在 DTU 上训练，再零样本泛化到其他数据。Quark 迭代式的“匹配 + 可见性”设计，也继承自在 DTU 上发展起来的 plane-sweep MVS 路线。需要注意，DTU 是黑色背景、受控光照下的桌面物体，和临场场景（人、室内、动态）差距很大。两篇锚点都改用了更接近真实场景的训练数据：Quark 用 Spaces/RFF/Shiny/SWORD，Ha 用 ScanNet/Spaces/DyNeRF。",
+  "concept_ids": [
+   "d-mvs",
+   "g-sfm",
+   "d-sensors"
+  ],
+  "difficulty": "入门",
+  "must_read": false,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "Tanks and Temples: Benchmarking Large-Scale Scene Reconstruction",
+  "authors": "Arno Knapitsch et al. (Intel Labs)",
+  "year": 2017,
+  "venue": "ACM Transactions on Graphics 36(4) (SIGGRAPH 2017)",
+  "url": "https://doi.org/10.1145/3072959.3073599",
+  "citations": 1728,
+  "citations_source": "OpenAlex",
+  "theme": "t-generative-ff",
+  "influence_zh": "这是首个在真实户外和室内大场景中、用工业激光扫描仪获取几何真值、并以视频作为输入的重建基准。它的 F-score 协议成为 MVS/SfM 评测的标准。后来 NeRF++、Mip-NeRF 360、3DGS 等工作把其中的场景（如 Truck、Train）用作 NVS 测试场景，所以它也成了新视角合成的常用基准。",
+  "contributions_zh": "场景分为训练集、Intermediate 和 Advanced 三组，输入是高分辨率视频序列，真值来自激光扫描。评测指标：precision P 是重建点中距真值小于阈值 τ 的比例，recall R 是真值点中距重建小于 τ 的比例，二者合成 \\( F=\\frac{2PR}{P+R} \\)，τ 按场景单独设定。数值例：如果重建只覆盖了建筑的一半，但每个点都很准，那么 P≈1、R≈0.5、F≈0.67，即“准但不全”。",
+  "anchor_link_zh": "Quark 的 Table 3 在 3DGS 所用的 T&T 场景上与逐场景优化方法比较：Quark 为 23.60 / 0.852 / 0.138（PSNR/SSIM/LPIPS），高于 3DGS-30K 的 23.14 / 0.841 / 0.183，排名第一，而 Quark 从未在 T&T 上训练。这是 Quark 声称“前馈方法也能胜过逐场景优化”的关键证据之一。Ha et al. 没有使用这个数据集。",
+  "concept_ids": [
+   "d-mvs",
+   "g-sfm",
+   "v-metrics"
+  ],
+  "difficulty": "入门",
+  "must_read": false,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "ScanNet: Richly-annotated 3D Reconstructions of Indoor Scenes",
+  "authors": "Angela Dai et al. (Stanford / Princeton / TUM)",
+  "year": 2017,
+  "venue": "CVPR 2017",
+  "url": "https://arxiv.org/abs/1702.04405",
+  "citations": 5922,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "这是首个百万帧级别的真实室内 RGB-D 视频数据集，带有相机位姿、表面重建和语义标注。室内 3D 理解、深度估计、SLAM、神经表面重建和可泛化 NVS 都把它当作公共基础数据。",
+  "contributions_zh": "作者用 iPad 加 Structure 深度传感器搭建了一套易扩展的采集系统，配合自动稠密重建（BundleFusion）和众包语义标注。数据共 1513 个扫描、2.5M 帧 RGB-D，每帧都有相机位姿和传感器深度。需要注意，传感器深度在物体边缘处常有缺失，在反光和透明表面上会出现空洞，这正是“深度传感器噪声特性”在实际数据中的样子。",
+  "anchor_link_zh": "ScanNet 是 Ha et al. 三个训练数据集之一。Ha 用它的传感器深度（而不是 RAFT-Stereo 估计的深度）训练融合网络，以目标帧为中心在 ±30 帧内取输入帧（排除 ±4 帧）。ScanNet 是静态场景，而且训练时输入视角与目标视角在同一时刻采样，这是 Ha 的网络从未见过视频中的时间变化、也没有时间损失的原因之一。Ha 的 image-based TSDF 融合也延续了 ScanNet 背后的 KinectFusion/BundleFusion 体系（Ha 引用 [13] BundleFusion）。Quark 没有使用 ScanNet。",
+  "concept_ids": [
+   "d-sensors",
+   "d-tsdf",
+   "g-sfm"
+  ],
+  "difficulty": "入门",
+  "must_read": false,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "DL3DV-10K: A Large-Scale Scene Dataset for Deep Learning-based 3D Vision",
+  "authors": "Lu Ling et al. (Purdue University)",
+  "year": 2024,
+  "venue": "CVPR 2024",
+  "url": "https://arxiv.org/abs/2312.16256",
+  "citations": 568,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "它把真实场景级多视角数据的规模从几百个场景提高到一万段 4K 视频，并覆盖反射、透明、光照变化等难例。2024 年以后，前馈 3DGS 和大模型 NVS 大多用它训练和评测。它还提供了 DL3DV-140 这个 NVS 基准。",
+  "contributions_zh": "数据集包含 51.2M 帧、10,510 段 4K 视频，来自 65 类兴趣点地点，有界和无界场景都有，每个场景都标注了反射、透明度、光照等复杂度属性。作者从中抽取 140 个场景组成 DL3DV-140，对 Instant-NGP、Nerfacto、Mip-NeRF 360、Zip-NeRF、3DGS 做统一评测。另外做了一个用它训练可泛化 NeRF 的试点实验，说明数据规模对前馈重建很重要。",
+  "anchor_link_zh": "Quark 的 Table 2 直接在 DL3DV-10K 基准上与逐场景优化方法比较：Quark 为 31.31 / 0.932 / 0.103，高于 Zip-NeRF 的 31.22 / 0.921 / 0.112 和 3DGS 的 29.82 / 0.919 / 0.120。基线数字取自本文，分辨率较低，而且 Quark 没有在 DL3DV 上训练过。Quark 的后续工作（如 iLRM）则在 RE10K 和 DL3DV 上训练和评测。",
+  "concept_ids": [
+   "g-sfm",
+   "n-nerf",
+   "n-3dgs",
+   "v-metrics"
+  ],
+  "difficulty": "入门",
+  "must_read": false,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "Denoising Diffusion Probabilistic Models",
+  "authors": "Jonathan Ho et al. (UC Berkeley)",
+  "year": 2020,
+  "venue": "NeurIPS 2020",
+  "url": "https://arxiv.org/abs/2006.11239",
+  "citations": 35356,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "DDPM 让扩散模型的图像质量首次追上 GAN（无条件 CIFAR-10 上 FID 3.17、IS 9.46），并给出了极简的“预测噪声”训练目标。此后几乎所有图像、视频和 3D 生成模型（LDM/Stable Diffusion、SVD、Zero-1-to-3、CAT3D 等）都建立在这套框架上。",
+  "contributions_zh": "前向过程逐步加高斯噪声：\\( q(x_t|x_{t-1})=\\mathcal N(\\sqrt{1-\\beta_t}\\,x_{t-1},\\beta_t I) \\)，可以一步写成 \\( x_t=\\sqrt{\\bar\\alpha_t}\\,x_0+\\sqrt{1-\\bar\\alpha_t}\\,\\epsilon \\)。其中 β_t 是第 t 步的噪声方差，\\( \\bar\\alpha_t=\\prod_{s\\le t}(1-\\beta_s) \\)，ε~N(0,I)。网络 ε_θ(x_t,t) 学习预测所加的噪声，简化损失为 \\( L=\\mathbb E\\|\\epsilon-\\epsilon_\\theta(x_t,t)\\|^2 \\)。论文证明这个损失等价于加权的变分下界，并与去噪得分匹配和 Langevin 动力学联系起来。设置为 T=1000，β 从 1e-4 线性增加到 0.02。数值例：t=500 时 \\( \\bar\\alpha_t\\approx0.08 \\)，信号系数约 0.28、噪声系数约 0.96，图像已经以噪声为主。采样时要从纯噪声 x_T 反向迭代 1000 步。",
+  "anchor_link_zh": "两篇锚点都没有使用扩散模型。Quark §2.3 把“带学习先验的生成式方法”（引用 Zero-1-to-3、Tseng et al. 2023 等）归为单视图或受限视角的另一类问题，没有与之比较。锚点之后的 2026 年工作开始引入扩散，例如 LiveStre4m 用扩散 Transformer 做时间插值和超分辨率。DDPM 的迭代去噪和 Quark 的迭代 render-and-refine 都是多步细化，但前者从噪声出发，采样出一个“可能”的解；后者从观测出发，逼近唯一的真实解。这是两者在临场应用中可信度不同的根源。",
+  "concept_ids": [
+   "l-diffusion",
+   "f-prob"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "Denoising Diffusion Implicit Models",
+  "authors": "Jiaming Song et al. (Stanford University)",
+  "year": 2021,
+  "venue": "ICLR 2021",
+  "url": "https://arxiv.org/abs/2010.02502",
+  "citations": 13571,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "DDIM 不改训练，只改采样：它把 DDPM 的 1000 步马尔可夫链换成可以跳步的非马尔可夫采样，墙钟时间快 10–50 倍。它确立了“训练与采样解耦”的思路，并给出噪声与图像之间的确定性映射。后续的 DPM-Solver、蒸馏和一致性模型等少步采样研究都从这里出发；图像反演编辑和 SDS 类方法也常用它。",
+  "contributions_zh": "在同一个训练目标下，DDIM 构造了一族非马尔可夫前向过程。采样分两步：先估计干净图像 \\( \\hat x_0=(x_t-\\sqrt{1-\\bar\\alpha_t}\\,\\epsilon_\\theta(x_t,t))/\\sqrt{\\bar\\alpha_t} \\)，再得到 \\( x_{t'}=\\sqrt{\\bar\\alpha_{t'}}\\,\\hat x_0+\\sqrt{1-\\bar\\alpha_{t'}}\\,\\epsilon_\\theta(x_t,t) \\)，其中 t'<t，可以一次跨越多步；η=0 时整个过程没有随机项，是确定性的。数值例：用 50 步代替 1000 步，网络调用次数减少 20 倍，FID 只略微变差。",
+  "anchor_link_zh": "锚点没有使用扩散模型，但 DDIM 说明了引入生成式先验时的时间门槛。Quark 在单张 A100 上 1080p 重建加渲染约 33 ms/帧；Ha et al. 用 TensorRT 约 39 ms/帧。即使每次网络调用只要 10 ms，50 步 DDIM 也需要 0.5 s。所以想把扩散补洞加进临场管线，必须用少步或单步采样。例如 Difix 使用单步的 SD-Turbo，也仍需 76 ms。",
+  "concept_ids": [
+   "l-diffusion",
+   "f-prob"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "High-Resolution Image Synthesis with Latent Diffusion Models",
+  "authors": "Robin Rombach et al. (LMU Munich / Runway)",
+  "year": 2022,
+  "venue": "CVPR 2022",
+  "url": "https://arxiv.org/abs/2112.10752",
+  "citations": 27566,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "LDM 把扩散过程搬到预训练自编码器的低维潜空间里，训练和推理成本大幅下降，并用 cross-attention 统一接入文本、布局等各种条件。开源的 Stable Diffusion 就基于它。Zero-1-to-3、MVDream、CAT3D、SVD、Difix 等 3D 和视频生成先验几乎都以它为骨干。",
+  "contributions_zh": "方法分两阶段。第一阶段训练一个感知压缩自编码器，下采样因子 f 取 4–8 时细节保留与效率平衡最好，并用感知损失加对抗损失保证重建锐利。第二阶段在潜变量 z=E(x) 上训练 UNet 去噪器：\\( L=\\mathbb E\\|\\epsilon-\\epsilon_\\theta(z_t,t,\\tau_\\theta(y))\\|^2 \\)，τ_θ(y) 是条件 y（如文本）的编码器。条件通过 cross-attention \\( \\mathrm{softmax}(QK^\\top/\\sqrt d)V \\) 注入，Q 来自 UNet 特征，K 和 V 来自条件编码。数值例：Stable Diffusion 把 512×512×3 的图像压成 64×64×4 的潜变量（f=8），每步去噪处理的数值量只有原来的约 1/48。",
+  "anchor_link_zh": "首先要注意命名冲突：Quark 里的 “LDM” 指 Layered Depth Map（分层深度图），和这里的 Latent Diffusion Model 毫无关系。阅读 Quark 和生成式 3D 文献时必须分清。锚点本身不使用扩散。潜扩散进入这条研究线的直接途径是：Quark 团队的后续工作 Tok-D（ICCV 2025，作者包括 Kaza、Luo、Lombardi）用基于潜扩散的 CAT3D 生成合成训练数据。",
+  "concept_ids": [
+   "l-diffusion",
+   "l-attention",
+   "l-cnn"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-generative-ff"
+  ]
+ }
+]

@@ -1,0 +1,1261 @@
+<title>3D 临场研究图谱</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]] },
+    options: { skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code", "input", "select", "button"] },
+    svg: { fontCache: "global" },
+    startup: {
+      typeset: false,
+      ready: function () {
+        window.MathJax.startup.defaultReady();
+        if (typeof window.__atlasMathReady === "function") window.__atlasMathReady();
+      }
+    }
+  };
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js"></script>
+<style>
+:root {
+  --bg: #F1F4F3;
+  --surface: #FFFFFF;
+  --surface-2: #E7ECEB;
+  --ink: #111918;
+  --ink-2: #34423F;
+  --muted: #62716E;
+  --rule: #D0D9D7;
+  --accent: #0B6B63;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #D5ECE8;
+  --mile: #8F5400;
+  --mile-soft: #F5E6CC;
+  --good: #1D7438;
+  --good-soft: #DCEFE2;
+  --warn: #9A5A00;
+  --warn-soft: #F7E9D2;
+  --bad: #AE2A1F;
+  --bad-soft: #F7DEDA;
+  --flash: #FFF3C4;
+  --v1: #440154; --v2: #3B528B; --v3: #21918C; --v4: #5EC962; --v5: #FDE725;
+  --serif: "Noto Serif SC", "Songti SC", "STSong", Georgia, serif;
+  --sans: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0B1110; --surface: #121A19; --surface-2: #1A2422; --ink: #E3EBE9; --ink-2: #BCC9C6;
+    --muted: #8A9B98; --rule: #26322F; --accent: #4CCFBE; --accent-ink: #04201D; --accent-soft: #10312D;
+    --mile: #F0B45A; --mile-soft: #37280F; --good: #62D38F; --good-soft: #10301D; --warn: #F0B45A;
+    --warn-soft: #37280F; --bad: #FF8F80; --bad-soft: #3A1714; --flash: #3A3312;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0B1110; --surface: #121A19; --surface-2: #1A2422; --ink: #E3EBE9; --ink-2: #BCC9C6;
+  --muted: #8A9B98; --rule: #26322F; --accent: #4CCFBE; --accent-ink: #04201D; --accent-soft: #10312D;
+  --mile: #F0B45A; --mile-soft: #37280F; --good: #62D38F; --good-soft: #10301D; --warn: #F0B45A;
+  --warn-soft: #37280F; --bad: #FF8F80; --bad-soft: #3A1714; --flash: #3A3312;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.75; }
+a { color: var(--accent); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3, h4 { font-family: var(--serif); text-wrap: balance; line-height: 1.3; margin: 0; }
+p { margin: 0; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.ramp { height: 4px; background: linear-gradient(90deg, var(--v1), var(--v2), var(--v3), var(--v4), var(--v5)); border-radius: 2px; }
+
+.shell { max-width: 1280px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 80px; display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 48px; }
+.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 20px); align-self: start; max-height: calc(100vh - 40px); overflow-y: auto; font-size: 13px; }
+.toc .brand { font-family: var(--serif); font-weight: 700; font-size: 15px; margin-bottom: 10px; }
+.toc ol { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 1px; }
+.toc li.grp { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 12px 10px 4px; }
+.toc a { display: block; color: var(--ink-2); text-decoration: none; padding: 3px 10px; border-left: 2px solid var(--rule); }
+.toc a:hover { color: var(--ink); border-left-color: var(--accent); }
+.toc a.on { color: var(--accent); border-left-color: var(--accent); font-weight: 500; }
+
+main { min-width: 0; display: grid; gap: 72px; }
+section { display: grid; gap: 22px; scroll-margin-top: 24px; min-width: 0; }
+.part { display: grid; gap: 6px; padding-top: 12px; border-top: 1px solid var(--rule); }
+.part .eyebrow { color: var(--accent); }
+.part h2 { font-size: clamp(26px, 3vw, 34px); }
+.part p { color: var(--ink-2); max-width: 72ch; }
+.eyebrow { font-family: var(--mono); font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.sec-head { display: grid; gap: 8px; }
+.sec-head h2 { font-size: clamp(22px, 2.6vw, 28px); }
+.sec-head .lede { color: var(--ink-2); max-width: 72ch; }
+.prose { display: grid; gap: 12px; max-width: 74ch; color: var(--ink-2); }
+.prose p { text-align: justify; }
+
+.hero { display: grid; gap: 18px; padding-top: 8px; }
+.hero h1 { font-size: clamp(30px, 4.6vw, 46px); letter-spacing: .01em; }
+.hero .sub { max-width: 68ch; color: var(--ink-2); font-size: 16px; }
+.anchors-line { display: flex; flex-wrap: wrap; gap: 10px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; padding: 2px 10px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--rule); white-space: nowrap; }
+.chip.accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.stats { display: flex; flex-wrap: wrap; gap: 28px; padding-top: 6px; }
+.stat { display: grid; gap: 0; }
+.stat b { font-family: var(--mono); font-size: 22px; font-weight: 500; color: var(--ink); }
+.stat span { font-size: 12.5px; color: var(--muted); }
+.starts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.start { appearance: none; text-align: left; font: inherit; cursor: pointer; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; display: grid; gap: 4px; color: var(--ink); }
+.start:hover { border-color: var(--accent); }
+.start b { font-family: var(--serif); font-size: 15.5px; }
+.start span { font-size: 13px; color: var(--ink-2); }
+.start i { font-style: normal; font-family: var(--mono); font-size: 11.5px; color: var(--accent); }
+
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 22px; min-width: 0; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--rule); }
+.tab { appearance: none; background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 14px; font: inherit; font-size: 14px; color: var(--ink-2); cursor: pointer; margin-bottom: -1px; }
+.tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
+.anchor-body { display: grid; gap: 26px; padding-top: 22px; min-width: 0; }
+.meta-line { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.tldr { font-size: 16px; color: var(--ink); border-left: 3px solid var(--accent); padding-left: 14px; max-width: 72ch; }
+h3.sub { font-size: 17px; }
+.stages { list-style: none; counter-reset: st; margin: 0; padding: 0; display: grid; gap: 12px; }
+.stages li { counter-increment: st; display: grid; grid-template-columns: 34px minmax(0,1fr); gap: 10px; }
+.stages li::before { content: counter(st); font-family: var(--mono); font-size: 13px; width: 26px; height: 26px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; margin-top: 2px; }
+.stages b { display: block; color: var(--ink); }
+.stages span { color: var(--ink-2); font-size: 14px; }
+.kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+.kv div { background: var(--surface); padding: 10px 12px; display: grid; gap: 2px; }
+.kv .k { font-size: 12px; color: var(--muted); }
+.kv .v { font-family: var(--mono); font-size: 13px; color: var(--ink); overflow-wrap: anywhere; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 24px; }
+ul.plain { margin: 0; padding-left: 1.1em; display: grid; gap: 6px; color: var(--ink-2); font-size: 14px; }
+ul.plain li::marker { color: var(--muted); }
+
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--rule); }
+th { font-weight: 500; color: var(--muted); font-size: 12px; letter-spacing: .04em; background: var(--surface-2); position: sticky; top: 0; z-index: 1; }
+tr:last-child td { border-bottom: 0; }
+td.dim { color: var(--ink); font-weight: 500; white-space: nowrap; }
+td.code { font-family: var(--mono); font-size: 12.5px; color: var(--ink); white-space: nowrap; }
+
+.stack { display: grid; gap: 0; border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.layer { display: grid; grid-template-columns: 200px minmax(0,1fr) 150px; gap: 20px; padding: 16px 18px; border-bottom: 1px solid var(--rule); }
+.layer:last-child { border-bottom: 0; }
+.layer .name b { display: block; font-family: var(--serif); font-size: 16px; }
+.layer .name span { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.layer .body { display: grid; gap: 8px; font-size: 14px; color: var(--ink-2); }
+.layer .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.layer .bneck { font-size: 13px; }
+.layer .bneck em { font-style: normal; color: var(--bad); font-weight: 500; }
+.mat { display: grid; gap: 6px; align-content: start; }
+.mat .bar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; }
+.mat .bar i { height: 8px; border-radius: 2px; background: var(--surface-2); }
+.mat .bar i.f1 { background: var(--v1); } .mat .bar i.f2 { background: var(--v2); } .mat .bar i.f3 { background: var(--v3); } .mat .bar i.f4 { background: var(--v4); } .mat .bar i.f5 { background: var(--v5); }
+.mat small { font-size: 11.5px; color: var(--muted); }
+
+details.area, details.card-d { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; min-width: 0; }
+details.area > summary, details.card-d > summary { list-style: none; cursor: pointer; padding: 14px 20px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+details.area > summary::-webkit-details-marker, details.card-d > summary::-webkit-details-marker, details.idea > summary::-webkit-details-marker, details.step > summary::-webkit-details-marker, details.qa > summary::-webkit-details-marker { display: none; }
+details.area > summary h3 { font-size: 18px; }
+details.area > summary .cnt, details.card-d > summary .cnt { font-size: 12.5px; color: var(--muted); }
+.tog { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--accent); }
+details[open] > summary .tog::after { content: "收起"; }
+details:not([open]) > summary .tog::after { content: "展开"; }
+.area-body { padding: 18px 20px 22px; display: grid; gap: 22px; border-top: 1px solid var(--rule); min-width: 0; }
+.subgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.subcard { border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px; display: grid; gap: 6px; align-content: start; }
+.subcard b { font-size: 14px; }
+.subcard .en { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.subcard p { font-size: 13.5px; color: var(--ink-2); }
+.subcard .reps { font-size: 12px; color: var(--muted); }
+.timeline { display: grid; gap: 0; border-left: 2px solid var(--rule); margin-left: 6px; }
+.timeline div { display: grid; grid-template-columns: 58px minmax(0,1fr); gap: 10px; padding: 4px 0 4px 14px; position: relative; font-size: 13.5px; color: var(--ink-2); }
+.timeline div::before { content: ""; position: absolute; left: -6px; top: 12px; width: 10px; height: 10px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); }
+.timeline .y { font-family: var(--mono); color: var(--ink); }
+.btn { appearance: none; border: 1px solid var(--accent); background: transparent; color: var(--accent); border-radius: 6px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; justify-self: start; }
+.btn:hover { background: var(--accent-soft); }
+
+.db-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.field { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.field select { max-width: min(360px, 86vw); }
+.field input, .field select { font: inherit; font-size: 14px; color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 7px 10px; min-width: 0; }
+.field input { width: min(320px, 80vw); }
+.db-count { font-size: 13px; color: var(--muted); margin-left: auto; }
+.db-wrap { max-height: 78vh; overflow: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+.db td.t { min-width: 260px; }
+.db td.t a { font-weight: 500; }
+.db td.t small { display: block; color: var(--muted); font-size: 12px; }
+.db td.s { min-width: 280px; color: var(--ink-2); }
+.db td.n { font-family: var(--mono); font-size: 12px; color: var(--ink-2); min-width: 160px; }
+.db td.y { font-family: var(--mono); }
+.tier { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.tier.milestone { background: var(--mile-soft); color: var(--mile); }
+.tier.important { background: var(--accent-soft); color: var(--accent); }
+.tier.relevant { background: var(--surface-2); color: var(--muted); }
+.areatag { font-size: 11.5px; color: var(--muted); white-space: nowrap; display: block; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 18px; display: grid; gap: 8px; align-content: start; }
+.card h4 { font-size: 15.5px; }
+.card p { font-size: 13.5px; color: var(--ink-2); }
+.card .lbl { font-size: 11.5px; color: var(--muted); letter-spacing: .04em; }
+
+.pill { font-size: 12px; padding: 1px 9px; border-radius: 999px; white-space: nowrap; font-weight: 500; }
+.pill.pursue, .pill.open, .pill.yes { background: var(--good-soft); color: var(--good); }
+.pill.pursue_with_repositioning, .pill.partially_scooped { background: var(--warn-soft); color: var(--warn); }
+.pill.drop, .pill.scooped { background: var(--bad-soft); color: var(--bad); }
+.pill.no { background: var(--surface-2); color: var(--muted); font-weight: 400; }
+.pill.must { background: var(--mile-soft); color: var(--mile); }
+.pill.should { background: var(--accent-soft); color: var(--accent); }
+.pill.optional { background: var(--surface-2); color: var(--muted); font-weight: 400; }
+.score { display: inline-grid; grid-template-columns: 60px 1fr; align-items: center; gap: 8px; width: 100%; }
+.score .track { height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
+.score .track i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.score .num { font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+
+details.idea { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; }
+details.idea > summary { list-style: none; cursor: pointer; padding: 16px 20px; display: grid; grid-template-columns: 44px minmax(0,1fr) auto; gap: 14px; align-items: start; }
+details.idea .rank { font-family: var(--mono); font-size: 20px; color: var(--muted); }
+details.idea .head { display: grid; gap: 6px; }
+details.idea .head h3 { font-size: 17px; }
+details.idea .head p { font-size: 14px; color: var(--ink-2); }
+details.idea .en-title { font-family: var(--mono); font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+details.idea .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+details.idea .ov { font-family: var(--mono); font-size: 24px; color: var(--ink); text-align: right; line-height: 1; }
+details.idea .ov small { display: block; font-size: 11px; color: var(--muted); }
+.idea-body { border-top: 1px solid var(--rule); padding: 18px 20px 22px; display: grid; gap: 20px; min-width: 0; }
+.scores { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px 18px; }
+.idea-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 18px 26px; }
+.blk { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.blk h4 { font-family: var(--sans); font-size: 12.5px; font-weight: 700; color: var(--muted); letter-spacing: .05em; }
+.blk p, .blk li { font-size: 14px; color: var(--ink-2); }
+.blk p { white-space: pre-line; }
+.threat { font-size: 13.5px; color: var(--ink-2); border-left: 2px solid var(--rule); padding-left: 10px; display: grid; gap: 2px; }
+.threat.high { border-left-color: var(--bad); }
+.threat.medium { border-left-color: var(--warn); }
+.obj { display: grid; gap: 2px; font-size: 13.5px; }
+.obj b { color: var(--ink); font-weight: 500; }
+.obj span { color: var(--ink-2); }
+
+.path { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; }
+.path ol { margin: 0; padding-left: 1.3em; display: grid; gap: 10px; font-size: 13.5px; }
+.path ol li small { display: block; color: var(--muted); }
+.note { font-size: 13px; color: var(--muted); max-width: 80ch; }
+
+/* ---------- learning part ---------- */
+.cchip { appearance: none; font: inherit; font-size: 12.5px; padding: 1px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); border: 1px solid transparent; cursor: pointer; white-space: nowrap; }
+.cchip:hover { border-color: var(--accent); }
+.cchip.ghost { background: transparent; border-color: var(--rule); color: var(--ink-2); }
+.cchip.ghost:hover { border-color: var(--accent); color: var(--accent); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chips .lbl { font-size: 12px; color: var(--muted); margin-right: 2px; }
+.flash { animation: flash 1.6s ease-out 1; }
+@keyframes flash { 0% { background-color: var(--flash); } 100% { background-color: transparent; } }
+@media (prefers-reduced-motion: reduce) { .flash { animation: none; outline: 2px solid var(--accent); } }
+
+.math-block { overflow-x: auto; overflow-y: hidden; padding: 8px 12px; background: var(--surface-2); border-radius: 6px; font-family: var(--mono); font-size: 13px; color: var(--ink); }
+.math-block mjx-container { margin: 4px 0 !important; }
+.eq { display: grid; gap: 6px; }
+.eq p { font-size: 13.5px; color: var(--ink-2); white-space: pre-line; }
+.eqs { display: grid; gap: 14px; }
+.aside { background: var(--surface-2); border-radius: 8px; padding: 10px 14px; font-size: 14px; color: var(--ink-2); display: grid; gap: 2px; }
+.aside b { font-size: 12px; color: var(--muted); letter-spacing: .05em; font-weight: 700; }
+.aside span { white-space: pre-line; }
+.idref { appearance: none; background: none; border: 0; padding: 0 1px; font: inherit; font-family: var(--mono); font-size: .86em; color: var(--accent); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.idref:hover { text-decoration-style: solid; }
+
+.roadmap { display: grid; gap: 10px; }
+details.stage { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; min-width: 0; }
+details.stage > summary { list-style: none; cursor: pointer; padding: 14px 18px; display: grid; grid-template-columns: 40px minmax(0,1fr) auto; gap: 12px; align-items: start; }
+details.stage > summary::-webkit-details-marker { display: none; }
+details.stage .num { font-family: var(--mono); width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-size: 13px; }
+details.stage .head { display: grid; gap: 4px; }
+details.stage .head h3 { font-size: 16.5px; }
+details.stage .head p { font-size: 13.5px; color: var(--ink-2); }
+details.stage .dur { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+.mods { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.mod { appearance: none; text-align: left; font: inherit; cursor: pointer; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; display: grid; gap: 4px; align-content: start; color: var(--ink); }
+.mod:hover { border-color: var(--accent); }
+.mod i { font-style: normal; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.mod b { font-family: var(--serif); font-size: 14.5px; }
+.mod span { font-size: 12.5px; color: var(--ink-2); }
+
+details.concept { border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); min-width: 0; }
+details.concept > summary { list-style: none; cursor: pointer; padding: 12px 16px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px 12px; }
+details.concept > summary::-webkit-details-marker { display: none; }
+details.concept .nm { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+details.concept .nm b { font-family: var(--serif); font-size: 15.5px; }
+details.concept .nm span { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+details.concept .tl { grid-column: 1 / -1; font-size: 13.5px; color: var(--ink-2); }
+details.concept .uses { display: flex; gap: 6px; align-items: center; }
+.concept-body { border-top: 1px solid var(--rule); padding: 16px 16px 20px; display: grid; gap: 18px; min-width: 0; }
+.anchor-use { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+.anchor-use > div { border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; align-content: start; }
+.anchor-use h5 { margin: 0; font-family: var(--sans); font-size: 12.5px; font-weight: 700; color: var(--ink); display: flex; gap: 8px; align-items: center; }
+.anchor-use p { font-size: 13.5px; color: var(--ink-2); }
+.anchor-use small { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+details.qa { border-top: 1px dashed var(--rule); }
+details.qa > summary { list-style: none; cursor: pointer; padding: 8px 0; font-size: 14px; color: var(--ink); display: flex; gap: 8px; }
+details.qa > summary::before { content: "问"; font-size: 11.5px; color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 0 6px; height: fit-content; margin-top: 3px; }
+details.qa > p { font-size: 13.5px; color: var(--ink-2); padding: 0 0 10px 30px; white-space: pre-line; }
+.res { display: grid; gap: 6px; font-size: 13.5px; }
+.res div { display: grid; grid-template-columns: 58px minmax(0,1fr); gap: 8px; }
+.res .ty { font-family: var(--mono); font-size: 11px; color: var(--muted); padding-top: 3px; }
+.res small { color: var(--muted); display: block; }
+
+.diagram-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); padding: 10px; }
+svg.diagram { display: block; width: 100%; min-width: 860px; height: auto; }
+.dnode rect { fill: var(--surface-2); stroke: var(--rule); stroke-width: 1; }
+.dnode.data rect { fill: var(--surface); stroke-dasharray: 4 3; }
+.dnode.click { cursor: pointer; }
+.dnode.click:hover rect, .dnode.click:focus rect { stroke: var(--accent); stroke-width: 1.6; }
+.dnode.click:focus { outline: none; }
+.dnode .t { fill: var(--ink); font-family: var(--sans); font-size: 13px; font-weight: 500; }
+.dnode .s { fill: var(--muted); font-family: var(--sans); font-size: 11px; }
+.dnode .k { fill: var(--accent); font-family: var(--mono); font-size: 10.5px; font-weight: 500; }
+.dedge { stroke: var(--muted); stroke-width: 1.4; fill: none; }
+.dedge.fb { stroke: var(--accent); stroke-dasharray: 5 4; }
+.dhead { fill: var(--muted); }
+.dhead.fb { fill: var(--accent); }
+.dloop { fill: var(--accent-soft); fill-opacity: .45; stroke: var(--accent); stroke-width: 1; }
+.dlabel { fill: var(--accent); font-family: var(--sans); font-size: 12px; font-weight: 700; }
+.dnote { fill: var(--muted); font-family: var(--sans); font-size: 11.5px; }
+
+details.step { border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); min-width: 0; }
+details.step > summary { list-style: none; cursor: pointer; padding: 12px 16px; display: grid; grid-template-columns: 44px minmax(0,1fr) auto; gap: 10px; align-items: baseline; }
+details.step .sid { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+details.step .st { display: grid; gap: 2px; }
+details.step .st b { font-size: 15px; font-weight: 500; color: var(--ink); }
+details.step .st small { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.step-body { border-top: 1px solid var(--rule); padding: 16px; display: grid; gap: 16px; min-width: 0; }
+.checklist { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.checklist div { border: 1px solid var(--rule); border-radius: 8px; padding: 8px 12px; display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); align-content: start; }
+
+.lanes-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); padding: 12px 12px 6px; position: relative; }
+svg.lanes { display: block; width: 100%; min-width: 820px; height: auto; }
+.lanes .grid { stroke: var(--rule); stroke-width: 1; }
+.lanes .axis { fill: var(--muted); font-family: var(--mono); font-size: 11px; }
+.lanes .lane-l { fill: var(--ink-2); font-family: var(--sans); font-size: 12px; }
+.lanes .dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+.lanes .dot.hollow { fill: var(--surface); stroke: var(--accent); stroke-width: 1.6; }
+.lanes .hit { fill: transparent; cursor: pointer; }
+.lanes g.m:hover .dot, .lanes g.m:focus .dot { stroke: var(--ink); }
+.lanes g.m:focus { outline: none; }
+.lanes .brk { stroke: var(--muted); stroke-width: 1; }
+.vtip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; color: var(--ink); max-width: 320px; box-shadow: 0 4px 16px rgba(0,0,0,.12); display: grid; gap: 2px; z-index: 3; }
+.vtip small { color: var(--muted); font-family: var(--mono); }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); align-items: center; padding: 4px 4px 0; }
+.legend svg { vertical-align: middle; }
+.classic-list { display: grid; gap: 10px; }
+details.classic { border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); min-width: 0; }
+details.classic > summary { list-style: none; cursor: pointer; padding: 10px 16px; display: grid; grid-template-columns: 52px minmax(0,1fr) auto; gap: 10px; align-items: baseline; }
+details.classic > summary::-webkit-details-marker { display: none; }
+details.classic .yr { font-family: var(--mono); font-size: 13px; color: var(--ink); }
+details.classic .ti { display: grid; gap: 2px; }
+details.classic .ti b { font-size: 14.5px; font-weight: 500; }
+details.classic .ti small { font-size: 12px; color: var(--muted); }
+details.classic .cit { font-family: var(--mono); font-size: 12px; color: var(--ink-2); text-align: right; white-space: nowrap; }
+.classic-body { border-top: 1px solid var(--rule); padding: 12px 16px 16px; display: grid; gap: 12px; }
+
+.gl-wrap { max-height: 72vh; overflow: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+.gl td.en { font-weight: 500; color: var(--ink); min-width: 170px; }
+.gl td.zh { min-width: 110px; }
+.gl td.def { min-width: 300px; color: var(--ink-2); }
+
+@media (max-width: 1000px) {
+  .shell { grid-template-columns: minmax(0,1fr); gap: 20px; padding-top: 0; }
+  .toc { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); max-height: none; overflow-x: auto; overflow-y: hidden; padding-block: 10px; border-bottom: 1px solid var(--rule); margin-inline: -20px; padding-inline: 20px; }
+  .toc .brand, .toc .ramp, .toc li.grp { display: none; }
+  .toc ol { display: flex; gap: 4px; margin: 0; white-space: nowrap; }
+  .toc a { border-left: 0; border-bottom: 2px solid transparent; padding: 4px 8px; }
+  .toc a.on { border-bottom-color: var(--accent); }
+  .layer { grid-template-columns: minmax(0,1fr); gap: 10px; }
+  .two, .idea-grid, .path, .anchor-use { grid-template-columns: minmax(0,1fr); }
+  .mods { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .starts { grid-template-columns: minmax(0,1fr); }
+}
+@media (max-width: 560px) {
+  .shell { padding-inline: 16px; }
+  .toc { margin-inline: -16px; padding-inline: 16px; }
+  .panel { padding: 16px; }
+  details.idea > summary { grid-template-columns: minmax(0,1fr) auto; }
+  details.idea .rank { display: none; }
+  details.step > summary { grid-template-columns: minmax(0,1fr) auto; }
+  details.step .sid { display: none; }
+  details.classic > summary { grid-template-columns: 44px minmax(0,1fr); }
+  details.classic .cit { grid-column: 2; text-align: left; }
+  .mods { grid-template-columns: minmax(0,1fr); }
+  .area-body, .idea-body, .concept-body, .step-body { padding-inline: 12px; }
+}
+</style>
+
+<div class="shell">
+  <nav class="toc" aria-label="目录">
+    <div class="brand">3D 临场研究图谱</div>
+    <div class="ramp" aria-hidden="true"></div>
+    <ol id="toc"></ol>
+  </nav>
+  <main id="main"></main>
+</div>
+
+<script type="application/json" id="data">/*__DATA__*/</script>
+<script>
+(function () {
+  "use strict";
+  var DATA;
+  try { DATA = JSON.parse(document.getElementById("data").textContent); } catch (e) { DATA = {}; }
+
+  // ---------- DOM helpers: all text goes through textContent; links are https-only ----------
+  function safeUrl(u) { if (typeof u !== "string") return null; var s = u.trim(); return /^https:\/\/[^\s"'<>]+$/i.test(s) ? s : null; }
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "class") n.className = v;
+      else if (k === "text") n.textContent = String(v);
+      else if (k === "href") { var u = safeUrl(v); if (u) { n.setAttribute("href", u); n.setAttribute("target", "_blank"); n.setAttribute("rel", "noopener noreferrer"); } }
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c === null || c === undefined || c === false) return; n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return n;
+  }
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function sv(tag, attrs, kids) {
+    var n = document.createElementNS(SVGNS, tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "text") n.textContent = String(v);
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c) n.appendChild(c); });
+    return n;
+  }
+  function arr(x) { return Array.isArray(x) ? x : []; }
+  function str(x) { return typeof x === "string" ? x : (x === null || x === undefined ? "" : String(x)); }
+  // Known concept / advanced-topic ids mentioned in prose become inline links (maps are filled once data loads).
+  var conceptName = {}, advName = {};
+  var ID_RE = /(a-[a-z0-9]+(?:-[a-z0-9]+)*|[fgdrilnv]-[a-z0-9]+)/g;
+  function rich(text) {
+    var s = str(text), out = [], last = 0, m;
+    ID_RE.lastIndex = 0;
+    while ((m = ID_RE.exec(s)) !== null) {
+      var id = m[1], prev = m.index > 0 ? s.charAt(m.index - 1) : "", next = s.charAt(m.index + id.length);
+      var target = conceptName[id] ? "concept-" + id : (advName[id] ? "adv-" + id : null);
+      if (!target || /[A-Za-z0-9_\-]/.test(prev) || /[A-Za-z0-9_]/.test(next)) continue;
+      if (m.index > last) out.push(document.createTextNode(s.slice(last, m.index)));
+      out.push(idLink(target, id, conceptName[id] || advName[id]));
+      last = m.index + id.length;
+    }
+    if (last < s.length) out.push(document.createTextNode(s.slice(last)));
+    return out;
+  }
+  function idLink(target, id, label) {
+    return el("button", { type: "button", class: "idref", title: label, text: id, onclick: function (e) { e.preventDefault(); goTo(target); } });
+  }
+  function paras(text) { return str(text).split(/\n\s*\n/).map(function (t) { return t.trim(); }).filter(Boolean).map(function (t) { return el("p", null, rich(t)); }); }
+  function asideBox(label, text) { return str(text).trim() ? el("div", { class: "aside" }, [el("b", { text: label }), el("span", null, rich(text))]) : null; }
+  function link(title, url) { return safeUrl(url) ? el("a", { href: url, text: title }) : el("span", { text: title }); }
+  function ul(items, map) { return el("ul", { class: "plain" }, arr(items).map(function (x) { return el("li", null, [map ? map(x) : str(x)]); })); }
+  function secHead(eyebrow, title, lede) { return el("div", { class: "sec-head" }, [el("div", { class: "eyebrow", text: eyebrow }), el("h2", { text: title }), lede ? el("p", { class: "lede", text: lede }) : null]); }
+  function blk(title, kids) { return el("div", { class: "blk" }, [el("h4", { text: title })].concat(kids)); }
+  function textBlk(title, text) { return str(text).trim() ? blk(title, [el("div", { class: "prose" }, paras(text))]) : null; }
+  function fmtCit(n) { n = Number(n); if (!(n >= 0)) return "—"; if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k"; return String(n); }
+
+  // ---------- math (MathJax, typeset lazily) ----------
+  var mathReady = false, mathQueue = [];
+  window.__atlasMathReady = function () { mathReady = true; var q = mathQueue.slice(); mathQueue = []; q.forEach(typeset); };
+  function typeset(node) {
+    if (!node) return;
+    if (!mathReady || !window.MathJax || typeof window.MathJax.typesetPromise !== "function") { mathQueue.push(node); return; }
+    try { window.MathJax.typesetPromise([node]).catch(function () { /* leave raw TeX visible */ }); } catch (e) { /* leave raw TeX visible */ }
+  }
+  function eqList(eqs) {
+    eqs = arr(eqs).filter(function (q) { return q && str(q.tex).trim(); });
+    if (!eqs.length) return null;
+    return el("div", { class: "eqs" }, eqs.map(function (q) {
+      return el("div", { class: "eq" }, [el("div", { class: "math-block", text: "\\[" + str(q.tex) + "\\]" }), q.explain_zh ? el("p", null, rich(q.explain_zh)) : null]);
+    }));
+  }
+  document.addEventListener("toggle", function (e) { var t = e.target; if (t && t.tagName === "DETAILS" && t.open) typeset(t); }, true);
+
+  // ---------- navigation & cross-links ----------
+  var main = document.getElementById("main");
+  var toc = document.getElementById("toc");
+  var sections = [];
+  function addGroup(label) { toc.appendChild(el("li", { class: "grp", text: label })); }
+  function addPart(eyebrow, title, text) { main.appendChild(el("div", { class: "part" }, [el("div", { class: "eyebrow", text: eyebrow }), el("h2", { text: title }), text ? el("p", { text: text }) : null])); }
+  function addSection(id, tocLabel, nodes) {
+    var s = el("section", { id: id }, nodes);
+    main.appendChild(s);
+    sections.push(id);
+    var a = el("a", { "data-id": id, text: tocLabel }); a.setAttribute("href", "#" + id);
+    toc.appendChild(el("li", null, [a]));
+    return s;
+  }
+  function goTo(id) {
+    var t = document.getElementById(id);
+    if (!t) return;
+    var p = t;
+    while (p && p !== document.body) {
+      if (typeof p._activate === "function") p._activate();
+      if (p.tagName === "DETAILS") p.open = true;
+      p = p.parentElement;
+    }
+    typeset(t);
+    t.scrollIntoView({ block: "start" });
+    t.classList.remove("flash"); void t.offsetWidth; t.classList.add("flash");
+  }
+  function refChip(targetId, label, ghost) { return el("button", { type: "button", class: "cchip" + (ghost ? " ghost" : ""), text: label, onclick: function (e) { e.preventDefault(); goTo(targetId); } }); }
+  function makeTabs(views, storageKey) {
+    var tabs = el("div", { class: "tabs", role: "tablist" });
+    var holder = el("div");
+    var panels = {};
+    function show(id) {
+      Array.prototype.forEach.call(tabs.children, function (b) { b.setAttribute("aria-selected", b.getAttribute("data-id") === id ? "true" : "false"); });
+      views.forEach(function (v) { panels[v.id].hidden = v.id !== id; });
+      typeset(panels[id]);
+      if (storageKey) { try { localStorage.setItem(storageKey, id); } catch (e) { /* storage unavailable */ } }
+    }
+    views.forEach(function (v) {
+      tabs.appendChild(el("button", { class: "tab", role: "tab", type: "button", "data-id": v.id, text: v.label, onclick: function () { show(v.id); } }));
+      var p = el("div", { role: "tabpanel" }, [v.node()]);
+      p._activate = function () { show(v.id); };
+      panels[v.id] = p; holder.appendChild(p);
+    });
+    var initial = views[0].id;
+    if (storageKey) { try { var s = localStorage.getItem(storageKey); if (s && panels[s]) initial = s; } catch (e) { /* storage unavailable */ } }
+    show(initial);
+    return el("div", null, [tabs, holder]);
+  }
+
+  // ---------- data ----------
+  var meta = DATA.meta || {};
+  var synth = DATA.synth || {};
+  var anchors = DATA.anchors || {};
+  var areas = arr(DATA.areas);
+  var papers = arr(DATA.papers);
+  var ideas = arr(DATA.ideas);
+  var L = DATA.learn || {};
+  var modules = arr(L.modules);
+  var advanced = arr(L.advanced);
+  var classics = arr(L.classics);
+  var guides = L.guided || {};
+  var roadmap = L.roadmap || {};
+  var glossary = arr(L.glossary);
+  var areaName = {}; areas.forEach(function (a) { areaName[a.key] = a.area_title_zh || a.key; });
+  var themeName = {}; arr(L.themes).forEach(function (t) { themeName[t.id] = t.title_zh; });
+
+  modules.forEach(function (m) { arr(m.concepts).forEach(function (c) { conceptName[c.id] = c.name_zh; }); });
+  advanced.forEach(function (t) { advName[t.id] = t.title_zh; });
+  function cChip(id, ghost) { return conceptName[id] ? refChip("concept-" + id, conceptName[id], ghost) : null; }
+  function aChip(id) { return advName[id] ? refChip("adv-" + id, advName[id], true) : null; }
+  function chipRow(label, nodes) { nodes = nodes.filter(Boolean); return nodes.length ? el("div", { class: "chips" }, [el("span", { class: "lbl", text: label })].concat(nodes)) : null; }
+
+  // reverse indices
+  var walkBy = {}, classicBy = {}, advBy = {}, stageBy = {};
+  ["quark", "ha"].forEach(function (k) {
+    var g = guides[k]; if (!g) return;
+    arr(g.walkthrough).forEach(function (s) { arr(s.concept_ids).forEach(function (c) { (walkBy[c] = walkBy[c] || []).push({ anchor: k, id: s.id, title: s.title_zh }); }); });
+  });
+  classics.forEach(function (p, i) { arr(p.concept_ids).forEach(function (c) { (classicBy[c] = classicBy[c] || []).push(i); }); });
+  advanced.forEach(function (t) { arr(t.prereqs).forEach(function (c) { (advBy[c] = advBy[c] || []).push(t.id); }); });
+  arr(roadmap.stages).forEach(function (s, i) { arr(s.concept_ids).forEach(function (c) { (stageBy[c] = stageBy[c] || []).push(i); }); });
+  var anchorShort = { quark: "Quark", ha: "Ha et al." };
+  function walkId(anchor, sid) { return "walk-" + anchor + "-" + sid; }
+
+  // ================= HERO =================
+  addSection("top", "概览", [
+    el("div", { class: "hero" }, [
+      el("div", { class: "eyebrow", text: "Field survey & study guide · " + (meta.date || "") + " · 3D telepresence / real-time 3D vision" }),
+      el("h1", { text: "3D 临场研究图谱" }),
+      el("p", { class: "sub", text: meta.subtitle || "" }),
+      el("div", { class: "anchors-line" }, [
+        el("span", { class: "chip accent", text: "锚点 A · Quark (SIGGRAPH Asia 2024)" }),
+        el("span", { class: "chip accent", text: "锚点 B · Ha et al. (CVPR 2025)" })
+      ]),
+      el("div", { class: "ramp", "aria-hidden": "true" }),
+      el("div", { class: "stats" }, [
+        el("div", { class: "stat" }, [el("b", { text: String(Object.keys(conceptName).length) }), el("span", { text: "基础概念" })]),
+        el("div", { class: "stat" }, [el("b", { text: String(advanced.length) }), el("span", { text: "进阶专题" })]),
+        el("div", { class: "stat" }, [el("b", { text: String(classics.length) }), el("span", { text: "2026 年前高影响论文" })]),
+        el("div", { class: "stat" }, [el("b", { text: String(papers.length) }), el("span", { text: "领域论文 / 产品 / 标准" })]),
+        el("div", { class: "stat" }, [el("b", { text: String(ideas.length) }), el("span", { text: "经查新评审的研究方向" })])
+      ]),
+      el("div", { class: "starts" }, [
+        el("button", { type: "button", class: "start", onclick: function () { goTo("roadmap"); } }, [el("i", { text: "零基础" }), el("b", { text: "从学习路线开始" }), el("span", { text: "分阶段的概念、论文、课程和动手项目" })]),
+        el("button", { type: "button", class: "start", onclick: function () { goTo("guided"); } }, [el("i", { text: "想读懂两篇论文" }), el("b", { text: "精读导读" }), el("span", { text: "逐步拆解 Quark 与 Ha et al.，每一步链接到所需的基础概念" })]),
+        el("button", { type: "button", class: "start", onclick: function () { goTo("ideas"); } }, [el("i", { text: "找研究方向" }), el("b", { text: "研究机会" }), el("span", { text: "18 个经对抗查新与模拟评审的方向" })])
+      ])
+    ])
+  ]);
+  if (synth.executive_summary_zh) addSection("summary", "执行摘要", [secHead("Executive summary", "执行摘要"), el("div", { class: "prose" }, paras(synth.executive_summary_zh))]);
+
+  // ================= PART I: LEARNING =================
+  addGroup("入门学习");
+  addPart("Part I · Learn", "入门学习", meta.learn_lede || "");
+
+  // ---------- Roadmap ----------
+  (function () {
+    var stages = arr(roadmap.stages);
+    if (!stages.length) return;
+    var nodes = stages.map(function (s, i) {
+      var pr = s.project || {};
+      return el("details", { class: "stage", id: "stage-" + i }, [
+        el("summary", null, [
+          el("span", { class: "num", text: String(i + 1) }),
+          el("div", { class: "head" }, [el("h3", { text: s.title_zh }), el("p", { text: s.goal_zh })]),
+          el("span", { class: "dur", text: s.duration_zh || "" })
+        ]),
+        el("div", { class: "area-body" }, [
+          chipRow("概念", arr(s.concept_ids).map(function (c) { return cChip(c); })),
+          chipRow("进阶专题", arr(s.advanced_ids).map(aChip)),
+          arr(s.papers).length ? blk("要读的论文", [ul(s.papers, function (p) { return el("span", null, [link(p.title, p.url), p.why_zh ? " — " + p.why_zh : ""]); })]) : null,
+          arr(s.resources).length ? blk("课程与资料", [resList(s.resources)]) : null,
+          blk("动手项目：" + (pr.title_zh || ""), [el("div", { class: "prose" }, paras(pr.task_zh)), pr.deliverable_zh ? el("p", { class: "note", text: "交付物：" + pr.deliverable_zh }) : null, pr.hints_zh ? el("p", { class: "note", text: "提示：" + pr.hints_zh }) : null]),
+          arr(s.checkpoint_zh).length ? blk("学完应能回答", [ul(s.checkpoint_zh)]) : null
+        ])
+      ]);
+    });
+    addSection("roadmap", "学习路线", [
+      secHead("Roadmap", "学习路线：从零到能复现两篇锚点论文", roadmap.overview_zh || ""),
+      el("div", { class: "roadmap" }, nodes),
+      el("div", { class: "two" }, [
+        arr(roadmap.courses_books).length ? blk("核心课程与教材", [resList(roadmap.courses_books)]) : null,
+        arr(roadmap.tools).length ? blk("工具链", [ul(roadmap.tools, function (t) { return el("span", null, [link(t.name, t.url), " — " + str(t.use_zh)]); })]) : null
+      ]),
+      arr(roadmap.tips_zh).length ? blk("学习建议", [ul(roadmap.tips_zh)]) : null
+    ]);
+  })();
+
+  function resList(items) {
+    var ty = { book: "教材", course: "课程", paper: "论文", tutorial: "教程", code: "代码", video: "视频", blog: "文章" };
+    return el("div", { class: "res" }, arr(items).map(function (r) { return el("div", null, [el("span", { class: "ty", text: ty[r.type] || r.type || "" }), el("span", null, [link(r.title, r.url), r.note_zh ? el("small", { text: r.note_zh }) : null])]); }));
+  }
+  function qaList(items, qk, ak) { return el("div", null, arr(items).map(function (q) { return el("details", { class: "qa" }, [el("summary", { text: q[qk] }), el("p", null, rich(q[ak]))]); })); }
+
+  // ---------- Foundations ----------
+  (function () {
+    if (!modules.length) return;
+    function usePill(u, label) { var on = u && u.used; return el("span", { class: "pill " + (on ? "yes" : "no"), text: label + (on ? " 用到" : " 未用") }); }
+    function useBox(u, anchorKey, cid) {
+      u = u || {};
+      var steps = arr(walkBy[cid]).filter(function (w) { return w.anchor === anchorKey; });
+      return el("div", null, [
+        el("h5", null, [anchorShort[anchorKey], usePill(u, "")]),
+        u.where ? el("small", { text: u.where }) : null,
+        el("p", { text: u.how_zh || "" }),
+        steps.length ? chipRow("导读", steps.map(function (w) { return refChip(walkId(w.anchor, w.id), w.id + " " + w.title, true); })) : null
+      ]);
+    }
+    function conceptCard(c) {
+      var cls = arr(classicBy[c.id]);
+      return el("details", { class: "concept", id: "concept-" + c.id }, [
+        el("summary", null, [
+          el("div", { class: "nm" }, [el("b", { text: c.name_zh }), el("span", { text: c.name_en })]),
+          el("div", { class: "uses" }, [usePill(c.in_quark, "Quark"), usePill(c.in_ha, "Ha")]),
+          el("p", { class: "tl", text: c.tldr_zh })
+        ]),
+        el("div", { class: "concept-body" }, [
+          chipRow("前置", arr(c.prereqs).map(function (p) { return cChip(p, true); })),
+          textBlk("直觉", c.intuition_zh),
+          asideBox("类比", c.analogy_zh),
+          arr(c.equations).length ? blk("关键公式", [eqList(c.equations)]) : null,
+          textBlk("例子", c.worked_example_zh),
+          arr(c.pitfalls_zh).length ? blk("易错点", [ul(c.pitfalls_zh)]) : null,
+          blk("在两篇锚点论文中", [el("div", { class: "anchor-use" }, [useBox(c.in_quark, "quark", c.id), useBox(c.in_ha, "ha", c.id)])]),
+          textBlk("在 3D 临场系统中", c.in_field_zh),
+          chipRow("延伸到进阶专题", arr(advBy[c.id]).map(aChip)),
+          cls.length ? chipRow("相关经典论文", cls.slice(0, 8).map(function (i) { return refChip("classic-" + i, classics[i].title.length > 42 ? classics[i].title.slice(0, 40) + "…" : classics[i].title, true); })) : null,
+          arr(c.resources).length ? blk("学习资源", [resList(c.resources)]) : null,
+          arr(c.self_check).length ? blk("自测", [qaList(c.self_check, "q_zh", "a_zh")]) : null
+        ])
+      ]);
+    }
+    var overview = el("div", { class: "mods" }, modules.map(function (m) {
+      return el("button", { type: "button", class: "mod", onclick: function () { goTo("module-" + m.id); } }, [el("i", { text: m.id + " · " + arr(m.concepts).length + " 个概念" }), el("b", { text: m.title_zh }), el("span", { text: m.goal_zh })]);
+    }));
+    var mods = modules.map(function (m, i) {
+      var d = el("details", { class: "area", id: "module-" + m.id }, [
+        el("summary", null, [el("h3", { text: m.id + " · " + m.title_zh }), el("span", { class: "cnt", text: m.title_en + " · " + arr(m.concepts).length + " 个概念" }), el("span", { class: "tog" })]),
+        el("div", { class: "area-body" }, [
+          el("div", { class: "prose" }, paras(m.intro_zh)),
+          asideBox("怎么学", m.study_tips_zh),
+          el("div", { style: "display:grid;gap:8px" }, arr(m.concepts).map(conceptCard))
+        ])
+      ]);
+      if (i === 0) d.open = true;
+      return d;
+    });
+    addSection("foundations", "基础知识", [
+      secHead("Foundations", "基础知识：读懂这个领域需要的 " + Object.keys(conceptName).length + " 个概念", meta.foundations_lede || ""),
+      overview
+    ].concat(mods));
+  })();
+
+  // ---------- Guided reading ----------
+  function diagramQuark() {
+    return {
+      w: 960, h: 300,
+      nodes: [
+        { x: 10, y: 118, w: 132, h: 64, t: "输入视角 × M", s: "RGB + 相机，M = 8", k: "q1" },
+        { x: 162, y: 118, w: 140, h: 64, t: "编码", s: "特征金字塔 + 射线编码 γ", k: "q2" },
+        { x: 322, y: 118, w: 132, h: 64, t: "初始化 LDM", s: "24 层 × 36×64", k: "q4" },
+        { x: 322, y: 212, w: 132, h: 58, t: "LDM 参数化", s: "等视差锚点 + 视差带", k: "q3", data: true },
+        { x: 496, y: 64, w: 118, h: 58, t: "Render", s: "LDM → 输入视角 Ĩ", k: "q5" },
+        { x: 640, y: 64, w: 118, h: 58, t: "Update", s: "对比 Ĩ 与观测 → Δ", k: "q6" },
+        { x: 568, y: 160, w: 118, h: 58, t: "Fuse", s: "One-to-many attention", k: "q7" },
+        { x: 800, y: 64, w: 150, h: 64, t: "上采样后激活", s: "3.75× 到 1080p", k: "q9" },
+        { x: 800, y: 170, w: 150, h: 64, t: "IBR 混合 + over", s: "全分辨率像素凸组合", k: "q10" }
+      ],
+      loop: { x: 480, y: 26, w: 294, h: 250, label: "Update & Fuse × 5（由粗到细）", noteK: "q8", note: "每步分辨率 ×2，Layer Collapse 层数 ÷2" },
+      edges: [
+        { d: "M142,150 L162,150" }, { d: "M302,150 L322,150" },
+        { d: "M388,212 L388,182" },
+        { d: "M454,150 C470,150 470,93 496,93" },
+        { d: "M614,93 L640,93" },
+        { d: "M699,122 C699,150 686,189 686,189" },
+        { d: "M568,189 C520,189 530,122 540,122", fb: true },
+        { d: "M774,96 L800,96" },
+        { d: "M875,128 L875,170" },
+        { d: "M875,234 L875,268" }
+      ],
+      out: { x: 875, y: 285, text: "新视角图像（1080p，≈30 ms/帧）" }
+    };
+  }
+  function diagramHa() {
+    return {
+      w: 960, h: 330,
+      nodes: [
+        { x: 10, y: 128, w: 136, h: 64, t: "K 个 RGB-D 视角", s: "t 时刻，K = 4", k: "h1" },
+        { x: 10, y: 236, w: 136, h: 58, t: "深度来源", s: "RAFT-Stereo / 传感器", k: "h2", data: true },
+        { x: 176, y: 26, w: 164, h: 64, t: "逐视角前向 splat", s: "像素大小的不透明高斯", k: "h3" },
+        { x: 372, y: 26, w: 150, h: 64, t: "Iₖ, αₖ, Dₖ", s: "K 份目标视角图像", k: "h3", data: true },
+        { x: 176, y: 128, w: 110, h: 64, t: "差分掩码 M", s: "哪里在动", k: "h4" },
+        { x: 304, y: 128, w: 110, h: 64, t: "深度 EMA", s: "只滤静止区域", k: "h5" },
+        { x: 432, y: 128, w: 140, h: 64, t: "图像空间 TSDF", s: "sₖ 截断 τ，加权", k: "h6" },
+        { x: 590, y: 128, w: 128, h: 64, t: "光线步进", s: "零交叉 → 深度 𝒟ᵗ", k: "h8" },
+        { x: 432, y: 240, w: 140, h: 58, t: "上一帧深度 𝒟ᵗ⁻¹", s: "时间反馈 ω_tmp", k: "h9" },
+        { x: 752, y: 60, w: 160, h: 72, t: "几何引导混合 U-Net", s: "9K+1 通道输入", k: "h10" },
+        { x: 752, y: 190, w: 160, h: 64, t: "wₖ、w_BG、I_BG", s: "混合出最终图像", k: "h11" }
+      ],
+      edges: [
+        { d: "M78,236 L78,192" },
+        { d: "M146,146 C160,146 160,58 176,58" },
+        { d: "M146,160 L176,160" },
+        { d: "M340,58 L372,58" },
+        { d: "M286,160 L304,160" }, { d: "M414,160 L432,160" }, { d: "M572,160 L590,160" },
+        { d: "M502,240 L502,192" },
+        { d: "M654,192 C654,270 600,269 572,269", fb: true },
+        { d: "M522,58 C640,58 700,84 752,84" },
+        { d: "M718,160 C735,160 735,112 752,112" },
+        { d: "M832,132 L832,190" },
+        { d: "M832,254 L832,292" }
+      ],
+      out: { x: 832, y: 312, text: "输出图像 ℐᵗ（≈40–100 ms/帧，不含立体深度）" },
+      notes: [{ x: 600, y: 300, text: "虚线：下一帧回灌" }]
+    };
+  }
+  function drawDiagram(spec, anchorKey, title) {
+    var svg = sv("svg", { class: "diagram", viewBox: "0 0 " + spec.w + " " + spec.h, role: "img", "aria-label": title });
+    var defs = sv("defs", null, [
+      sv("marker", { id: "ah-" + anchorKey, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" }, [sv("path", { d: "M0,0 L10,5 L0,10 z", class: "dhead" })]),
+      sv("marker", { id: "ahf-" + anchorKey, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" }, [sv("path", { d: "M0,0 L10,5 L0,10 z", class: "dhead fb" })])
+    ]);
+    svg.appendChild(defs);
+    if (spec.loop) {
+      var lp = spec.loop;
+      svg.appendChild(sv("rect", { class: "dloop", x: lp.x, y: lp.y, width: lp.w, height: lp.h, rx: 12 }));
+      svg.appendChild(sv("text", { class: "dlabel", x: lp.x + 14, y: lp.y + 22, text: lp.label }));
+      var ng = sv("g", { class: "dnode click", tabindex: "0", role: "button", "aria-label": "跳到导读 " + lp.noteK });
+      ng.appendChild(sv("text", { class: "dnote", x: lp.x + 14, y: lp.y + lp.h - 14, text: "▸ " + lp.note + "（" + lp.noteK + "）" }));
+      ng.addEventListener("click", function () { goTo(walkId(anchorKey, lp.noteK)); });
+      ng.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); goTo(walkId(anchorKey, lp.noteK)); } });
+      svg.appendChild(ng);
+    }
+    spec.edges.forEach(function (e) { svg.appendChild(sv("path", { class: "dedge" + (e.fb ? " fb" : ""), d: e.d, "marker-end": "url(#" + (e.fb ? "ahf-" : "ah-") + anchorKey + ")" })); });
+    spec.nodes.forEach(function (n) {
+      var g = sv("g", { class: "dnode click" + (n.data ? " data" : ""), tabindex: "0", role: "button", "aria-label": n.t + "，跳到导读 " + n.k });
+      g.appendChild(sv("rect", { x: n.x, y: n.y, width: n.w, height: n.h, rx: 8 }));
+      g.appendChild(sv("text", { class: "k", x: n.x + 10, y: n.y + 16, text: n.k }));
+      g.appendChild(sv("text", { class: "t", x: n.x + 10, y: n.y + 35, text: n.t }));
+      g.appendChild(sv("text", { class: "s", x: n.x + 10, y: n.y + 52, text: n.s }));
+      var go = function () { goTo(walkId(anchorKey, n.k)); };
+      g.addEventListener("click", go);
+      g.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+      svg.appendChild(g);
+    });
+    if (spec.out) svg.appendChild(sv("text", { class: "dnote", x: spec.out.x, y: spec.out.y, "text-anchor": "middle", text: spec.out.text }));
+    arr(spec.notes).forEach(function (n) { svg.appendChild(sv("text", { class: "dnote", x: n.x, y: n.y, text: n.text })); });
+    return el("div", { class: "diagram-wrap" }, [svg]);
+  }
+  function stepCard(anchorKey, s) {
+    return el("details", { class: "step", id: walkId(anchorKey, s.id) }, [
+      el("summary", null, [el("span", { class: "sid", text: s.id }), el("div", { class: "st" }, [el("b", { text: s.title_zh }), s.paper_ref ? el("small", { text: s.paper_ref }) : null]), el("span", { class: "tog" })]),
+      el("div", { class: "step-body" }, [
+        chipRow("需要的基础", arr(s.concept_ids).map(function (c) { return cChip(c); })),
+        chipRow("延伸专题", arr(s.adv_ids).map(aChip)),
+        asideBox("这一步做什么", s.what_zh),
+        textBlk("白话解释", s.plain_zh),
+        asideBox("类比", s.analogy_zh),
+        arr(s.equations).length ? blk("公式逐项拆解", [eqList(s.equations)]) : null,
+        el("div", { class: "idea-grid" }, [textBlk("具体数字", s.numbers_zh), textBlk("为什么这样设计", s.why_design_zh)]),
+        textBlk("容易误解的地方", s.pitfalls_zh),
+        s.check_q_zh ? blk("自测", [qaList([{ q: s.check_q_zh, a: s.check_a_zh }], "q", "a")]) : null
+      ])
+    ]);
+  }
+  function guideView(anchorKey) {
+    var g = guides[anchorKey];
+    if (!g) return el("p", { class: "note", text: "该部分数据缺失。" });
+    var spec = anchorKey === "quark" ? diagramQuark() : diagramHa();
+    return el("div", { class: "anchor-body" }, [
+      el("div", { class: "prose" }, paras(g.story_zh)),
+      blk("流程图（点击方框跳到对应步骤）", [drawDiagram(spec, anchorKey, (anchorKey === "quark" ? "Quark" : "Ha et al.") + " 流程图")]),
+      arr(g.before_you_read).length ? blk("读之前先掌握", [el("div", { class: "checklist" }, arr(g.before_you_read).map(function (b) { return el("div", null, [cChip(b.concept_id) || el("b", { text: b.concept_id }), el("span", { text: b.why_zh })]); }))]) : null,
+      blk("逐步拆解", [el("div", { style: "display:grid;gap:8px" }, arr(g.walkthrough).map(function (s) { return stepCard(anchorKey, s); }))]),
+      arr(g.tensor_trace).length ? blk("张量形状追踪", [el("div", { class: "tbl-wrap" }, [el("table", null, [
+        el("thead", null, [el("tr", null, ["阶段", "张量", "形状", "说明"].map(function (h) { return el("th", { text: h }); }))]),
+        el("tbody", null, arr(g.tensor_trace).map(function (r) { return el("tr", null, [el("td", { text: r.stage_zh }), el("td", { class: "code", text: r.tensor }), el("td", { class: "code", text: r.shape }), el("td", { text: r.note_zh })]); }))
+      ])])]) : null,
+      arr(g.reading_experiments).length ? blk("怎么读实验部分", [el("div", { class: "cards" }, arr(g.reading_experiments).map(function (r) { return el("div", { class: "card" }, [el("h4", { text: r.item }), el("p", { text: r.how_to_read_zh }), el("span", { class: "lbl", text: "真正说明了什么" }), el("p", { text: r.takeaway_zh })]); }))]) : null,
+      arr(g.tradeoffs).length ? blk("设计取舍", [el("div", { class: "tbl-wrap" }, [el("table", null, [
+        el("thead", null, [el("tr", null, ["选择", "换来的", "付出的"].map(function (h) { return el("th", { text: h }); }))]),
+        el("tbody", null, arr(g.tradeoffs).map(function (r) { return el("tr", null, [el("td", { class: "dim", style: "white-space:normal", text: r.choice_zh }), el("td", { text: r.gain_zh }), el("td", { text: r.cost_zh })]); }))
+      ])])]) : null,
+      arr(g.faq).length ? blk("新手常问", [qaList(g.faq, "q_zh", "a_zh")]) : null,
+      arr(g.exercises).length ? blk("动手练习", [el("div", { class: "cards" }, arr(g.exercises).map(function (x) { return el("div", { class: "card" }, [el("div", { class: "chips" }, [el("span", { class: "pill " + (x.level === "入门" ? "should" : x.level === "进阶" ? "must" : "drop"), text: x.level })]), el("h4", { text: x.title_zh }), el("p", { text: x.task_zh }), x.expected_zh ? el("p", { class: "note", text: "预期结果：" + x.expected_zh }) : null, x.hint_zh ? el("p", { class: "note", text: "提示：" + x.hint_zh }) : null, chipRow("概念", arr(x.concept_ids).map(function (c) { return cChip(c, true); }))]); }))]) : null
+    ]);
+  }
+  if (guides.quark || guides.ha) {
+    addSection("guided", "精读导读", [
+      secHead("Guided reading", "精读导读：用基础知识读懂两篇锚点论文", meta.guided_lede || ""),
+      el("div", { class: "panel" }, [makeTabs([
+        { id: "quark", label: "Quark 导读", node: function () { return guideView("quark"); } },
+        { id: "ha", label: "Ha et al. 导读", node: function () { return guideView("ha"); } }
+      ], "atlas.guideTab")])
+    ]);
+  }
+
+  // ---------- Advanced ----------
+  if (advanced.length) {
+    var prio = { must: "必读", should: "建议", optional: "选读" };
+    addSection("advanced", "进阶专题", [
+      secHead("Advanced topics", "进阶专题与奠基论文", meta.advanced_lede || ""),
+      el("div", { style: "display:grid;gap:10px" }, advanced.map(function (t) {
+        return el("details", { class: "card-d", id: "adv-" + t.id }, [
+          el("summary", null, [el("h3", { style: "font-size:17px", text: t.title_zh }), el("span", { class: "cnt", text: t.title_en + " · " + arr(t.papers).length + " 篇奠基论文" }), el("span", { class: "tog" })]),
+          el("div", { class: "area-body" }, [
+            chipRow("前置概念", arr(t.prereqs).map(function (c) { return cChip(c); })),
+            el("div", { class: "prose" }, paras(t.overview_zh)),
+            arr(t.key_ideas).length ? blk("核心思想", [el("div", { class: "subgrid" }, arr(t.key_ideas).map(function (k) { return el("div", { class: "subcard" }, [el("b", { text: k.name_zh }), el("p", { text: k.explain_zh })]); }))]) : null,
+            arr(t.equations).length ? blk("关键公式", [eqList(t.equations)]) : null,
+            arr(t.evolution).length ? blk("演进", [el("div", { class: "timeline" }, arr(t.evolution).slice().sort(function (a, b) { return (a.year || 0) - (b.year || 0); }).map(function (e) { return el("div", null, [el("span", { class: "y", text: String(e.year) }), el("span", { text: e.milestone_zh })]); }))]) : null,
+            arr(t.papers).length ? blk("奠基论文", [el("div", { class: "tbl-wrap" }, [el("table", null, [
+              el("thead", null, [el("tr", null, ["优先级", "论文", "引用", "贡献"].map(function (h) { return el("th", { text: h }); }))]),
+              el("tbody", null, arr(t.papers).map(function (p) { return el("tr", null, [el("td", null, [el("span", { class: "pill " + (p.priority || "optional"), text: prio[p.priority] || "选读" })]), el("td", { style: "min-width:240px" }, [link(p.title, p.url), el("small", { style: "display:block;color:var(--muted);font-size:12px", text: [p.authors, p.venue, p.year].filter(Boolean).join(" · ") })]), el("td", { class: "code", text: fmtCit(p.citations) }), el("td", { style: "min-width:260px;color:var(--ink-2)", text: p.role_zh })]); }))
+            ])])]) : null,
+            textBlk("与两篇锚点论文的关系", t.relation_to_anchors_zh),
+            el("div", { class: "two" }, [arr(t.debates_zh).length ? blk("争论与分歧", [ul(t.debates_zh)]) : null, arr(t.open_questions_zh).length ? blk("开放问题", [ul(t.open_questions_zh)]) : null]),
+            arr(t.resources).length ? blk("学习资源", [resList(t.resources)]) : null
+          ])
+        ]);
+      }))
+    ]);
+  }
+
+  // ---------- Classics ----------
+  if (classics.length) {
+    (function () {
+      var themes = arr(L.themes);
+      var st = { theme: "all", must: "all", diff: "all", sort: "year" };
+      var tip = el("div", { class: "vtip", hidden: "" });
+      function laneChart() {
+        var W = 940, left = 170, right = 16, top = 26;
+        var x0 = left, x1 = W - right, split = 2010;
+        var xBreak = x0 + (x1 - x0) * 0.34;
+        var minYear = classics.reduce(function (m, p) { return p.year ? Math.min(m, p.year) : m; }, 2009);
+        var y0 = Math.floor((minYear - 1) / 5) * 5;
+        function xs(y) { y = Math.max(y0, Math.min(2025.6, y)); return y < split ? x0 + 6 + (y - y0) / (split - y0) * (xBreak - x0 - 18) : xBreak + (y - split + 0.5) / (2025.6 - split + 0.5) * (x1 - xBreak); }
+        function rr(c) { var n = Math.max(1, Number(c) || 1); return Math.max(3.5, Math.min(8, 1.8 * Math.log10(n) - 0.6)); }
+        var shortLane = { "t-ibr-geometry": "经典 IBR 与多视几何", "t-fusion-capture": "深度融合与临场系统", "t-deep-geometry": "深度学习几何", "t-neural-rendering": "神经渲染与新视角合成", "t-dynamic-human": "动态场景、4D 与人体", "t-generative-ff": "生成先验、前馈与评测" };
+        var laneData = themes.map(function (t) { return { t: t, items: [] }; });
+        var laneIdx = {}; themes.forEach(function (t, i) { laneIdx[t.id] = i; });
+        classics.forEach(function (p, i) { var li = laneIdx[p.theme]; if (li === undefined) return; laneData[li].items.push(i); });
+        var y = top, lanes = [];
+        laneData.forEach(function (ld) {
+          var byYear = {};
+          ld.items.forEach(function (i) { var yr = classics[i].year || 0; (byYear[yr] = byYear[yr] || []).push(i); });
+          var maxStack = 1; Object.keys(byYear).forEach(function (k) { maxStack = Math.max(maxStack, Math.ceil(byYear[k].length / 2)); });
+          var h = Math.max(44, maxStack * 22 + 14);
+          lanes.push({ ld: ld, y: y, h: h, byYear: byYear }); y += h;
+        });
+        var H = y + 30;
+        var svg = sv("svg", { class: "lanes", viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "2026 年前高影响论文时间分布（按主题分泳道）" });
+        [y0, y0 + 10, y0 + 20].filter(function (yr) { return yr < split - 4; }).forEach(function (yr) { svg.appendChild(sv("line", { class: "grid", x1: xs(yr), x2: xs(yr), y1: top - 6, y2: H - 26 })); svg.appendChild(sv("text", { class: "axis", x: xs(yr), y: H - 10, "text-anchor": "middle", text: String(yr) })); });
+        for (var yr = 2010; yr <= 2025; yr += 3) { svg.appendChild(sv("line", { class: "grid", x1: xs(yr), x2: xs(yr), y1: top - 6, y2: H - 26 })); svg.appendChild(sv("text", { class: "axis", x: xs(yr), y: H - 10, "text-anchor": "middle", text: String(yr) })); }
+        svg.appendChild(sv("path", { class: "brk", d: "M" + (xBreak - 6) + "," + (H - 30) + " l4,-8 M" + (xBreak - 1) + "," + (H - 30) + " l4,-8" }));
+        svg.appendChild(sv("text", { class: "axis", x: (x0 + xBreak) / 2, y: top - 12, "text-anchor": "middle", text: y0 + "–2009（压缩比例）" }));
+        svg.appendChild(sv("text", { class: "axis", x: (xBreak + x1) / 2, y: top - 12, "text-anchor": "middle", text: "2010–2025" }));
+        lanes.forEach(function (ln, li) {
+          if (li > 0) svg.appendChild(sv("line", { class: "grid", x1: 0, x2: W, y1: ln.y, y2: ln.y }));
+          var lab = shortLane[ln.ld.t.id] || str(ln.ld.t.title_zh).replace(/（.*?）/, "");
+          svg.appendChild(sv("text", { class: "lane-l", x: 4, y: ln.y + ln.h / 2 + 4, text: lab.length > 13 ? lab.slice(0, 12) + "…" : lab }));
+          if (!ln.ld.items.length) svg.appendChild(sv("text", { class: "axis", x: xBreak + 8, y: ln.y + ln.h / 2 + 4, text: "（本主题暂无数据）" }));
+          Object.keys(ln.byYear).forEach(function (k) {
+            var list = ln.byYear[k].slice().sort(function (a, b) { return (classics[b].citations || 0) - (classics[a].citations || 0); });
+            var rows = Math.ceil(list.length / 2);
+            list.forEach(function (i, j) {
+              var p = classics[i];
+              var col = list.length > 1 ? (j % 2 === 0 ? -1 : 1) : 0, row = Math.floor(j / 2);
+              var cx = xs(Number(k)) + col * 6, cy = ln.y + ln.h / 2 + (row - (rows - 1) / 2) * 22;
+              var r = rr(p.citations);
+              var g = sv("g", { class: "m", tabindex: "0", role: "button", "aria-label": p.title + "，" + p.year + "，引用 " + fmtCit(p.citations) });
+              g.appendChild(sv("circle", { class: "hit", cx: cx, cy: cy, r: r + 5 }));
+              g.appendChild(sv("circle", { class: "dot" + (p.must_read ? "" : " hollow"), cx: cx, cy: cy, r: r }));
+              function showTip() {
+                tip.textContent = "";
+                tip.appendChild(el("b", { text: p.title }));
+                tip.appendChild(el("small", { text: [p.year, p.venue, "引用 " + fmtCit(p.citations)].filter(Boolean).join(" · ") }));
+                tip.appendChild(el("span", { text: p.must_read ? "必读 · 点击查看" : "点击查看" }));
+                tip.hidden = false;
+                var wrap = tip.parentElement, wr = wrap.getBoundingClientRect(), sr = svg.getBoundingClientRect();
+                var scale = sr.width / W;
+                var px = sr.left - wr.left + wrap.scrollLeft + cx * scale, py = sr.top - wr.top + cy * scale;
+                var tw = tip.offsetWidth;
+                tip.style.left = Math.max(4, Math.min(px + 12, wrap.scrollWidth - tw - 4)) + "px";
+                tip.style.top = (py + 14) + "px";
+              }
+              g.addEventListener("mouseenter", showTip); g.addEventListener("focus", showTip);
+              g.addEventListener("mouseleave", function () { tip.hidden = true; }); g.addEventListener("blur", function () { tip.hidden = true; });
+              g.addEventListener("click", function () { tip.hidden = true; st.theme = "all"; st.must = "all"; st.diff = "all"; syncControls(); renderList(); goTo("classic-" + i); });
+              g.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); goTo("classic-" + i); } });
+              svg.appendChild(g);
+            });
+          });
+        });
+        var legend = el("div", { class: "legend" }, [
+          el("span", null, [lgDot(false), " 必读"]), el("span", null, [lgDot(true), " 其他"]),
+          el("span", { text: "点的大小 ∝ log(引用数)；悬停看详情，点击跳到条目" })
+        ]);
+        return el("div", { class: "lanes-wrap" }, [svg, legend, tip]);
+      }
+      function lgDot(hollow) { var s = sv("svg", { width: "14", height: "14", viewBox: "0 0 14 14", "aria-hidden": "true" }); s.appendChild(sv("circle", { cx: 7, cy: 7, r: 5, style: hollow ? "fill:var(--surface);stroke:var(--accent);stroke-width:1.6" : "fill:var(--accent)" })); return s; }
+      var listHost = el("div", { class: "classic-list" });
+      var count = el("span", { class: "db-count mono" });
+      var sTheme = el("select", { id: "cl-theme", "aria-label": "主题" }, [el("option", { value: "all", text: "全部主题" })].concat(themes.map(function (t) { return el("option", { value: t.id, text: t.title_zh }); })));
+      var sMust = el("select", { id: "cl-must", "aria-label": "必读" }, [["all", "全部"], ["must", "只看必读"]].map(function (o) { return el("option", { value: o[0], text: o[1] }); }));
+      var sDiff = el("select", { id: "cl-diff", "aria-label": "难度" }, [["all", "全部难度"], ["入门", "入门"], ["进阶", "进阶"], ["专家", "专家"]].map(function (o) { return el("option", { value: o[0], text: o[1] }); }));
+      var sSort = el("select", { id: "cl-sort", "aria-label": "排序" }, [["year", "按年份"], ["cit", "按引用数"]].map(function (o) { return el("option", { value: o[0], text: o[1] }); }));
+      function syncControls() { sTheme.value = st.theme; sMust.value = st.must; sDiff.value = st.diff; sSort.value = st.sort; }
+      function renderList() {
+        var idx = classics.map(function (_, i) { return i; }).filter(function (i) {
+          var p = classics[i];
+          if (st.theme !== "all" && arr(p.themes).indexOf(st.theme) < 0 && p.theme !== st.theme) return false;
+          if (st.must === "must" && !p.must_read) return false;
+          if (st.diff !== "all" && p.difficulty !== st.diff) return false;
+          return true;
+        });
+        idx.sort(function (a, b) { var A = classics[a], B = classics[b]; return st.sort === "cit" ? (B.citations || 0) - (A.citations || 0) : (A.year || 0) - (B.year || 0) || (B.citations || 0) - (A.citations || 0); });
+        count.textContent = idx.length + " / " + classics.length + " 篇";
+        listHost.textContent = "";
+        idx.forEach(function (i) {
+          var p = classics[i];
+          listHost.appendChild(el("details", { class: "classic", id: "classic-" + i }, [
+            el("summary", null, [
+              el("span", { class: "yr", text: String(p.year || "") }),
+              el("div", { class: "ti" }, [el("b", { text: p.title }), el("small", { text: [p.authors, p.venue].filter(Boolean).join(" · ") })]),
+              el("span", { class: "cit" }, [p.must_read ? el("span", { class: "pill must", text: "必读" }) : null, " ", "引用 " + fmtCit(p.citations)])
+            ]),
+            el("div", { class: "classic-body" }, [
+              el("div", { class: "chips" }, [link("打开论文 ↗", p.url), el("span", { class: "chip", text: themeName[p.theme] || p.theme || "" }), p.difficulty ? el("span", { class: "chip", text: "难度：" + p.difficulty }) : null, el("span", { class: "chip", text: (p.citations_source || "") + (p.citations >= 0 ? " 引用 " + p.citations : "") })]),
+              textBlk("为什么有影响力", p.influence_zh),
+              textBlk("主要贡献", p.contributions_zh),
+              textBlk("与两篇锚点论文的联系", p.anchor_link_zh),
+              chipRow("相关概念", arr(p.concept_ids).map(function (c) { return cChip(c, true); })),
+              chipRow("进阶专题", arr(p.adv_ids).map(aChip))
+            ])
+          ]));
+        });
+      }
+      sTheme.addEventListener("change", function () { st.theme = sTheme.value; renderList(); });
+      sMust.addEventListener("change", function () { st.must = sMust.value; renderList(); });
+      sDiff.addEventListener("change", function () { st.diff = sDiff.value; renderList(); });
+      sSort.addEventListener("change", function () { st.sort = sSort.value; renderList(); });
+      renderList();
+      addSection("classics", "经典论文", [
+        secHead("Pre-2026 classics", "2026 年之前的高影响论文", meta.classics_lede || ""),
+        laneChart(),
+        el("div", { class: "db-controls" }, [el("label", { class: "field", for: "cl-theme" }, ["主题", sTheme]), el("label", { class: "field", for: "cl-must" }, ["必读", sMust]), el("label", { class: "field", for: "cl-diff" }, ["难度", sDiff]), el("label", { class: "field", for: "cl-sort" }, ["排序", sSort]), count]),
+        listHost
+      ]);
+    })();
+  }
+
+  // ---------- Glossary ----------
+  if (glossary.length) {
+    (function () {
+      var cats = []; glossary.forEach(function (t) { if (t.category && cats.indexOf(t.category) < 0) cats.push(t.category); });
+      var q = el("input", { id: "gl-q", type: "search", placeholder: "中英文术语或缩写…", "aria-label": "搜索术语" });
+      var sc = el("select", { id: "gl-cat", "aria-label": "类别" }, [el("option", { value: "all", text: "全部类别" })].concat(cats.map(function (c) { return el("option", { value: c, text: c }); })));
+      var count = el("span", { class: "db-count mono" });
+      var tbody = el("tbody");
+      var sorted = glossary.slice().sort(function (a, b) { return str(a.term_en).toLowerCase() < str(b.term_en).toLowerCase() ? -1 : 1; });
+      function render() {
+        var qq = q.value.trim().toLowerCase(), cc = sc.value;
+        var rows = sorted.filter(function (t) { if (cc !== "all" && t.category !== cc) return false; if (!qq) return true; return (str(t.term_en) + " " + str(t.term_zh) + " " + str(t.abbr) + " " + str(t.def_zh)).toLowerCase().indexOf(qq) >= 0; });
+        count.textContent = rows.length + " / " + glossary.length + " 条";
+        tbody.textContent = "";
+        var frag = document.createDocumentFragment();
+        rows.forEach(function (t) { frag.appendChild(el("tr", null, [el("td", { class: "en" }, [t.term_en, t.abbr ? el("span", { class: "mono", style: "color:var(--muted);font-size:12px", text: " (" + t.abbr + ")" }) : null]), el("td", { class: "zh", text: t.term_zh }), el("td", { class: "def", text: t.def_zh }), el("td", null, [cChip(t.concept_id, true)])])); });
+        tbody.appendChild(frag);
+      }
+      q.addEventListener("input", render); sc.addEventListener("change", render);
+      render();
+      addSection("glossary", "术语表", [
+        secHead("Glossary", "术语表", "读论文时遇到的缩写和术语。点右侧概念可跳到对应的基础知识卡片。"),
+        el("div", { class: "db-controls" }, [el("label", { class: "field", for: "gl-q" }, ["搜索", q]), el("label", { class: "field", for: "gl-cat" }, ["类别", sc]), count]),
+        el("div", { class: "gl-wrap" }, [el("table", { class: "gl" }, [el("thead", null, [el("tr", null, ["English", "中文", "释义", "概念"].map(function (h) { return el("th", { text: h }); }))]), tbody])])
+      ]);
+    })();
+  }
+
+  if (arr(synth.reading_path).length) {
+    addSection("reading", "前沿阅读清单", [
+      secHead("Reading list", "前沿阅读清单", "按入门 / 进阶 / 前沿三档列出的领域论文（偏 2024–2026），与上面的经典论文互补。"),
+      el("div", { class: "path" }, arr(synth.reading_path).map(function (s) { return el("div", { class: "panel" }, [el("h3", { class: "sub", text: s.stage_zh, style: "margin-bottom:10px" }), el("ol", null, arr(s.items).map(function (x) { return el("li", null, [link(x.title, x.url), el("small", { text: x.why_zh })]); }))]); }))
+    ]);
+  }
+
+  // ================= PART II: FIELD SURVEY =================
+  addGroup("领域调研");
+  addPart("Part II · Survey", "领域调研", meta.survey_lede || "");
+
+  function anchorView(a) {
+    if (!a) return el("p", { class: "note", text: "该部分数据缺失。" });
+    var c = a.citation || {};
+    return el("div", { class: "anchor-body" }, [
+      el("div", { class: "meta-line" }, [
+        el("span", { text: c.authors || "" }), el("span", { text: c.affiliations || "" }), el("span", { class: "mono", text: (c.venue || "") + (c.year ? " · " + c.year : "") }),
+        link("论文", c.url), safeUrl(c.project_page) ? link("项目主页", c.project_page) : null, c.code_status ? el("span", { text: "代码：" + c.code_status }) : null
+      ]),
+      el("p", { class: "tldr", text: a.tldr_zh || "" }),
+      a.problem_setting_zh ? el("div", { class: "prose" }, [el("h3", { class: "sub", text: "问题设定" })].concat(paras(a.problem_setting_zh))) : null,
+      el("div", { class: "blk" }, [el("h3", { class: "sub", text: "流水线" }), el("ol", { class: "stages" }, arr(a.pipeline_zh).map(function (s) { return el("li", null, [el("div", null, [el("b", { text: s.stage }), el("span", { text: s.detail })])]); }))]),
+      arr(a.system_perf).length ? el("div", { class: "blk" }, [el("h3", { class: "sub", text: "系统与性能" }), el("div", { class: "kv" }, arr(a.system_perf).map(function (x) { return el("div", null, [el("span", { class: "k", text: x.item }), el("span", { class: "v", text: x.value })]); }))]) : null,
+      arr(a.key_design_choices_zh).length ? el("div", { class: "blk" }, [el("h3", { class: "sub", text: "关键设计选择" }), el("div", { class: "tbl-wrap" }, [el("table", null, [
+        el("thead", null, [el("tr", null, [el("th", { text: "选择" }), el("th", { text: "理由" }), el("th", { text: "被放弃的替代方案" })])]),
+        el("tbody", null, arr(a.key_design_choices_zh).map(function (d) { return el("tr", null, [el("td", { class: "dim", style: "white-space:normal;min-width:160px", text: d.choice }), el("td", { text: d.rationale }), el("td", { text: d.alternatives_rejected })]); }))
+      ])])]) : null,
+      a.training_zh ? el("div", { class: "prose" }, [el("h3", { class: "sub", text: "训练" })].concat(paras(a.training_zh))) : null,
+      arr(a.results_zh).length ? el("div", { class: "blk" }, [el("h3", { class: "sub", text: "实验结果" }), ul(a.results_zh, function (r) { return el("span", null, [el("b", { text: r.dataset + "：" }), r.finding]); })]) : null,
+      arr(a.ablations_zh).length ? el("div", { class: "blk" }, [el("h3", { class: "sub", text: "消融" }), ul(a.ablations_zh)]) : null,
+      el("div", { class: "two" }, [
+        el("div", { class: "blk" }, [el("h3", { class: "sub", text: "作者承认的局限" }), ul(a.limitations_stated_zh)]),
+        el("div", { class: "blk" }, [el("h3", { class: "sub", text: "精读发现的未言明问题" }), ul(a.limitations_unstated_zh)])
+      ]),
+      el("div", { class: "two" }, [
+        el("div", { class: "blk" }, [el("h3", { class: "sub", text: "前序工作" }), ul(arr((a.lineage || {}).predecessors), function (p) { return el("span", null, [link(p.title, p.url), " (" + p.year + ") — " + (p.note_zh || "")]); })]),
+        el("div", { class: "blk" }, [el("h3", { class: "sub", text: "后续 / 竞争工作" }), ul(arr((a.lineage || {}).successors), function (p) { return el("span", null, [link(p.title, p.url), " (" + p.year + ") — " + (p.note_zh || "")]); })])
+      ]),
+      arr(a.takeaways_for_telepresence_zh).length ? el("div", { class: "blk" }, [el("h3", { class: "sub", text: "对 3D 临场的启示" }), ul(a.takeaways_for_telepresence_zh)]) : null
+    ]);
+  }
+  function compareView(c) {
+    if (!c) return el("p", { class: "note", text: "该部分数据缺失。" });
+    return el("div", { class: "anchor-body" }, [
+      el("div", { class: "tbl-wrap" }, [el("table", null, [
+        el("thead", null, [el("tr", null, [el("th", { text: "维度" }), el("th", { text: "Quark" }), el("th", { text: "Ha et al." })])]),
+        el("tbody", null, arr(c.comparison_table).map(function (r) { return el("tr", null, [el("td", { class: "dim", text: r.dimension }), el("td", { text: r.quark }), el("td", { text: r.ha })]); }))
+      ])]),
+      el("div", { class: "prose" }, [el("h3", { class: "sub", text: "两种设计哲学" })].concat(paras(c.philosophy_zh))),
+      el("div", { class: "prose" }, [el("h3", { class: "sub", text: "互补性" })].concat(paras(c.complementarity_zh))),
+      el("div", { class: "prose" }, [el("h3", { class: "sub", text: "取两者之长的临场系统草图" })].concat(paras(c.combined_system_sketch_zh))),
+      el("div", { class: "blk" }, [el("h3", { class: "sub", text: "共同盲区" }), ul(c.shared_blindspots_zh)])
+    ]);
+  }
+  addSection("anchors", "锚点论文", [
+    secHead("Anchor papers", "两篇锚点论文精读（研究视角）", "偏研究者视角的精读：精确数字、设计选择、局限与谱系。想从零读懂，请先看上面的“精读导读”。"),
+    el("div", { class: "panel" }, [makeTabs([
+      { id: "quark", label: "Quark", node: function () { return anchorView(anchors.quark); } },
+      { id: "ha", label: "Ha et al.", node: function () { return anchorView(anchors.ha); } },
+      { id: "cmp", label: "对比与互补", node: function () { return compareView(anchors.compare); } }
+    ], "atlas.anchorTab")])
+  ]);
+
+  if (arr(synth.field_map).length) {
+    addSection("map", "领域全景", [
+      secHead("Field map", "端到端技术栈全景", "从采集到显示与交互，每一层的最新水平、成熟度（1 = 研究原型，5 = 已产品化）与当前瓶颈。"),
+      el("div", { class: "stack" }, arr(synth.field_map).map(function (Lr) {
+        var m = Math.max(0, Math.min(5, Math.round(Number(Lr.maturity) || 0)));
+        var bar = el("div", { class: "bar", "aria-label": "成熟度 " + m + " / 5" });
+        for (var i = 1; i <= 5; i++) bar.appendChild(el("i", { class: i <= m ? "f" + i : "" }));
+        return el("div", { class: "layer" }, [
+          el("div", { class: "name" }, [el("b", { text: Lr.layer_zh }), el("span", { text: Lr.layer_en })]),
+          el("div", { class: "body" }, [el("div", { class: "chips" }, arr(Lr.components_zh).map(function (c) { return el("span", { class: "chip", text: c }); })), el("p", { text: Lr.state_of_art_zh }), el("p", { class: "bneck" }, [el("em", { text: "瓶颈 " }), Lr.bottleneck_zh || ""])]),
+          el("div", { class: "mat" }, [el("small", { text: "成熟度 " + m + " / 5" }), bar])
+        ]);
+      }))
+    ]);
+  }
+  if (arr(synth.paradigms).length) {
+    addSection("paradigms", "范式对比", [
+      secHead("Paradigms", "表示与渲染范式对比"),
+      el("div", { class: "tbl-wrap" }, [el("table", null, [
+        el("thead", null, [el("tr", null, ["范式", "核心思路", "优势", "劣势", "代表工作", "展望"].map(function (h) { return el("th", { text: h }); }))]),
+        el("tbody", null, arr(synth.paradigms).map(function (p) { return el("tr", null, [el("td", { class: "dim", text: p.name }), el("td", { text: p.idea_zh }), el("td", { text: p.strengths_zh }), el("td", { text: p.weaknesses_zh }), el("td", { text: arr(p.exemplars).join("；") }), el("td", { text: p.outlook_zh })]); }))
+      ])])
+    ]);
+  }
+
+  var dbState = { q: "", area: "all", tier: "all", year: "all" };
+  var dbRender = null;
+  addSection("areas", "分方向综述", [
+    secHead("Sub-areas", "分方向综述", "每个方向包含演进脉络、子主题、时间线、趋势与开放问题。点“查看本方向论文”跳到论文库并按方向筛选。"),
+    el("div", { style: "display:grid;gap:12px" }, areas.map(function (a, idx) {
+      var n = papers.filter(function (p) { return arr(p.areas).indexOf(a.key) >= 0; }).length;
+      var d = el("details", { class: "area", id: "area-" + a.key }, [
+        el("summary", null, [el("h3", { text: a.area_title_zh || a.key }), el("span", { class: "cnt", text: n + " 篇 · " + arr(a.subtopics).length + " 个子主题" }), el("span", { class: "tog" })]),
+        el("div", { class: "area-body" }, [
+          el("div", { class: "prose" }, paras(a.overview_zh)),
+          el("div", { class: "subgrid" }, arr(a.subtopics).map(function (s) { return el("div", { class: "subcard" }, [el("b", { text: s.name_zh }), el("span", { class: "en", text: s.name_en }), el("p", { text: s.summary_zh }), arr(s.representative_works).length ? el("span", { class: "reps", text: "代表：" + arr(s.representative_works).join("；") }) : null]); })),
+          arr(a.timeline).length ? el("div", { class: "blk" }, [el("h4", { text: "时间线" }), el("div", { class: "timeline" }, arr(a.timeline).slice().sort(function (x, y) { return (x.year || 0) - (y.year || 0); }).map(function (t) { return el("div", null, [el("span", { class: "y", text: String(t.year) }), el("span", { text: t.event_zh })]); }))]) : null,
+          el("div", { class: "two" }, [el("div", { class: "blk" }, [el("h4", { text: "趋势" }), ul(a.trends_zh)]), el("div", { class: "blk" }, [el("h4", { text: "开放问题" }), ul(a.open_problems_zh)])]),
+          a.relation_to_anchors_zh ? el("div", { class: "blk" }, [el("h4", { text: "与两篇锚点论文的关系" }), el("div", { class: "prose" }, paras(a.relation_to_anchors_zh))]) : null,
+          el("button", { class: "btn", type: "button", text: "查看本方向论文 →", onclick: function () { dbState.area = a.key; var s = document.getElementById("db-area"); if (s) s.value = a.key; if (dbRender) dbRender(); goTo("papers"); } })
+        ])
+      ]);
+      if (idx === 0) d.open = true;
+      return d;
+    }))
+  ]);
+
+  (function () {
+    var years = {}; papers.forEach(function (p) { if (p.year) years[p.year] = 1; });
+    var yearList = Object.keys(years).map(Number).sort(function (a, b) { return b - a; });
+    var q = el("input", { id: "db-q", type: "search", placeholder: "标题、作者、摘要关键词…", "aria-label": "搜索论文" });
+    var sa = el("select", { id: "db-area", "aria-label": "方向" }, [el("option", { value: "all", text: "全部方向" })].concat(areas.map(function (a) { return el("option", { value: a.key, text: a.area_title_zh || a.key }); })));
+    var stt = el("select", { id: "db-tier", "aria-label": "重要性" }, [["all", "全部"], ["milestone", "里程碑"], ["important", "重要"], ["relevant", "相关"]].map(function (o) { return el("option", { value: o[0], text: o[1] }); }));
+    var sy = el("select", { id: "db-year", "aria-label": "年份" }, [el("option", { value: "all", text: "全部年份" }), el("option", { value: "2025+", text: "2025 年及以后" }), el("option", { value: "2023+", text: "2023 年及以后" })].concat(yearList.map(function (y) { return el("option", { value: String(y), text: String(y) }); })));
+    var count = el("span", { class: "db-count mono" });
+    var tbody = el("tbody");
+    var tierLabel = { milestone: "里程碑", important: "重要", relevant: "相关" };
+    var tierRank = { milestone: 0, important: 1, relevant: 2 };
+    function match(p) {
+      if (dbState.area !== "all" && arr(p.areas).indexOf(dbState.area) < 0) return false;
+      if (dbState.tier !== "all" && p.tier !== dbState.tier) return false;
+      if (dbState.year === "2025+" && !(p.year >= 2025)) return false;
+      else if (dbState.year === "2023+" && !(p.year >= 2023)) return false;
+      else if (/^\d{4}$/.test(dbState.year) && String(p.year) !== dbState.year) return false;
+      if (dbState.q) { var hay = (p.title + " " + p.authors + " " + p.venue + " " + p.summary_zh + " " + p.key_numbers).toLowerCase(); if (hay.indexOf(dbState.q) < 0) return false; }
+      return true;
+    }
+    function render() {
+      var rows = papers.filter(match).sort(function (a, b) { return (b.year || 0) - (a.year || 0) || (tierRank[a.tier] - tierRank[b.tier]); });
+      count.textContent = rows.length + " / " + papers.length + " 条";
+      tbody.textContent = "";
+      var frag = document.createDocumentFragment();
+      rows.forEach(function (p) {
+        frag.appendChild(el("tr", null, [
+          el("td", { class: "y", text: String(p.year || "") }),
+          el("td", { class: "t" }, [link(p.title, p.url), el("small", { text: [p.authors, p.venue].filter(Boolean).join(" · ") })]),
+          el("td", null, [el("span", { class: "tier " + (p.tier || "relevant"), text: tierLabel[p.tier] || "相关" })].concat(arr(p.areas).map(function (k) { return el("span", { class: "areatag", text: areaName[k] || k }); }))),
+          el("td", { class: "s", text: p.summary_zh || "" }),
+          el("td", { class: "n", text: p.key_numbers || "" })
+        ]));
+      });
+      tbody.appendChild(frag);
+    }
+    dbRender = render;
+    q.addEventListener("input", function () { dbState.q = q.value.trim().toLowerCase(); render(); });
+    sa.addEventListener("change", function () { dbState.area = sa.value; render(); });
+    stt.addEventListener("change", function () { dbState.tier = stt.value; render(); });
+    sy.addEventListener("change", function () { dbState.year = sy.value; render(); });
+    addSection("papers", "论文库", [
+      secHead("Paper database", "论文 / 产品 / 标准库", "按方向、重要性、年份筛选，按年份倒序。同一篇工作出现在多个方向时会合并并标注全部方向。"),
+      el("div", { class: "db-controls" }, [el("label", { class: "field", for: "db-q" }, ["搜索", q]), el("label", { class: "field", for: "db-area" }, ["方向", sa]), el("label", { class: "field", for: "db-tier" }, ["重要性", stt]), el("label", { class: "field", for: "db-year" }, ["年份", sy]), count]),
+      el("div", { class: "db-wrap" }, [el("table", { class: "db" }, [el("thead", null, [el("tr", null, ["年份", "工作", "标签", "简介", "关键数字"].map(function (h) { return el("th", { text: h }); }))]), tbody])])
+    ]);
+    render();
+  })();
+
+  if (arr(synth.trends_zh).length || arr(synth.grand_challenges_zh).length) {
+    addSection("trends", "趋势与挑战", [
+      secHead("Trends & challenges", "跨方向趋势与重大挑战"),
+      arr(synth.trends_zh).length ? el("div", { class: "cards" }, arr(synth.trends_zh).map(function (t) { return el("div", { class: "card" }, [el("h4", { text: t.trend }), el("span", { class: "lbl", text: "证据" }), el("p", { text: t.evidence }), el("span", { class: "lbl", text: "含义" }), el("p", { text: t.implication })]); })) : null,
+      arr(synth.grand_challenges_zh).length ? el("h3", { class: "sub", text: "重大挑战" }) : null,
+      arr(synth.grand_challenges_zh).length ? el("div", { class: "cards" }, arr(synth.grand_challenges_zh).map(function (g) { return el("div", { class: "card" }, [el("h4", { text: g.title }), el("p", { text: g.description }), el("span", { class: "lbl", text: "为什么难" }), el("p", { text: g.why_hard }), el("span", { class: "lbl", text: "有希望的方向" }), el("p", { text: g.promising_directions })]); })) : null,
+      arr(synth.predictions_zh).length ? el("div", { class: "blk" }, [el("h3", { class: "sub", text: "未来 1–3 年判断" }), ul(synth.predictions_zh)]) : null
+    ]);
+  }
+
+  // ================= PART III: RESEARCH =================
+  addGroup("研究");
+  if (ideas.length) {
+    var decLabel = { pursue: "建议推进", pursue_with_repositioning: "重新定位后推进", drop: "建议放弃" };
+    var verLabel = { open: "查新：空白", partially_scooped: "查新：部分已被做", scooped: "查新：已被做" };
+    function scoreRow(label, v) { var n = Math.max(0, Math.min(10, Number(v) || 0)); return el("div", { class: "score" }, [el("span", { class: "num", text: label + " " + n }), el("span", { class: "track" }, [el("i", { style: "width:" + (n * 10) + "%" })])]); }
+    addSection("ideas", "研究机会", [
+      secHead("Research opportunities", "研究机会：经对抗查新与评审的方向", meta.ideas_lede || ""),
+      el("div", { style: "display:grid;gap:12px" }, ideas.map(function (it, i) {
+        var s = it.scores || {}; var sh = it.sharpened || {}; var ex = it.experiments || {}; var nov = it.novelty || {}; var ef = it.effort || {};
+        return el("details", { class: "idea", id: "idea-" + it.id }, [
+          el("summary", null, [
+            el("span", { class: "rank", text: String(i + 1).padStart(2, "0") }),
+            el("div", { class: "head" }, [el("h3", { text: sh.title_zh || sh.title || it.name }), sh.title_en ? el("span", { class: "en-title", text: sh.title_en }) : null, el("p", { text: sh.one_liner || "" }), el("div", { class: "pills" }, [el("span", { class: "pill " + it.decision, text: decLabel[it.decision] || it.decision }), el("span", { class: "pill " + nov.verdict, text: verLabel[nov.verdict] || nov.verdict }), it.venue ? el("span", { class: "chip", text: it.venue }) : null])]),
+            el("div", { class: "ov" }, [String(s.overall != null ? s.overall : "–"), el("small", { text: "综合分" })])
+          ]),
+          el("div", { class: "idea-body" }, [
+            el("div", { class: "scores" }, [scoreRow("新颖", s.novelty), scoreRow("意义", s.significance), scoreRow("可行", s.feasibility), scoreRow("临场契合", s.telepresence_fit)]),
+            el("div", { class: "idea-grid" }, [
+              el("div", { class: "blk" }, [el("h4", { text: "核心论点（可证伪）" }), el("p", { text: sh.core_claim })]),
+              el("div", { class: "blk" }, [el("h4", { text: "关键洞察" }), el("p", { text: sh.key_insight })]),
+              el("div", { class: "blk" }, [el("h4", { text: "方法" }), el("p", { text: sh.method })]),
+              el("div", { class: "blk" }, [el("h4", { text: "为什么不是工程改进" }), el("p", { text: sh.why_not_engineering })]),
+              el("div", { class: "blk" }, [el("h4", { text: "与已有工作的区分" }), el("p", { text: sh.differentiation })]),
+              el("div", { class: "blk" }, [el("h4", { text: "查新后剩余的可辩护新意" }), el("p", { text: nov.remaining_novel_angle })])
+            ]),
+            arr(nov.threats).length ? el("div", { class: "blk" }, [el("h4", { text: "主要撞车风险（查新找到的相近工作）" }), el("div", { style: "display:grid;gap:8px" }, arr(nov.threats).map(function (t) { return el("div", { class: "threat " + t.overlap }, [el("span", null, [link(t.title, t.url), " · " + (t.year || "") + (t.venue ? " · " + t.venue : "") + " · 重叠度 " + ({ high: "高", medium: "中", low: "低" }[t.overlap] || t.overlap)]), el("span", { text: "重叠：" + (t.what_overlaps || "") }), el("span", { text: "差异：" + (t.what_remains_different || "") })]); }))]) : null,
+            el("div", { class: "idea-grid" }, [
+              el("div", { class: "blk" }, [el("h4", { text: "数据集" }), ul(ex.datasets)]),
+              el("div", { class: "blk" }, [el("h4", { text: "对比基线" }), ul(ex.baselines)]),
+              el("div", { class: "blk" }, [el("h4", { text: "指标" }), ul(ex.metrics)]),
+              el("div", { class: "blk" }, [el("h4", { text: "关键消融" }), ul(ex.key_ablations)])
+            ]),
+            ex.capture_notes ? el("div", { class: "blk" }, [el("h4", { text: ex.needs_custom_capture ? "需要自建采集" : "采集说明" }), el("p", { text: ex.capture_notes })]) : null,
+            el("div", { class: "idea-grid" }, [
+              el("div", { class: "blk" }, [el("h4", { text: "两周内的验证实验" }), el("p", { text: it.first_two_week_test })]),
+              el("div", { class: "blk" }, [el("h4", { text: "止损标准" }), el("p", { text: it.kill_criteria })])
+            ]),
+            arr(it.reviewer_objections).length ? el("div", { class: "blk" }, [el("h4", { text: "审稿人可能的质疑与回应" }), el("div", { style: "display:grid;gap:10px" }, arr(it.reviewer_objections).map(function (o) { return el("div", { class: "obj" }, [el("b", { text: "质疑：" + o.objection }), el("span", { text: "回应：" + o.rebuttal })]); }))]) : null,
+            el("div", { class: "kv" }, [
+              el("div", null, [el("span", { class: "k", text: "周期" }), el("span", { class: "v", text: ef.months || "" })]),
+              el("div", null, [el("span", { class: "k", text: "人力" }), el("span", { class: "v", text: ef.people || "" })]),
+              el("div", null, [el("span", { class: "k", text: "算力" }), el("span", { class: "v", text: ef.compute || "" })]),
+              el("div", null, [el("span", { class: "k", text: "目标会议" }), el("span", { class: "v", text: it.venue || "" })])
+            ]),
+            it.synergies ? el("div", { class: "blk" }, [el("h4", { text: "可组合的方向" }), el("p", { text: it.synergies })]) : null
+          ])
+        ]);
+      }))
+    ]);
+  }
+  addSection("method", "方法与说明", [secHead("Method & caveats", "调研方法与使用说明"), el("div", { class: "prose" }, paras(meta.method_zh || ""))]);
+
+  // ---------- TOC highlighting ----------
+  var links = {}; Array.prototype.forEach.call(toc.querySelectorAll("a"), function (a) { links[a.getAttribute("data-id")] = a; });
+  if ("IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { if (e.isIntersecting) { for (var k in links) links[k].classList.toggle("on", k === e.target.id); } });
+    }, { rootMargin: "-20% 0px -70% 0px" });
+    sections.forEach(function (id) { var s = document.getElementById(id); if (s) io.observe(s); });
+  }
+  if (location.hash && location.hash.length > 1) { var h = location.hash.slice(1); if (/^[A-Za-z0-9._~-]+$/.test(h)) setTimeout(function () { goTo(h); }, 50); }
+})();
+</script>

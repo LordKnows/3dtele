@@ -1,0 +1,351 @@
+{
+ "citation": {
+  "title": "Quark: Real-time, High-resolution, and General Neural View Synthesis",
+  "authors": "John Flynn*, Michael Broxton*, Lukas Murmann* (共同一作), Lucy Chai, Matthew DuVall, Clément Godard, Kathryn Heal, Srinivas Kaza, Stephen Lombardi, Xuan Luo, Supreeth Achar, Kira Prabhu, Tiancheng Sun, Lynn Tsai, Ryan Overbeck",
+  "affiliations": "Google (Mountain View, CA)",
+  "venue": "ACM Transactions on Graphics 43(6) / SIGGRAPH Asia 2024 (DOI 10.1145/3687953; arXiv 注释为 SIGGRAPH Asia 2024 camera ready)",
+  "year": 2024,
+  "url": "https://arxiv.org/abs/2411.16680",
+  "project_page": "https://quark-3d.github.io/",
+  "code_status": "未开源。截至 2026-09 arXiv 仅有 v1 (2024-11-25)；项目主页上的 Code 与 Data 按钮在 HTML 源码中被注释掉，只提供论文、视频 (https://youtu.be/w9Oqhaqbsyo) 和逐数据集的结果对比页。论文也未说明训练/推理所用的深度学习框架。"
+ },
+ "tldr_zh": "Quark 是 Google 提出的 feed-forward、可泛化的新视角合成网络。输入为 8 路（可扩展到 4–16 路）已标定的 RGB 图像或视频流，每帧在目标视角视锥内即时预测一个分层深度图（LDM：每层含 depth、density、对各输入图像的 blend weights），再用 IBR 方式把全分辨率输入图像混合、over 合成出新视角。重建加渲染合计在单张 A100 上达到 1080p/30fps。它的核心是把 DeepView 的“learned render-and-refine”（学习化梯度下降）嵌入 UNet 式的多尺度结构：由粗到细逐级提高空间分辨率，同时用 layer collapse 减少层数，并用 One-to-many attention（把 K/V 投影折叠进 Q 和输出投影）做低成本的跨视角融合。在 RFF、Shiny、N3DV 上，它的质量和速度都超过 ENeRF、GPNR、SIMPLI；在 DL3DV 上甚至超过逐场景优化的 Zip-NeRF 和 3DGS。代价是没有时间一致性，逐帧逐视角重建带来闪烁，而且只能在有限视角覆盖的范围内工作。",
+ "problem_setting_zh": "任务是从稀疏、宽基线（相机间距最大约 30cm）的已标定多视角图像或同步视频中实时合成任意新视角。“实时”指场景重建与渲染合计，而不像 NeRF/3DGS 那样只有渲染实时、重建仍需离线优化。输入包括 M 张 RGB 图、相机内外参，以及由 SfM 点估计的近/远平面；训练与主实验中 M=8，取离目标视角最近的 8 台相机。输出是目标视角的 RGB，可选输出深度图。方法不做逐场景训练，要求跨数据集泛化。作者把单图/单目/生成式/人体先验类方法视为另一类问题，不做比较。场景对象是通用静态或动态场景，不是专门的人像，论文也没有专门针对 telepresence 做评测。",
+ "pipeline_zh": [
+  {
+   "stage": "1. 输入编码 (Encode Input Images)",
+   "detail": "M 张输入图像经残差 CNN 与带步长的 mean-pooling 编码为 K 级特征金字塔，通道数 C=32（Quark 最高分辨率一级为 288×480，此外有 144×240、72×120、36×60 等级）。同时计算射线方向编码 γ：取输入射线与目标 LDM 视锥近/远平面交点，在投影空间求 2D 差向量，经 tanh 后做 8 个 octave 的正弦编码，再线性投影到 C 维。输入射线与目标射线重合时编码为 0。该编码先在低分辨率计算，再双线性上采样到各级。"
+  },
+  {
+   "stage": "2. 学习式初始化 (Learned Initialization)",
+   "detail": "用一个可学习的 32 维特征广播成初始 feature volume V(0)，层深度固定为等视差间隔的 anchor，把编码后的图像特征 back-project（Bp）到这些平面上，不做渲染比较。Quark 的初始 LDM 为 24 层×36×64，Quark+ 为 32 层×54×96。"
+  },
+  {
+   "stage": "3. 迭代 Update & Fuse（共 5 步，UNet 式由粗到细）",
+   "detail": "每步：(a) 解码当前 V 得到中间 LDM（depth、density、appearance c=sigmoid(V·W_a)），用双线性 splat 投到每个输入视角后 over 合成得到 Ĩ，不用光追或光栅化；(b) Update Block 用小型残差 CNN 结合 Ĩ、该级输入特征 I_k 和射线编码，生成每视角 update feature，其中含匹配线索和“渲染 vs 观测”的可见性残差；(c) 用当前深度把 update feature 反投影回 LDM 层空间，得到 Δ（类似 plane-sweep volume）；(d) Fusion Block 反复做 One-to-many attention（V 作为单一 query 对 M 个视角的 Δ 做 cross-attention），与 3×3 残差卷积交替，结构为 pre-LN Transformer。第 1、3、4 步把空间分辨率翻倍；最后两步前各做一次 Layer Collapse（残差 MLP：直通支路取相邻两层均值，残差支路取两层拼接），层数减半。Quark：24 层 36×64 → 24 层 72×128 → 12 层 144×256 → 6 层 288×512；Quark+：32 层 → 16 层 → 8 层 432×768。注意力头数随分辨率递减，依次为 A4、A2、A1。"
+  },
+  {
+   "stage": "4. 深度参数化",
+   "detail": "每层深度被限制在近/远平面 (η, f) 之间的等视差带内：anchor δ=(ℓ−0.5)/L，d_ℓ = [(δ + 0.5/L·tanh(V W_d))·(1/η − 1/f) + 1/f]^{-1}，即每层只能在自己的视差带内移动。density 为 σ=sigmoid(V W_σ)。"
+  },
+  {
+   "stage": "5. Upsample & Activate",
+   "detail": "最终 LDM 的未激活属性（depth、density、blend logits）先双线性上采样到输出分辨率，再施加非线性。Quark 上采样 3.75×，Quark+ 论文写 2.4×，但按表 9 的 432→1080 实为 2.5×。这一做法借鉴 ReLU Fields 的 post-activation，可以在平滑区插值的同时保持锐利的遮挡边界。blend weights 由最后一个 Fusion Block 的 One-to-many attention 产生，softmax 推迟到上采样之后才施加。"
+  },
+  {
+   "stage": "6. IBR 渲染",
+   "detail": "c_target = O(Σ_m β_m · P^T_θ(I, d), σ)：把全分辨率输入图像按各层深度反投影到 LDM 层，用每层每像素的 M 维 blend weights 做凸组合得到每层 RGB，再按 σ 由后向前 over 合成。推理时使用 CUDA 优化渲染器，1080p 约 1.3 ms/帧。每帧、每个目标视角都重新生成 LDM，用完即丢弃。"
+  },
+  {
+   "stage": "7. One-to-many attention 的复杂度技巧",
+   "detail": "单 query 的 cross-attention 中，把 W_i^K 折叠进 W_i^Q、W_i^V 折叠进 W^O，于是 head_i = Attention(V W_i^q, Δ, Δ)，完全省去对 M 个 Δ 的 K/V 投影矩阵乘。这些逐视角计算主要在图像空间完成后再 lift 到层空间。理论 FLOPs（d_k=32，N=8）：h=1 时为标准 cross-attention 的 1/8.1，h=2 时为 1/4.1，h=4 时为 1/2.0，h=8 时相同。h=4 时输入数从 4 增到 64，标准注意力开销涨 13.0×，本方法只涨 1.9×（接近 O(1)）。但编码与逐视角 update 仍为 O(M)，总运行时间约为 T_V + M·T_image。"
+  }
+ ],
+ "key_design_choices_zh": [
+  {
+   "choice": "以目标视角对齐的 LDM（分层深度图）作为逐帧即时生成、即时丢弃的中间表示",
+   "rationale": "LDM 介于全体积表示和表面之间：层数相当于体渲染的采样步，每层深度贴合平滑表面。它是 2D 结构，可以直接使用高效的 2D 网络，而且渲染只需逐像素 over 合成。为每个目标视角单独生成，可以把几何和混合权重“过拟合”到该视角，从而弥补 LDM 本身不能全方向观察的缺点，并在一定程度上模拟反射和折射。",
+   "alternatives_rejected": "平面 MPI/MSI（DeepView、StereoMag）：层数需求大；需显式实例化网格的 layered mesh（Immersive LF Video、SIMPLI）；全局一致的 NeRF/3DGS：需要慢速离线优化；ENeRF 的单层带厚度深度：深度复杂场景下失败。"
+  },
+  {
+   "choice": "学习式 render-and-refine，并嵌入多尺度 UNet，同时“升分辨率、降层数”",
+   "rationale": "沿用 DeepView 的学习化梯度下降思路：把当前估计渲染回输入视角，比较差异后再更新，约 5 次迭代即可收敛。早期在极低分辨率下用多层密集采样深度、定位表面，后期在高分辨率下用少量层贴合表面，把计算量在空间维和深度维之间取得平衡。消融显示：去掉 render-and-refine（Ĩ 置零）PSNR 从 30.41 降到 29.71；去掉 layer collapse 质量略升（30.56），但运行时间 +115%。",
+   "alternatives_rejected": "单分辨率的 render-and-refine（DeepView、SIMPLI 等）速度太慢，SIMPLI 需 4.4s；一次性前馈、不做迭代：质量更低。"
+  },
+  {
+   "choice": "IBR 混合输出（对输入像素做 blend weights 凸组合）而非直接回归 RGB",
+   "rationale": "网络只需在约 512×288 的分辨率下求解，高频纹理直接取自全分辨率输入图，因此能用很低的计算代价实现 1080p 到 2K 输出。消融中改为直接输出 RGB 时 PSNR 从 30.41 降到 29.18，LPIPS 从 0.154 升到 0.179，是所有消融中退化最大的一项。",
+   "alternatives_rejected": "网络直接解码 RGB（SIMPLI 式外观）：输出更糊；NeX/Ref-NeRF 式的显式视角相关外观模型：作者留作未来工作。"
+  },
+  {
+   "choice": "One-to-many attention 做跨视角融合，并用射线方向编码代替位置编码",
+   "rationale": "方法不依赖视角顺序，可支持可变的输入数量，而且表达力强于均值/方差/max-pool 这类聚合。去掉 cross-attention（把 keys 置零，相当于取均值）时 PSNR 从 30.41 降到 29.73。射线编码让网络偏向离目标视角近的射线，有利于非 Lambertian 表面，但在消融中收益很小（30.41 vs 30.32）。",
+   "alternatives_rejected": "NerFormer 的跨视角 self-attention：O(M²)；AggTransformer 的单次 softmax 聚合：表达力不足；简单拼接或 RNN：不具顺序不变性；均值/方差统计量。"
+  },
+  {
+   "choice": "只选取离目标最近的 8 个视角（训练时从最近 16 个中随机抽 8 个）",
+   "rationale": "控制每帧计算量以保证实时，同时通过随机抽样提升对视角选择的鲁棒性。",
+   "alternatives_rejected": "用全部视角优化一个全局几何（NeRF/3DGS）；学习式视角选择（作者提到可作为未来工作）。"
+  }
+ ],
+ "training_zh": "训练数据是 Spaces、RFF (LLFF)、NeX-Shiny、SWORD 四个静态多视角数据集的加权混合，前三者之外各数据集等权，较小的 Shiny 权重为 0.25。训练中没有任何动态或视频数据，也没有 DL3DV、Mip-NeRF360、T&T 或 N3DV。按样本调整内部 LDM 的宽高比，同时保持每层像素总数与 1080p 模型相同。近/远平面按 SfM（COLMAP）点的深度分布逐样本自适应设定。每个样本以 8 个输入视角（从离目标最近的 16 个中随机选取）渲染一个 held-out 目标视角。损失为 10·L1 + LPIPS。batch size 16，单台 16×A100 机器。先在半分辨率输入和半分辨率 LDM 上训练 250K 步，再在全分辨率上训练 350K 步，合计 600K 步。目标图与渲染图随机裁剪：低分辨率阶段 256×256，高分辨率阶段 512×512。学习率 20K 步内 warmup 到 1.5e-4，保持 520K 步，再在“最后 680K 步”内 cosine 衰减到 0。注意 20K+520K+680K=1.22M，与文中总计 600K 步矛盾，原文存在笔误或未说明。全模型使用 residual scaling (GPT-2 式) 以稳定训练。消融模型在半分辨率下只训练 250K 步。另有一个支持 4–16 张可变输入的变体，用于 Spaces 基线距离实验。",
+ "system_perf": [
+  {
+   "item": "主打性能",
+   "value": "1080p (1920×1080) 重建+渲染合计 30fps，单张 NVIDIA A100，8 路输入"
+  },
+  {
+   "item": "Quark 运行时间（表1，含重建+渲染）",
+   "value": "1024×768: 32.2 ms；2048×1536: 33.0 ms"
+  },
+  {
+   "item": "Quark+ 运行时间",
+   "value": "1024×768: 91.9 ms；2048×1536: 92.6 ms（约 11 fps，作者称“interactive”）"
+  },
+  {
+   "item": "基线运行时间（同硬件）",
+   "value": "ENeRF 205 ms (1024×768) / 811 ms (2048×1536)；SIMPLI 4.4 s；GPNR 25 s。Quark 比 ENeRF 快 >6×（2K 下 >20×），比 SIMPLI 快 >100×，比 GPNR 快 >700×"
+  },
+  {
+   "item": "最终 IBR 渲染器",
+   "value": "CUDA 优化，1080p 约 1.3 ms/帧"
+  },
+  {
+   "item": "内部 LDM 尺寸 Quark",
+   "value": "初始 24 层×36×64 → 输出 6 层×288×512，C=32，上采样 3.75× 到 1080p"
+  },
+  {
+   "item": "内部 LDM 尺寸 Quark+",
+   "value": "初始 32 层×54×96 → 输出 8 层×432×768，上采样约 2.5×（论文写 2.4×）"
+  },
+  {
+   "item": "输入视角数扩展",
+   "value": "运行时间随视角数线性增长 (T_V + M·T_image)；在 32 个输入视角以内保持 >10 fps（图7）"
+  },
+  {
+   "item": "输入基线",
+   "value": "主实验 8 视角、相距最大约 30 cm；Spaces 实验中基线约 10/20/30 cm"
+  },
+  {
+   "item": "训练硬件",
+   "value": "单台 16×A100 机器，600K 步（训练总时长未报告）"
+  },
+  {
+   "item": "未报告项",
+   "value": "显存占用、端到端延迟（采集/编码/传输）、消费级 GPU 上的速度、深度学习框架、立体（双目）渲染的开销均未报告"
+  }
+ ],
+ "results_zh": [
+  {
+   "dataset": "Real Forward Facing (RFF/LLFF) @1024×768",
+   "finding": "Quark 26.03 / 0.850 / 0.137 (PSNR/SSIM/LPIPS)，Quark+ 26.53 / 0.861 / 0.127；GPNR 25.42 / 0.816 / 0.218，ENeRF 23.71 / 0.780 / 0.224，SIMPLI 23.35 / 0.812 / 0.191。在 2048×1536 下 Quark 为 25.42 / 0.809 / 0.233，ENeRF 为 23.62 / 0.775 / 0.308。"
+  },
+  {
+   "dataset": "NeX-Shiny @1024×768",
+   "finding": "Quark 26.51 / 0.866 / 0.108，Quark+ 26.67 / 0.869 / 0.104；ENeRF 25.75 / 0.836 / 0.143，GPNR 25.98 / 0.840 / 0.160，SIMPLI 25.42 / 0.844 / 0.132。在 2048×1536 下 Quark 降为 24.66 / 0.799 / 0.174（LPIPS 明显变差）。"
+  },
+  {
+   "dataset": "Neural 3D Video (N3DV，动态) @1024×768",
+   "finding": "协议：视频裁剪到 300 帧，每 10 帧评一次，以 0 号相机为目标。Quark 31.57 / 0.942 / 0.127，Quark+ 31.95 / 0.945 / 0.122；ENeRF 29.86 / 0.922 / 0.172，GPNR 29.80 / 0.916 / 0.215，SIMPLI 28.79 / 0.919 / 0.169。在 2048×1536 下 Quark 为 31.46，ENeRF 为 29.62。"
+  },
+  {
+   "dataset": "DL3DV-10K benchmark（与逐场景优化方法比较，基线数值取自 DL3DV 论文，较低分辨率）",
+   "finding": "Quark 31.31 / 0.932 / 0.103，Quark+ 31.53 / 0.935 / 0.101，高于 Zip-NeRF 31.22 / 0.921 / 0.112、Mip-NeRF360 30.98 / 0.911 / 0.132、3DGS 29.82 / 0.919 / 0.120、Instant-NGP 25.01、Nerfacto 24.61。Quark 未在 DL3DV 上训练。"
+  },
+  {
+   "dataset": "Mip-NeRF360（3DGS 论文使用的场景）",
+   "finding": "Quark 26.60 / 0.774 / 0.214，Quark+ 26.91 / 0.784 / 0.207；M-NeRF360 27.69 / 0.792 / 0.237，3DGS-30K 27.21 / 0.815 / 0.214。Quark 排第三。"
+  },
+  {
+   "dataset": "Tanks&Temples",
+   "finding": "Quark 23.60 / 0.852 / 0.138，Quark+ 23.83 / 0.857 / 0.133，高于 3DGS-30K 的 23.14 / 0.841 / 0.183，排名第一。"
+  },
+  {
+   "dataset": "Deep Blending (Playroom)",
+   "finding": "Quark 23.61 / 0.837 / 0.289，远低于 3DGS-30K 的 30.04 / 0.906 / 0.242 和 M-NeRF360 的 29.66，只优于 Plenoxels 和 INGP。原因是最近 8 个视角覆盖不足；即使改用考虑视角角度差的选择启发式，仍出现硬边伪影。"
+  },
+  {
+   "dataset": "Spaces（基线距离鲁棒性，4–16 张可变输入模型）",
+   "finding": "小基线（约 10cm）29.03 / 0.9215 / 0.1586，中基线（约 20cm）29.57 / 0.9258 / 0.1541，大基线（约 30cm）29.43 / 0.9241 / 0.1541，三者表现相近。作者称 DeepView 在小基线上最好，但 SSIM 因预处理差异不可直接比较，也未给出 DeepView 的具体数值对比。"
+  }
+ ],
+ "ablations_zh": [
+  "设置：以 Quark+ 为基线，在半分辨率上训练 250K 步，在 DL3DV 上以 1080p 评测。基线结果为 PSNR 30.4071 / SSIM 0.9165 / LPIPS 0.1543。运行时间变化为未优化实现下的近似值。",
+  "No layer collapse：运行时间 +115.18%，质量略升（30.5635 / 0.9184 / 0.1531）。说明减层以很小的质量代价换来了超过 2 倍的加速。",
+  "Fewer iterations（去掉前两个 Update & Fuse，初始分辨率翻倍）：运行时间 −17.49%，结果 30.3227 / 0.9153 / 0.1554，几乎不掉点。作者承认这提示存在更优的速度/质量权衡，设计空间没有充分搜索。",
+  "No ray directional encoding（置零）：运行时间 −1.28%，结果 30.3179 / 0.9157 / 0.1555，收益很小。",
+  "No render-and-refine（渲染图 Ĩ 置零）：运行时间 −5.22%，结果 29.7106 / 0.9111 / 0.1599，PSNR 约 −0.7 dB。",
+  "No cross attention（keys 置零，退化为均值；计算 blend weights 时保留完整 keys）：运行时间 −3.09%，结果 29.7289 / 0.9097 / 0.1621。",
+  "RGB Output（直接用 appearance 特征的前 3 通道作为输出，而非 IBR 混合）：运行时间 −4.56%，结果 29.1779 / 0.8926 / 0.1788，是退化最大的一项。",
+  "Quark vs Quark+（附录图9，SWORD）：更大的 LDM 可以捕获更细的深度细节，差异主要体现在深度图特写中。",
+  "作者自述：分数差异很小，因为 DL3DV 多数场景较简单，差异集中在物体边界的少量像素上。"
+ ],
+ "limitations_stated_zh": [
+  "不强制时间一致性：视频逐帧独立重建，会产生闪烁。目标相机移动时，作为输入的相机集合会发生切换，这也会引起闪烁；输入之间曝光差异大时尤为明显。在这一点上，离线的全场景方法（NeRF/3DGS）优于 Quark。",
+  "blend weights 是输入颜色的凸组合，无法准确表示视角相关材质，只能借助逐帧优化和射线编码“近似”复现部分反射和折射。",
+  "blend weights 对输入曝光不一致、焦距不同的情况敏感，会产生边缘伪影和闪烁；相机标定有误差时，会产生错误的硬边，而不是其他方法那种较温和的模糊。",
+  "为保证实时只能使用少量输入（8–16 张）。当最近视角覆盖不足时（Mip-NeRF360、Deep Blending），视图边缘附近会出现伪影，失败方式比逐场景优化方法更难看（硬边而非模糊）。需要更好的视角选择或全局几何。",
+  "所有评测指标都不衡量时间闪烁。",
+  "超参数众多，设计空间没有充分探索；可能存在同等质量但更快的配置。",
+  "LDM 与 LM 在历史上的问题是不能从任意方向观看；Quark 靠逐视角重新生成来缓解这一点。",
+  "消融使用未优化的实现，运行时间变化为近似值；消融分数差异很小。"
+ ],
+ "limitations_unstated_zh": [
+  "“2K 实时”的含义需要细看。内部 LDM 分辨率是固定的，Quark 为 6 层×288×512，1024×768 与 2048×1536 的运行时间几乎相同（32.2 vs 33.0 ms），说明高分辨率输出主要来自 IBR 取样和双线性上采样，几何分辨率并没有提高。表1中 Quark 从 1024×768 到 2048×1536，Shiny 上 PSNR 从 26.51 降到 24.66、LPIPS 从 0.108 升到 0.174，RFF 上 LPIPS 从 0.137 升到 0.233，高分辨率下的感知质量明显退化。",
+  "“30fps”只是单张 A100 上的纯网络推理吞吐，不含采集、解码、标定、传输和显示。论文没有报告端到端延迟、显存占用和消费级 GPU 上的数据，对 telepresence 部署而言关键信息缺失。",
+  "表示是目标视角相关的：每个新视角（包括 VR/3D 显示器所需的左右眼两个视角，或多个观众）都要完整跑一遍网络，计算量随视点数线性增长。论文全文没有讨论立体或多视点输出（全文检索无 stereo 渲染相关讨论），这与 3DGS 等“一次重建、多视角渲染”的方案有本质差别。",
+  "表1 的比较存在混杂因素：基线是在 RFF+IBRNet 数据上重训的，Quark 则用 Spaces+RFF+Shiny+SWORD 训练，训练数据不同。而且 Quark 在 RFF 和 Shiny 的评测场景是否从训练集中剔除，论文没有说明（训练集包含这两个数据集，评测只说明了 held-out 目标视角）。",
+  "DL3DV 和 3DGS 数据集的比较中，基线数值直接照搬原论文，分辨率和预处理未必与 Quark 一致，作者承认 DL3DV 基线“只在较低分辨率下有分数”。另外，每 8 帧取一帧作为目标、其余相邻帧作为输入，在稠密视频轨迹上是插值式设定，最近邻视角非常接近，这天然有利于 IBR。它与摘要宣称的“稀疏宽基线”场景并不一致。",
+  "没有与同期的 feed-forward 3DGS 路线比较，也没有引用 pixelSplat、MVSplat、GPS-Gaussian（均早于投稿），以及同期的 LVSM/GS-LRM 类大模型。因此“SOTA real-time generalizable”的结论只相对于 ENeRF、GPNR、SIMPLI 这三个较旧的基线成立。",
+  "动态场景评测很薄弱：训练集里没有动态数据，动态评测只有 N3DV 一个数据集，且只以 0 号相机为目标、每 10 帧评一帧，没有任何时间稳定性指标（如 tOF、flicker）。也没有针对人像或人体的评测（面部、头发、快速运动），而这些正是 telepresence 的核心内容。",
+  "方法依赖精确的相机标定，以及由 SfM 点估计的逐场景近/远平面。在实时系统中，深度范围怎样在线获取、视锥外物体怎样处理，论文都没有讨论；深度被硬性限制在各层等视差带内，也意味着 [η, f] 设置不当时会直接失败。",
+  "消融只做了单次训练，没有方差；各项差异很小（例如射线编码只带来 0.09 dB），且是在半分辨率、250K 步的缩短设置下完成的，统计显著性存疑。",
+  "原文存在若干数值不一致：学习率日程（20K+520K+680K=1.22M）与总训练步数 600K 矛盾；Quark+ 输出 LDM 在正文写作 768×438，表9 为 432×768，据此上采样因子应为 2.5× 而非文中的 2.4×；表8 中编码特征为 36×60，而 LDM 为 36×64。这些都是小问题，但会影响复现。",
+  "代码和权重均未开放，复现门槛高。后续工作（iLRM、MVP、AnySplat、LVT 等）基本只在相关工作部分引用 Quark，没有与它做定量对比，Quark 的结论至今缺少独立验证。"
+ ],
+ "lineage": {
+  "predecessors": [
+   {
+    "title": "DeepView: View Synthesis with Learned Gradient Descent",
+    "year": 2019,
+    "url": "https://arxiv.org/abs/1906.07316",
+    "note_zh": "同一作者团队（Flynn、Broxton、DuVall、Overbeck）。提出 learned gradient descent / render-and-refine 和 MPI 表示，并用 max-pool 做跨视角聚合，还发布了 Spaces 数据集。Quark 核心思想的直接来源。"
+   },
+   {
+    "title": "Immersive Light Field Video with a Layered Mesh Representation",
+    "year": 2020,
+    "url": "https://doi.org/10.1145/3386569.3392485",
+    "note_zh": "Google 团队（Broxton、Flynn、Overbeck、Debevec 等）的 SIGGRAPH 2020 论文。先用 MSI 求解再转换为 layered mesh 做沉浸式光场视频，是 LDM/LM 表示的前身，但为离线处理。"
+   },
+   {
+    "title": "Stereo Magnification: Learning View Synthesis using Multiplane Images",
+    "year": 2018,
+    "url": "https://arxiv.org/abs/1805.09817",
+    "note_zh": "MPI 表示的开山之作，Flynn 为共同作者；Quark 的分层半透明表示源自此线。"
+   },
+   {
+    "title": "Stereo Magnification with Multi-Layer Images",
+    "year": 2022,
+    "url": "https://arxiv.org/abs/2201.05023",
+    "note_zh": "StereoLayers（Khakhulin 等），用少量非平面层（layered mesh）代替 MPI，Quark 将其列为 LM 类前作。"
+   },
+   {
+    "title": "Self-improving Multiplane-to-layer Images for Novel View Synthesis",
+    "year": 2022,
+    "url": "https://arxiv.org/abs/2210.01602",
+    "note_zh": "SIMPLI（WACV 2023），同样采用 render-and-refine 与 LDM 几何，是与 Quark 最接近的基线。Quark 通过多尺度和 One-to-many attention 实现了超过 100 倍的加速和更好的质量。"
+   },
+   {
+    "title": "Efficient Neural Radiance Fields for Interactive Free-viewpoint Video",
+    "year": 2021,
+    "url": "https://arxiv.org/abs/2112.01517",
+    "note_zh": "ENeRF（SIGGRAPH Asia 2022），在 Quark 之前最快的可泛化 NeRF，用单层带厚度深度引导采样。Quark 的主要速度对标对象，在深度复杂场景中不如 Quark。"
+   },
+   {
+    "title": "Generalizable Patch-Based Neural Rendering",
+    "year": 2022,
+    "url": "https://arxiv.org/abs/2207.10662",
+    "note_zh": "GPNR（ECCV 2022），沿极线取 patch 送入 Transformer 回归颜色。质量强但慢（25s），Quark 比它快 700 倍以上。"
+   },
+   {
+    "title": "IBRNet: Learning Multi-View Image-Based Rendering",
+    "year": 2021,
+    "url": "https://arxiv.org/abs/2102.13090",
+    "note_zh": "可泛化 IBR 与跨视角特征聚合（均值/方差统计）的代表作；Quark 的基线在其数据上重训。"
+   },
+   {
+    "title": "Local Light Field Fusion: Practical View Synthesis with Prescriptive Sampling Guidelines",
+    "year": 2019,
+    "url": "https://arxiv.org/abs/1905.00889",
+    "note_zh": "提供 RFF/LLFF 数据集与 MPI 融合思路，Quark 的训练与评测数据之一。"
+   },
+   {
+    "title": "NeX: Real-time View Synthesis with Neural Basis Expansion",
+    "year": 2021,
+    "url": "https://arxiv.org/abs/2103.05606",
+    "note_zh": "提供 Shiny 数据集与视角相关外观的基函数展开，Quark 把显式视角相关建模列为未来工作。"
+   },
+   {
+    "title": "ReLU Fields: The Little Non-linearity That Could",
+    "year": 2022,
+    "url": "https://arxiv.org/abs/2205.10824",
+    "note_zh": "“先插值后激活”能在低分辨率网格上得到锐利边界。Quark 的 Upsample & Activate 由此而来。"
+   },
+   {
+    "title": "An Introduction to Transformers",
+    "year": 2023,
+    "url": "https://arxiv.org/abs/2304.10557",
+    "note_zh": "Turner 的教程，其中指出可把 K/V 投影折叠进 Q 和输出投影的冗余，这是 One-to-many attention 的理论依据。"
+   },
+   {
+    "title": "GPS-Gaussian: Generalizable Pixel-wise 3D Gaussian Splatting for Real-time Human Novel View Synthesis",
+    "year": 2023,
+    "url": "https://arxiv.org/abs/2312.02155",
+    "note_zh": "并行路线，Quark 未引用：面向人像的实时 feed-forward 3DGS，是 telepresence 场景下的重要对照，锚点论文 B 引用了它。"
+   }
+  ],
+  "successors": [
+   {
+    "title": "LVT: Large-Scale Scene Reconstruction via Local View Transformers",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2509.25001",
+    "note_zh": "SIGGRAPH Asia 2025，与 Quark 团队重叠（Flynn、Chai、Heal、Luo）。沿用“近邻视角信息最有用”的思路，只在局部邻域内做注意力以避免二次复杂度，并用相对几何变换编码代替位置编码。输出带视角相关颜色和不透明度的 3DGS，可一次前向重建任意大的场景。是 Quark 局部视角融合思想的延伸，表示从逐视角 LDM 换成了持久的 3DGS。"
+   },
+   {
+    "title": "Learning Efficient Fuse-and-Refine for Feed-Forward 3D Gaussian Splatting",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2503.14698",
+    "note_zh": "NeurIPS 2025，原名 SplatVoxel，作者含 Quark 的 Chai、Luo、Lombardi、Sun。把 pixel-aligned Gaussians 聚合到由粗到细的体素层级，用稀疏体素 Transformer 融合精化，支持带历史记忆的动态场景在线重建，单张 H100 上 15 fps、350 ms 延迟。其附表把 Quark 列为不支持动态和时间融合的方法，直接针对 Quark 的时间一致性缺陷。"
+   },
+   {
+    "title": "Online Neural Space Time Memory for Dynamic Novel View Synthesis",
+    "year": 2026,
+    "url": "https://arxiv.org/abs/2607.15271",
+    "note_zh": "与 Quark 作者高度重叠（Tsai、Kaza、Sun、Lombardi、Luo，以及 Seitz）。面向多视角流式视频的在线 NVS，用 Test-Time Training 记忆存储长时历史：约 1 FPS 更新记忆，逐帧应用记忆，以 30 FPS 输出新视角；在 256×256、单张 H100 上达到摊销实时，针对动态人体运动和分钟级记忆。可看作 Quark“无时间一致性”问题的团队内后续方案。"
+   },
+   {
+    "title": "Scaling Transformer-Based Novel View Synthesis Models with Token Disentanglement and Synthetic Data",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2509.06950",
+    "note_zh": "ICCV 2025，作者含 Kaza、Luo、Lombardi。用扩散模型生成的合成数据扩展 LVSM 类 Transformer NVS 的训练集，并提出 token disentanglement。相关工作中称 Quark 能在高得多的分辨率下达到 SOTA。"
+   },
+   {
+    "title": "iLRM: An Iterative Large 3D Reconstruction Model",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2507.23277",
+    "note_zh": "迭代精化的 feed-forward 3DGS 大模型，把场景表示与输入图像解耦以提升可扩展性。明确批评 Quark 的表示局限于目标视角，缺乏显式、持久的 3D 表示。"
+   },
+   {
+    "title": "Multi-view Pyramid Transformer: Look Coarser to See Broader",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2512.07806",
+    "note_zh": "采用视角间由局部到全局、视角内由细到粗的双层级结构，可一次前向从数十到数百张图重建大场景（3DGS）。在引言中把 Quark 作为多尺度高效设计的参照。"
+   },
+   {
+    "title": "AnySplat: Feed-forward 3D Gaussian Splatting from Unconstrained Views",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2505.23716",
+    "note_zh": "ACM TOG，从无位姿图像集合一次前向预测 3DGS 和相机参数，去掉了 Quark 依赖精确标定的前提；引用 Quark。"
+   },
+   {
+    "title": "tttLRM: Test-Time Training for Long Context and Autoregressive 3D Reconstruction",
+    "year": 2026,
+    "url": "https://arxiv.org/abs/2602.20160",
+    "note_zh": "CVPR 2026，用 TTT 层实现线性复杂度的长上下文、自回归、流式 3D 重建，可解码为 GS；引用 Quark。"
+   },
+   {
+    "title": "LiveStre4m: Feed-Forward Live Streaming of Novel Views from Unposed Multi-View Video",
+    "year": 2026,
+    "url": "https://arxiv.org/abs/2604.06740",
+    "note_zh": "面向无位姿多视角视频直播的 feed-forward NVS：先用多视角 ViT 重建关键帧，再用扩散 Transformer 插值以保证时间一致性，并内置相机位姿预测器。在“免标定”和“时序稳定”两点上直接回应 Quark 的限制。"
+   },
+   {
+    "title": "GaussianNexus: Room-Scale Real-Time AR/VR Telepresence with Gaussian Splatting",
+    "year": 2025,
+    "url": "https://doi.org/10.1145/3746059.3747693",
+    "note_zh": "UIST 2025，房间尺度实时 AR/VR telepresence 系统，基于 3DGS；引用 Quark，属于 HCI/系统侧的应用后继。"
+   },
+   {
+    "title": "Tele360: Real-Time Feed-Forward Human Reconstruction from Sparse Unposed Cameras",
+    "year": 2026,
+    "url": "https://arxiv.org/abs/2609.15032",
+    "note_zh": "竞争路线（未核实是否引用 Quark）：从稀疏、无位姿 RGB 流实时 feed-forward 重建动态人体 3DGS，用视频编码器把 Gaussian maps 推流到远端，在单张消费级 GPU 上实现 2K 输入到渲染超过 25 FPS。与 Quark 的逐视角服务端渲染形成对照。"
+   },
+   {
+    "title": "LVSM: A Large View Synthesis Model with Minimal 3D Inductive Bias",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2410.17242",
+    "note_zh": "同期竞争路线，Quark 未比较：几乎不带 3D 归纳偏置的纯 Transformer NVS。质量强，但分辨率和速度远不及 Quark，是 2025 年后“大模型 NVS”主线的起点，也是上面 Scaling 一文的基座。"
+   }
+  ]
+ },
+ "takeaways_for_telepresence_zh": [
+  "Quark 证明了“无需逐场景优化、每帧 feed-forward 重建+渲染”可以在 1080p/30fps 下达到接近离线 NeRF/3DGS 的质量。对 Project Starline / Google Beam 这类固定多相机舱体（8 路相机、基线 ≤30cm、标定精确）来说，它正好落在舒适区。",
+  "逐目标视角的 LDM 很适合“服务端按观看者头部位姿渲染、再推送 2D 视频”的云端架构。但双目 HMD 或光场显示需要每眼、每视点各推理一次，成本线性增长。若要本地多视点显示，应考虑一次重建、多次渲染的持久表示（如 LVT、SplatVoxel、Tele360 采用的 3DGS）。",
+  "IBR blend weights 用很低的算力换来高分辨率纹理，但对相机之间的曝光和白平衡差异、标定误差非常敏感，出错时是硬边而不是模糊。实际系统必须做严格的颜色标定、同步和在线标定监控；视角相关的高光（眼睛、皮肤油光）也只能近似表现。",
+  "时间闪烁是 Quark 公认的短板：逐帧独立重建，且随目标视角移动切换输入相机。锚点论文 B（几何引导的在线 3D 视频合成，强调多视角时间一致性）和 Google 团队自己的后续 SplatVoxel、NSTM 都在补这一块。做 telepresence 时应把时间稳定性指标（如 flicker、tOF）纳入评测，而不只看逐帧 PSNR。",
+  "有两个可以直接复用的工程技巧。一是 One-to-many attention：单 query 的 cross-attention 把 K/V 投影折叠进 Q/O，融合代价对视角数接近 O(1)。二是由粗到细的“升分辨率、降层数”配合 layer collapse：去掉 layer collapse 会慢 115%，而消融还显示减少迭代次数可再省 17% 且几乎不掉点。这两者都适合移植到实时多视角融合网络中。",
+  "论文没有人像或人体评测，也没有端到端延迟、显存和消费级 GPU 的数据。评估它能否用于通话时，需要自行在多视角人像数据上测试头发、面部、快速手势和遮挡，并在目标硬件上测出含编码与传输的 motion-to-photon 延迟。",
+  "Quark 没有开源，后续论文大多只在相关工作中引用、没有定量对比。若以它为 baseline，需要自己复现（结构细节见附录表8、表9）。复现时还要注意原文中学习率日程与总步数、上采样因子等数值不一致之处。"
+ ]
+}

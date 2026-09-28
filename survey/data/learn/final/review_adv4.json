@@ -1,0 +1,837 @@
+{
+ "topics": [
+  {
+   "id": "a-diffusion-3d",
+   "title_zh": "扩散模型与三维/新视角生成先验",
+   "title_en": "Diffusion models as 3D / novel-view priors",
+   "overview_zh": "为什么新视角合成需要“生成”？给定 K 张已标定输入，目标视角里总有一部分像素没有被任何输入相机看到，例如人物转身后露出的背部、被手臂挡住的躯干、视锥外的墙角。这些区域的正确答案不唯一（多模态）。Quark 和 Ha et al. 都是确定性网络。Quark 的最终颜色是全分辨率输入像素按 blend weights 做的凸组合（每层先混合，再按 density 做 over 合成），只能在输入颜色之间“插值”，无法为所有输入都没看到的区域创造新内容。Ha et al. 用一个 4 层 U-Net 预测背景图 I_BG 来补洞，训练用的是 0.8·L1+0.2·SSIM（另加深度一致项和空洞掩码项）这类回归损失；面对多种可能答案时，回归网络只能输出它们的折中（L2 损失下是条件均值，L1 损失下是条件中位数），画面上表现为模糊或硬边伪影。扩散模型走的是另一条路：学习图像（或多视图、视频）的完整分布 p(x|c)，在不确定的地方采样出一个清晰、合理的答案。本专题讲扩散模型怎样从 2D 图像生成器变成三维和新视角的先验，以及它为什么至今没有进入 Quark、Ha et al. 这类实时临场管线。\n\n核心思想。扩散模型（DDPM）把“生成”拆成很多次“去噪”：前向过程逐步给图像加高斯噪声，网络学习在任意噪声水平下预测所加的噪声。LDM 把这一过程搬到 VAE 的低维潜空间（下采样因子 f=4–8），十亿参数级的文生图模型（Stable Diffusion）因此才训练得动。把 2D 扩散用于 3D 有三种接口。① 作为损失：DreamFusion 提出 Score Distillation Sampling（SDS），把 NeRF 渲染图加噪后交给冻结的扩散模型“打分”，再把预测噪声与真实噪声之差回传给 3D 参数。② 作为视角生成器：Zero-1-to-3 以相对相机位姿为条件微调 Stable Diffusion；MVDream 和 CAT3D 用跨视图的 3D self-attention 一次生成多张一致的视图，再交给常规 3D 重建；视频扩散模型（SVD）则把“相机在移动的视频”当作天然的多视图数据。③ 作为修复器或正则项：ReconFusion 在未观测视角处用扩散先验正则 NeRF；Difix3D+ 用单步扩散清除渲染伪影，既可以把结果蒸馏回 3D，也可以在推理时作为一个 76 ms（A100）的后处理。\n\n演化。2020 年 DDPM 在 CIFAR-10 上达到 FID 3.17，但采样需要 1000 步。同年的 DDIM 用非马尔可夫过程把采样加速 10–50 倍。2021 年 LDM 把扩散搬进潜空间。2022 年 DreamFusion 证明不需要任何 3D 数据也能“从文本蒸馏出 3D”，代价是每个场景要在 4 芯片 TPUv4 上优化约 1.5 小时。2023 年进入“相机可控”阶段：Zero-1-to-3（在 80 万以上 Objaverse 物体上训练）、MVDream（4 视图联合生成）、SVD（1.52 亿视频片段预训练，并证明可微调为多视图生成器）、ADD（1–4 步采样）。2024 年 CAT3D 把“生成大量视图再稳健重建”做到约一分钟一个场景。2025 年 Difix3D+ 把扩散变成单步修复器；CausVid（2024 年底公开，CVPR 2025）把 50 步双向视频扩散蒸馏成 4 步因果自回归生成器，单卡 H100 上 9.4 FPS，首帧延迟 1.3 s。\n\n现状（截至 2026-09）。稀疏视角重建和单图生成三维场景的最强方法几乎都依赖扩散先验，例如 CAT3D、Stable Virtual Camera、Bolt3D。实时方向集中在“少步 + 因果 + KV cache”：Self Forcing 在单张 H100 上以 832×480 分辨率达到 17 FPS、首帧延迟 0.69 s；RealCam 用少步自回归视频扩散做单目输入、相机可控的视频到视频生成，单卡 H20 上首帧延迟 0.72 s（5B 模型）到 1.15 s（1.3B 模型）；LiveStre4m 在多视角直播中用扩散 Transformer 做关键帧之间的时间插值。拿临场系统的硬指标对照：Starline 回环端到端延迟 105.8 ms，对话同步的上限约 250 ms，Quark 的重建加渲染合计只有 32.2 ms。多步生成仍慢一到两个数量级，目前最接近可部署的形态是单步修复器。更根本的争议在忠实性：远程临场要显示“真实的对方”，生成内容最多只能用在确实没被任何相机看到的区域，而且必须在时间上保持稳定。",
+   "key_ideas": [
+    {
+     "name_zh": "前向加噪与去噪训练：扩散模型在学什么",
+     "explain_zh": "直觉：如果能从“加了一点噪声的图”里猜出噪声，就能把图往“自然图像”的方向推一小步；把 1000 个小步串起来，就能从纯噪声走到一张图。前向过程在任意一步 t 都有闭式解（公式 1），所以训练时随机抽一个 t 和一份噪声 ε，一次计算就得到训练样本 x_t，网络 ε_θ 只需回归 ε（公式 2）。数值例子：DDPM 用线性调度，β 从 1e-4 增到 0.02，T=1000。t=200 时 \\(\\sqrt{\\bar\\alpha_t}\\approx0.81\\)，噪声标准差约 0.58，图像结构仍清晰可辨；t=500 时信号系数只剩约 0.28，内容已几乎看不出。理解这一点的回报：去噪网络本质上是一个“给定噪声水平，把输入拉回自然图像流形”的算子。Difix 正是利用这一点，把带 NeRF/3DGS 伪影的渲染图当作“某个噪声水平下的图”做单步去噪（见第 6 条）。与锚点的联系：Quark 和 Ha et al. 的网络都在回归一个确定的答案，扩散模型学的则是一个分布。有了这层区分，才能理解为什么锚点方法在去遮挡区表现为“模糊或硬边”，而生成方法表现为“清晰但未必真实”。"
+    },
+    {
+     "name_zh": "潜空间扩散与条件注入（LDM、classifier-free guidance）",
+     "explain_zh": "直觉：像素空间里大部分比特花在人眼不敏感的高频细节上。先用 VAE 把图像压到低维潜空间，再在潜空间里做扩散，计算量能降一个数量级以上。LDM 比较了下采样因子 f∈{1,2,4,8,16,32}，结论是 f=4 和 f=8 在质量和速度之间最平衡。数值例子：Stable Diffusion 把 512×512×3 的图像编码成 64×64×4 的潜变量，元素数减少 48 倍（786,432 → 16,384）。条件 c（文本、图像、相机位姿）通过 cross-attention 或通道拼接注入。classifier-free guidance 用 \\(\\hat\\epsilon=\\epsilon_\\theta(x_t,\\varnothing)+w\\,[\\epsilon_\\theta(x_t,c)-\\epsilon_\\theta(x_t,\\varnothing)]\\) 放大条件的作用：w 越大，结果越贴合条件，多样性越低。DreamFusion 发现 SDS 需要 w=100，远大于普通图像采样常用的 5–30，否则结果过度平滑。与锚点的联系：Quark 的思路与 LDM 很像。它在 288×512（Quark）或 432×768（Quark+）的低分辨率上求解几何和混合权重，高频细节直接从全分辨率输入图像里取；LDM 的高频细节则交给 VAE decoder 补回。两者都是“在压缩空间里做昂贵的推理，把高频留给便宜的解码或取样”。"
+    },
+    {
+     "name_zh": "把 2D 扩散当作 3D 优化的损失：Score Distillation Sampling",
+     "explain_zh": "直觉：手里没有 3D 训练数据，却有一个很懂 2D 图像的扩散模型。做法是随机选一个相机渲染 NeRF，给渲染图加噪，再让扩散模型预测噪声。如果渲染图“像一张符合文本描述的真实照片”，预测噪声就会接近真实加入的噪声；两者之差指出“该往哪里改”，再经过渲染器的雅可比 ∂x/∂φ 回传给 NeRF 参数（公式 3）。SDS 有意省略了 U-Net 自身的雅可比，所以不需要对扩散模型做反向传播。代价有两个。一是它是 mode-seeking 的，结果偏饱和、偏平滑。二是它属于逐场景优化：DreamFusion 每个 prompt 要在 4 芯片 TPUv4 上迭代 15,000 次，约 1.5 小时。与锚点的联系：这是“逐场景优化”范式在生成领域的极端形态，恰好站在 Quark 的对立面，因为 Quark 的卖点正是不做任何逐场景优化、每帧直接 feed-forward。理解 SDS 能帮你读懂后续大量“用扩散先验正则 3D 重建”的论文（ReconFusion 也在新视角处施加类似的扩散引导），也能看清这类方法为什么不能直接用于 30 fps 的临场。"
+    },
+    {
+     "name_zh": "相机条件化与多视图联合生成：Zero-1-to-3 → MVDream → CAT3D",
+     "explain_zh": "直觉：要让扩散模型“换个角度看”，就得把相机告诉它。Zero-1-to-3 在 Objaverse（80 万以上 3D 模型）的渲染数据上微调 Stable Diffusion，条件是输入图和相对位姿（用极角、方位角、半径表示的相对旋转与平移）。它一次只生成一张图，多次独立采样之间彼此不一致。MVDream 把 SD 原有的 2D self-attention“膨胀”成跨视图的 3D self-attention，一次生成 4 张正交视图，让各视图能互相“看见”。CAT3D 沿用这种 3D self-attention，并用 raymap 编码相机：每个潜空间像素存一条射线的原点和方向，坐标系取第一张条件图的相机。单图输入时它生成 80 张视图，少视图输入时生成 480–960 张，再用加了 LPIPS 损失的 Zip-NeRF 稳健重建，一个场景最快约 1 分钟。消融显示，raymap 的泛化能力远好于把位姿压成一个低维向量。与锚点的联系：raymap 和 Quark 的射线方向编码 γ（见 l-encoding）是同一个思想，都把相机几何以“逐像素射线”的形式交给网络。区别在于：CAT3D 编码射线本身（以第一张条件图的相机为参考系）；Quark 编码的是输入射线相对目标射线的偏差（两条射线与 LDM 近/远平面交点之差，重合时为 0），直接告诉网络“这个输入像素离目标视线有多远”。CAT3D 的 3D self-attention 和 Quark 的 One-to-many attention 都在做跨视图的信息交换，但复杂度差别很大：前者对所有视图的所有 token 做全注意力，代价随视图数平方增长；后者以 LDM 特征为唯一 query，并把 K/V 投影折叠掉，注意力部分的代价几乎不随输入视角数增长（h=4 时输入从 4 增到 64，标准 cross-attention 涨 13.0×，它只涨 1.9×）；不过逐视角的编码和 update 仍随视角数线性增长。这正是“离线生成”和“实时渲染”在架构上的分水岭。"
+    },
+    {
+     "name_zh": "视频扩散作为“视角 + 时间”的双重先验（SVD 及其后继）",
+     "explain_zh": "直觉：相机在移动的一段视频本身就是一组多视图；人物在动的一段视频则包含了运动和时间一致性。视频扩散模型在海量视频上训练，所以同时学到了这两种先验。Stable Video Diffusion 从 5.8 亿个视频片段（LVD）中筛出 1.52 亿个用于预训练，输出 14 帧或 25 帧。论文还展示了它可以微调成多视图生成器，并且优于基于图像扩散的多视图方法。后续的 ViewCrafter、Stable Virtual Camera、FrameCrafter 都走这条路。FrameCrafter 把稀疏视角 NVS 表述为“低帧率视频补全”，并去掉时间位置编码，使模型对输入顺序不敏感。与锚点的联系：Ha et al. 标题里的“多视角时间一致性”，正是视频扩散天生具备、逐帧回归网络却缺少的性质。Ha et al. 只在深度一端换取时间稳定（颜色差分掩码递归滤波，再把上一帧 TSDF 深度回灌），融合网络本身没有任何时间状态，训练中也没有时间损失。另一方面，FrameCrafter 对输入顺序不变的要求，与 Quark 的 One-to-many attention 对视角顺序不变是同一个设计约束：只要输入是一组无序的相机，就必须满足它。Ha et al. 的 U-Net 把 K 个视角按通道拼接输入，不具备置换不变性，需要固定的视角排序。"
+    },
+    {
+     "name_zh": "生成式修复器：ReconFusion 与 Difix3D+",
+     "explain_zh": "直觉：与其让扩散模型从头生成，不如只让它“修补”渲染结果中不可信的部分。ReconFusion 训练了一个以 PixelNeRF 特征为条件的新视角扩散模型，在只有 3、6 或 9 张输入的少视图重建里，把它作为 Zip-NeRF 在未观测相机处的正则项。Difix3D+ 更进一步。它以单步模型 SD-Turbo 为底座，冻结 VAE 编码器，用 LoRA 微调解码器，并加入参考视图混合层，把干净的输入视图作为条件。它的关键观察是：带 NeRF/3DGS 伪影的渲染图，分布上接近扩散训练中某个中等噪声水平的图像。作者用预训练 SD-Turbo 扫描噪声水平：τ=200 的指标最好（PSNR 17.73）；τ=1000 时只有 12.18，因为图像内容被改写；τ=10 时 PSNR 为 17.72，数值几乎持平，但模型只做微小调整，大部分伪影原样保留。按 Stable Diffusion 的噪声调度，τ≈200 意味着 \\(x_\\tau\\approx0.87\\,x_0+0.49\\,\\epsilon\\)，也就是修正幅度中等、上下文得以保留。它有两种用法：训练时把修好的新视角蒸馏回 3D，以保证多视一致；推理时作为后处理，在 A100 上只增加 76 ms，比多步扩散快 10 倍以上。整体上 PSNR 提升超过 1 dB，FID 改善约 2 倍。与锚点的联系：它正好对准两篇锚点的薄弱环节。Quark 在视角覆盖不足时会出现硬边伪影（Deep Blending 上只有 23.61 dB，3DGS 为 30.04 dB）；Ha et al. 的 I_BG 补洞来自一个没有生成先验的 4 层 U-Net。但 76 ms 是 Quark 全部 32.2 ms 预算的 2.4 倍，而且逐帧后处理不保证时间一致。“扩散修复器能否进入实时临场”的核心矛盾就在这里。"
+    },
+    {
+     "name_zh": "少步蒸馏与因果化：从 1000 步到 1 步，从双向到流式",
+     "explain_zh": "直觉：扩散采样的成本 = 步数 × 单步网络开销。提速因此有两条路：减少步数；让视频按时间顺序一块块生成，并复用历史计算。DDIM 把 DDPM 的马尔可夫链换成训练目标相同的非马尔可夫过程，采样快 10–50 倍。ADD（2023）用“分数蒸馏 + 对抗损失”把 SDXL 压到 1–4 步，4 步即可追平原模型；Difix 使用的 SD-Turbo 就来自这条技术线。视频方面，CausVid 用分布匹配蒸馏（DMD）把 50 步的双向扩散 Transformer 压成 4 步的因果自回归生成器，配合 KV cache 做流式生成：首帧延迟 1.3 s，之后约 9.4 FPS；作为对比，双向教师模型生成一段 10 秒视频要 219.2 s。与锚点的联系：Quark 的 learned render-and-refine 本身就是一个被展开、被训练的少步迭代求解器（见 l-iterative），用 5 次 Update & Fuse 替代了 DeepView 式的多次梯度下降。它的消融（半分辨率、250K 步的缩短设置）显示，去掉前两次迭代能减少 17.49% 的运行时间，而 PSNR 只从 30.41 降到 30.32。这与扩散蒸馏是同一个逻辑：用训练把迭代步数压到最少。区别在于，Quark 每一步都用观测（渲染图与输入之间的残差）来纠正估计，生成模型的每一步只依赖自身预测，所以后者在流式生成中会累积误差、产生长时漂移。"
+    }
+   ],
+   "equations": [
+    {
+     "tex": "x_t=\\sqrt{\\bar\\alpha_t}\\,x_0+\\sqrt{1-\\bar\\alpha_t}\\,\\epsilon,\\qquad \\epsilon\\sim\\mathcal N(0,I),\\qquad \\bar\\alpha_t=\\prod_{s=1}^{t}\\left(1-\\beta_s\\right)",
+     "explain_zh": "前向加噪的闭式解。x_0：干净样本（LDM 中是 VAE 潜变量，Difix 中是渲染图的潜变量）；t：噪声步序号，取值 1…T，DDPM 取 T=1000；β_s：第 s 步加入的噪声方差，即噪声调度；\\(\\bar\\alpha_t\\)：到第 t 步累计保留的信号能量比例；ε：与 x_0 同形状的标准高斯噪声；x_t：第 t 步的带噪样本。例：DDPM 线性调度下，t=200 时 \\(\\sqrt{\\bar\\alpha_t}\\approx0.81\\)，\\(\\sqrt{1-\\bar\\alpha_t}\\approx0.58\\)。Stable Diffusion 调度下，t=200 时两者约为 0.87 和 0.49；Difix 选 τ=200 做单步修复时，输入就处在这个噪声水平。"
+    },
+    {
+     "tex": "\\mathcal L(\\theta)=\\mathbb E_{x_0,\\,c,\\,t,\\,\\epsilon}\\Big[\\big\\|\\epsilon-\\epsilon_\\theta(x_t,\\,t,\\,c)\\big\\|_2^2\\Big]",
+     "explain_zh": "带条件的去噪训练目标（DDPM 的简化损失再加上条件 c）。ε_θ：去噪网络（U-Net 或 Transformer），输入带噪样本 x_t、步序号 t 和条件 c，输出对所加噪声的估计。期望对训练数据 x_0、条件 c、随机步 t、随机噪声 ε 取。不同论文的差别几乎都在 c 上：LDM 中 c 是文本嵌入；Zero-1-to-3 中 c=(输入图, 相对旋转 R, 相对平移 T)；CAT3D 中 c 是输入视图的潜变量加上每个视图的 raymap；Difix 中 c 是干净的参考视图。例：某元素的真实噪声为 0.30、网络预测为 0.25，则该元素对损失的贡献为 (0.05)²=0.0025。"
+    },
+    {
+     "tex": "\\nabla_\\phi\\mathcal L_{\\mathrm{SDS}}=\\mathbb E_{t,\\epsilon}\\Big[w(t)\\,\\big(\\hat\\epsilon_\\psi(x_t;\\,y,\\,t)-\\epsilon\\big)\\,\\frac{\\partial x}{\\partial\\phi}\\Big],\\qquad x=g(\\phi)",
+     "explain_zh": "Score Distillation Sampling 的梯度（DreamFusion）。φ：3D 表示的参数（NeRF 权重或 Gaussian 参数）；g：可微渲染器，x=g(φ) 是某个随机相机下的渲染图；x_t：对 x 按公式 1 加噪的结果；y：文本（或图像、相机）条件；\\(\\hat\\epsilon_\\psi\\)：冻结的扩散模型预测的噪声，通常带 classifier-free guidance；w(t)：随噪声水平变化的权重；∂x/∂φ：渲染器的雅可比。含义：预测噪声与真实噪声之差可以看作“把渲染图推向高概率图像”的方向，乘以雅可比后回传到 3D。公式省略了扩散 U-Net 自身的雅可比，这让计算很便宜，但也引入了偏差。例（量级对比）：DreamFusion 每个 prompt 在 4 芯片 TPUv4 上迭代 15,000 次，约 1.5 小时；Quark 每帧 32.2 ms，两者相差约 1.7×10^5 倍。"
+    }
+   ],
+   "evolution": [
+    {
+     "year": 2015,
+     "milestone_zh": "Sohl-Dickstein 等在 ICML 提出扩散概率模型（Deep Unsupervised Learning using Nonequilibrium Thermodynamics），把生成建模为逐步去噪的逆过程。"
+    },
+    {
+     "year": 2020,
+     "milestone_zh": "DDPM 用“预测噪声”的简化损失让扩散模型达到 GAN 级画质（CIFAR-10 FID 3.17）；DDIM 提出非马尔可夫采样，快 10–50 倍。"
+    },
+    {
+     "year": 2021,
+     "milestone_zh": "LDM 把扩散搬进 VAE 潜空间，并用 cross-attention 做条件注入，成为 Stable Diffusion 的基础。"
+    },
+    {
+     "year": 2022,
+     "milestone_zh": "DreamFusion 提出 SDS，用冻结的 2D 扩散模型优化 NeRF，实现无需 3D 数据的文生 3D；3DiM（Watson 等）首次用扩散模型做位姿条件的新视角合成。"
+    },
+    {
+     "year": 2023,
+     "milestone_zh": "进入相机可控阶段：Zero-1-to-3（相对位姿条件）、MVDream（跨视图 3D self-attention）、Stable Video Diffusion（开源视频扩散骨干）、ADD（1–4 步）、ReconFusion（扩散先验正则少视图 NeRF）。"
+    },
+    {
+     "year": 2024,
+     "milestone_zh": "CAT3D 用多视图潜扩散加 raymap 生成数十到数百张视图，再稳健重建，最快约 1 分钟一个场景；CausVid 把 50 步双向视频扩散蒸馏为 4 步因果自回归生成器（arXiv 2024-12，CVPR 2025）。"
+    },
+    {
+     "year": 2025,
+     "milestone_zh": "Difix3D+（CVPR 2025 Oral，Best Paper Finalist）把单步扩散用作 3D 渲染修复器，推理后处理 76 ms（A100）；Self Forcing（NeurIPS 2025）等把流式视频扩散推到单卡 17 FPS、首帧不到 1 s。"
+    },
+    {
+     "year": 2026,
+     "milestone_zh": "RealCam、FrameCrafter、LiveStre4m 等把少步因果视频扩散引入实时或在线的新视角视频；4DGS-Fixer 用视频扩散修复稀疏视角 4DGS。生成先验开始逼近临场系统的延迟门槛，但尚未跨过。"
+    }
+   ],
+   "papers": [
+    {
+     "title": "Denoising Diffusion Probabilistic Models",
+     "authors": "Jonathan Ho et al.",
+     "year": 2020,
+     "venue": "NeurIPS 2020",
+     "url": "https://arxiv.org/abs/2006.11239",
+     "citations": 35360,
+     "role_zh": "确立现代扩散模型的训练与采样框架：闭式前向加噪、预测噪声的简化损失、1000 步祖先采样，CIFAR-10 FID 3.17。本专题公式 1、2 的出处。",
+     "priority": "must"
+    },
+    {
+     "title": "High-Resolution Image Synthesis with Latent Diffusion Models",
+     "authors": "Robin Rombach et al.",
+     "year": 2021,
+     "venue": "CVPR 2022",
+     "url": "https://arxiv.org/abs/2112.10752",
+     "citations": 27573,
+     "role_zh": "在 VAE 潜空间做扩散（f=4 和 f=8 最优），用 cross-attention 注入条件。它是 Stable Diffusion 的基础，Zero-1-to-3、CAT3D、Difix 都在其上微调。",
+     "priority": "must"
+    },
+    {
+     "title": "DreamFusion: Text-to-3D using 2D Diffusion",
+     "authors": "Ben Poole et al.",
+     "year": 2022,
+     "venue": "ICLR 2023",
+     "url": "https://arxiv.org/abs/2209.14988",
+     "citations": 3866,
+     "role_zh": "提出 SDS，用冻结的 2D 扩散模型优化 NeRF，实现无需 3D 数据的文生 3D，是“扩散作为损失”范式的起点（公式 3）。",
+     "priority": "must"
+    },
+    {
+     "title": "Zero-1-to-3: Zero-shot One Image to 3D Object",
+     "authors": "Ruoshi Liu et al.",
+     "year": 2023,
+     "venue": "ICCV 2023",
+     "url": "https://arxiv.org/abs/2303.11328",
+     "citations": 1868,
+     "role_zh": "以相对相机位姿为条件微调 Stable Diffusion，在 Objaverse 上学会“换视角”，开创了相机可控的单图新视角扩散。",
+     "priority": "must"
+    },
+    {
+     "title": "CAT3D: Create Anything in 3D with Multi-View Diffusion Models",
+     "authors": "Ruiqi Gao et al.",
+     "year": 2024,
+     "venue": "NeurIPS 2024",
+     "url": "https://arxiv.org/abs/2405.10314",
+     "citations": 484,
+     "role_zh": "多视图潜扩散加 raymap 相机编码和 3D self-attention，一次生成数十到数百张一致的视图，再用稳健的 Zip-NeRF 重建，约 1 分钟一个场景，是少视图重建最强的基线之一。",
+     "priority": "must"
+    },
+    {
+     "title": "Difix3D+: Improving 3D Reconstructions with Single-Step Diffusion Models",
+     "authors": "Jay Zhangjie Wu et al.",
+     "year": 2025,
+     "venue": "CVPR 2025 (Oral, Best Paper Finalist)",
+     "url": "https://arxiv.org/abs/2503.01774",
+     "citations": 188,
+     "role_zh": "基于 SD-Turbo 的单步扩散修复器（τ=200，冻结 VAE 编码器、LoRA 微调解码器，并用参考视图混合层以干净输入视图为条件）。修复结果既可以蒸馏回 3D，也可以作为 A100 上 76 ms 的后处理；这是与实时临场渲染关系最直接的扩散用法。",
+     "priority": "must"
+    },
+    {
+     "title": "Stable Video Diffusion: Scaling Latent Video Diffusion Models to Large Datasets",
+     "authors": "Andreas Blattmann et al.",
+     "year": 2023,
+     "venue": "arXiv 技术报告",
+     "url": "https://arxiv.org/abs/2311.15127",
+     "citations": 2928,
+     "role_zh": "系统化的视频数据筛选（LVD 约 5.8 亿片段筛到 1.52 亿）与三阶段训练，给出开源的视频扩散骨干，并证明视频模型可以微调成多视图生成器（多视一致性优于 Zero123XL、SyncDreamer）；大量后续新视角视频方法以它为底座。",
+     "priority": "should"
+    },
+    {
+     "title": "MVDream: Multi-view Diffusion for 3D Generation",
+     "authors": "Yichun Shi et al.",
+     "year": 2023,
+     "venue": "ICLR 2024",
+     "url": "https://arxiv.org/abs/2308.16512",
+     "citations": 1094,
+     "role_zh": "把 2D self-attention 膨胀为跨视图的 3D self-attention，联合生成 4 张正交视图，并用于多视图 SDS，缓解了多面（Janus）问题。",
+     "priority": "should"
+    },
+    {
+     "title": "ReconFusion: 3D Reconstruction with Diffusion Priors",
+     "authors": "Rundi Wu et al.",
+     "year": 2023,
+     "venue": "CVPR 2024",
+     "url": "https://arxiv.org/abs/2312.02981",
+     "citations": 405,
+     "role_zh": "训练以 PixelNeRF 特征为条件的新视角扩散模型，在 3、6、9 视图的重建中正则 Zip-NeRF 的未观测视角，是“用扩散先验正则重建”的代表作。",
+     "priority": "should"
+    },
+    {
+     "title": "Denoising Diffusion Implicit Models",
+     "authors": "Jiaming Song et al.",
+     "year": 2020,
+     "venue": "ICLR 2021",
+     "url": "https://arxiv.org/abs/2010.02502",
+     "citations": 13571,
+     "role_zh": "训练目标与 DDPM 相同的非马尔可夫采样，快 10–50 倍并支持确定性采样，是所有少步采样器的起点。",
+     "priority": "should"
+    },
+    {
+     "title": "Classifier-Free Diffusion Guidance",
+     "authors": "Jonathan Ho, Tim Salimans",
+     "year": 2022,
+     "venue": "NeurIPS 2021 Workshop on Deep Generative Models（arXiv 2022 完整版）",
+     "url": "https://arxiv.org/abs/2207.12598",
+     "citations": 7173,
+     "role_zh": "不需要额外分类器的条件增强：训练时随机丢弃条件，让同一个网络同时学会有条件和无条件预测，推理时按权重 w 外推两者之差。文本、图像、相机条件的扩散模型几乎都依赖它；本专题第 2 条要点里的 \\(\\hat\\epsilon\\) 公式和 DreamFusion 的 w=100 都出自这里。",
+     "priority": "should"
+    },
+    {
+     "title": "Novel View Synthesis with Diffusion Models",
+     "authors": "Daniel Watson et al.",
+     "year": 2022,
+     "venue": "ICLR 2023",
+     "url": "https://arxiv.org/abs/2210.04628",
+     "citations": 351,
+     "role_zh": "3DiM：第一个位姿条件的图像到图像扩散新视角合成模型，完全不含显式 3D 表示。它提出随机条件化（每个去噪步随机选一张已有视图作条件）来提高多视一致性，并提出“用生成视图训练一个神经场、再测其一致性”的 3D 一致性评分。Zero-1-to-3、CAT3D 这条“相机条件扩散”路线从这里开始。",
+     "priority": "optional"
+    },
+    {
+     "title": "Adversarial Diffusion Distillation",
+     "authors": "Axel Sauer et al.",
+     "year": 2023,
+     "venue": "ECCV 2024",
+     "url": "https://arxiv.org/abs/2311.17042",
+     "citations": 876,
+     "role_zh": "用分数蒸馏加对抗损失，把大模型压到 1–4 步，4 步即可追平 SDXL。Turbo 系列单步模型出自这条线，Difix 的底座 SD-Turbo 即是其一。",
+     "priority": "optional"
+    },
+    {
+     "title": "From Slow Bidirectional to Fast Autoregressive Video Diffusion Models",
+     "authors": "Tianwei Yin et al.",
+     "year": 2024,
+     "venue": "CVPR 2025",
+     "url": "https://arxiv.org/abs/2412.07772",
+     "citations": 413,
+     "role_zh": "CausVid：用 DMD 把 50 步双向视频扩散蒸馏为 4 步因果自回归生成器，配合 KV cache，首帧 1.3 s、之后 9.4 FPS；Self Forcing、RealCam 等流式视频扩散建立在它之上。",
+     "priority": "optional"
+    }
+   ],
+   "prereqs": [
+    "l-diffusion",
+    "l-attention",
+    "l-encoding",
+    "l-iterative",
+    "n-nerf",
+    "n-3dgs",
+    "n-generalizable",
+    "v-temporal"
+   ],
+   "relation_to_anchors_zh": "（1）两篇锚点共同回避的问题。Quark 明确把“单图、单目、生成式、人体先验类方法”划为另一类问题，不做比较。它的输出是输入像素的凸组合，任何输入都没看到的区域只能出错：在 Mip-NeRF360 和 Deep Blending 上，失败方式是硬边而不是模糊，作者自己也承认需要更好的视角选择或全局几何。Ha et al. 同样没有使用任何生成先验，而是用 4 层 U-Net 同时输出背景图 I_BG 和背景权重 w_BG，其中 L_Mask 只用空洞的二值掩码监督。本专题回答的正是这个被回避的问题：去遮挡区域的内容从哪里来。（2）概念对照。Quark 的射线方向编码对应 CAT3D 的 raymap；Quark 的 One-to-many attention（注意力部分的开销对视角数接近常数，编码与逐视角 update 仍是线性）对应 MVDream/CAT3D 的 3D self-attention（代价随 token 数平方增长）；Quark 的 5 次 learned render-and-refine，以及“减少迭代只掉约 0.08 dB”的消融，对应 DDIM/ADD/CausVid 的少步蒸馏；Quark 在 288×512 上求解、由 IBR 补全 1080p 细节，对应 LDM 在 64×64 潜空间求解、由 VAE 解码补回细节。（3）时间预算对照。Quark 的重建加渲染为 32.2 ms（A100），Ha et al. 约 39 ms（TensorRT，不含立体深度）；而单步 Difix 就需要 76 ms（A100），CausVid 首帧 1.3 s，RealCam 首帧 0.72–1.15 s。所以 2026 年现实可行的路线是“几何/IBR 主干 + 可选的单步生成式修补”，而不是端到端生成。（4）团队动向。Quark 作者参与的 Scaling Transformer-Based NVS（ICCV 2025，Nair 等；作者含 Quark 的 Kaza、Luo、Lombardi）用扩散模型生成的合成数据扩充 NVS 训练集，并提出 token disentanglement 来抑制合成数据中的伪影；在这里扩散是“数据引擎”，而不是渲染器。Ha et al. 的后续竞品 LiveStre4m 用扩散 Transformer 在关键帧之间做时间插值，以换取时序稳定。",
+   "debates_zh": [
+    "忠实性与完整性之争：远程临场能不能显示“生成出来的”对方？生成内容可能改变表情、口型或身份细节。一派主张只在确认没有观测的区域生成，并显式标注不确定度；另一派认为感知质量优先，理由是 FID/LPIPS 的改善很明显。",
+    "蒸馏回 3D 还是逐帧后处理：Difix3D+ 表明，把修复结果蒸馏回持久的 3D 表示可以保持多视一致；推理时逐帧修复更快，但可能在视角和时间上不一致。Quark、Ha et al. 这类每帧丢弃表示的方法只能选后者。",
+    "要不要显式 3D：CAT3D、ReconFusion 坚持“生成视图 + 3D 重建”；Stable Virtual Camera、FrameCrafter 等直接用视频或多视图扩散输出新视角，几何只隐含在网络里。后一种做法在大视角变化下的一致性和可控性仍有争议。",
+    "SDS 路线还有没有价值：SDS 的 mode-seeking 带来过饱和、多面（Janus）等问题，2024 年后“多视图生成 + 重建”占了主导；不过“分数蒸馏”又以另一种身份回到了 ADD、DMD 等少步蒸馏方法中。",
+    "指标之争：PSNR/SSIM 会惩罚任何与真值不同的合理生成，FID/LPIPS 又可能奖励“看起来真实但其实错误”的内容。临场场景更需要时间闪烁、身份一致性指标和人眼评测。"
+   ],
+   "open_questions_zh": [
+    "能否在 Quark 量级的约 30 ms 单卡预算内完成单步、时间一致、身份忠实的去遮挡补全？目前最快的单步修复器 Difix 在 A100 上仍需 76 ms，而且没有时间条件。",
+    "怎样做“受观测约束的生成”：只在所有输入都看不到的像素上采样，其余像素严格服从 IBR 结果，同时输出逐像素不确定度，供渲染器混合使用？",
+    "流式因果视频扩散的长时漂移和首帧延迟（0.7–1.3 s）怎样才能压进对话可接受的端到端 250 ms 以内？",
+    "双目与多视点一致：左右眼各自独立采样会产生双目不一致，视差冲突直接导致不适。扩散先验怎样与立体约束结合？",
+    "训练数据：大规模、带标定的多视角人像视频（而不是 Objaverse 物体或单目网络视频）依然稀缺。生成先验在人脸、头发、手部上的可信度如何量化？"
+   ],
+   "resources": [
+    {
+     "title": "What are Diffusion Models? (Lilian Weng)",
+     "url": "https://lilianweng.github.io/posts/2021-07-11-diffusion-models/",
+     "type": "blog",
+     "note_zh": "从前向与反向过程、DDIM、条件生成一直推导到加速采样，公式记号与 DDPM 原文一致，适合配合本专题公式 1、2 精读。"
+    },
+    {
+     "title": "CVPR 2022 Tutorial: Denoising Diffusion-based Generative Modeling: Foundations and Applications",
+     "url": "https://cvpr2022-tutorial-diffusion-models.github.io/",
+     "type": "tutorial",
+     "note_zh": "CVPR 教程，提供讲义和录像：基础理论（DDPM、分数匹配、SDE）、加速与条件化，以及在图像编辑、3D 等方向的应用。"
+    },
+    {
+     "title": "The Annotated Diffusion Model (Hugging Face)",
+     "url": "https://huggingface.co/blog/annotated-diffusion",
+     "type": "tutorial",
+     "note_zh": "用 PyTorch 逐行实现 DDPM，可以直接跑通前向加噪与噪声预测训练，把公式变成代码。"
+    },
+    {
+     "title": "threestudio: A unified framework for 3D content generation",
+     "url": "https://github.com/threestudio-project/threestudio",
+     "type": "code",
+     "note_zh": "统一实现了 DreamFusion（SDS）、Zero-1-to-3、ProlificDreamer 等 3D 生成方法（MVDream 以扩展形式提供），适合动手对比“扩散作为损失”的各种变体。"
+    }
+   ]
+  },
+  {
+   "id": "a-telepresence-sys",
+   "title_zh": "三维临场系统设计",
+   "title_en": "3D telepresence system design",
+   "overview_zh": "三维临场（3D telepresence）要把远端参与者的外观和几何实时“搬”过来，并按本地观看者双眼的位置正确显示，使观看者获得立体视差、运动视差和目光接触。它不是单个算法，而是一条流水线：多相机采集（同步与标定，见 g-rig）→ 几何估计与融合（主动深度或学习式立体，见 d-sensors、d-stereo、d-tsdf）→ 编码与传输（见 v-codec）→ 按观看者视点渲染（IBR 或神经渲染）→ 头部跟踪的立体或光场显示（见 v-perception）。各段延迟相加：Starline 引用的对话同步上限约为 250 ms，而“头动 → 画面”的局部延迟要求更严，否则自动立体屏会出现左右眼串扰，甚至立体反转。Quark 和 Ha et al. 都只覆盖“重建 + 渲染”这一段，也只报告了这一段的 GPU 时间。本专题把它们放回完整系统中，才能判断“30 fps”“39 ms”到底意味着什么。\n\n核心设计轴有四条。（1）几何从哪里来：Holoportation 每个相机舱包含近红外立体相机和彩色相机，做主动立体；Starline 用 3 个自研的主动立体 RGB-D 采集舱（近红外图案投影，180 Hz 采集）；VirtualCube 用 6 台 Azure Kinect；Tele-Aloha 只用 4 台 RGB 相机加学习式级联视差估计（4.7 ms）。（2）传什么、在哪一端渲染：Holoportation 在发送端做 Fusion4D 非刚性融合，传网格和纹理（约 1–2 Gbps）；Starline 传 4 路彩色和 3 路深度视频（H.265，30–100 Mbit/s），在接收端按双眼位置做 image-based TSDF 光线步进；VirtualCube 在发送端按对方视点直接渲染出 2D 肖像，用 JPEG+TCP 传输，约 7 Mbps；Tele-Aloha 传 RGB 视频（约 100 Mbit/s），在接收端渲染。（3）外观如何合成：几乎所有系统都采用视角相关的纹理混合，包括 Holoportation 的法向加权加多数投票、Montage4D 的测地扩散加时间纹理场、Starline 的 cos² 法向权重、VirtualCube 的学习式 Lumi-Net 权重、Tele-Aloha 的加权混合。它们是 Quark 和 Ha et al. 中 blend weights 的系统前身（见 i-blending）。（4）显示：HMD（Holoportation）、头部跟踪的自动立体屏（Starline 65 英寸 8K，每眼约 45 px/deg；Tele-Aloha 27 英寸），或者大屏加视点跟踪（VirtualCube 用 3 块 65 英寸 4K 屏）。\n\n演化。1998 年 Office of the Future 提出用相机与投影把远端办公室“搬进来”的设想。2003 年 blue-c 在 CAVE 式投影房间里用可切换透明度的液晶玻璃幕“边投影边拍摄”，实时生成基于点的 3D 视频。2011 年 Maimone 与 Fuchs 用多台 Kinect 做出免穿戴的实时 3D 临场原型。2015 年 Collet 等用 106 台相机离线制作可流式传输的自由视点视频（平均 9.5 Mbps）。2016 年 Fusion4D 与 Holoportation 实现了实时非刚性融合和 AR/VR 双向临场。2018 年 Montage4D 解决了纹理接缝与时间闪烁，LookinGood 引入实时神经重渲染。2021 年 Project Starline 用用户研究证明 3D 临场优于 2D 视频会议（117 人、9 个月、308 次真实会议的部署调查，外加 25 人的组内对照实验），回环延迟 105.8 ms。VirtualCube（IEEE VR 2022）支持多方会议。2024 年 Tele-Aloha 把系统压缩到 4 台 RGB 相机加 1 块 RTX 4090，做到 2K、30 fps、延迟低于 150 ms。2025 年 Starline 产品化为 Google Beam（HP Dimension）：6 台高速相机、60 fps、65 英寸光场屏（约 3320 万像素，8K 级），每端至少需要 50 Mbps 对称带宽，网络延迟低于 100 ms。\n\n现状（截至 2026-09）。工业界以 Beam 为代表，走“少量 RGB 相机 + AI 重建 + 光场屏”的路线。研究侧有三条主线并行。(a) feed-forward 3DGS 人体重建与推流：Tele360 用 4–6 路未标定的 2K 相机，6 路时网络推理在 RTX 5090 上约 35 ms，Gaussian 图经视频编码推流约 100 Mbit/s。(b) 化身式极低带宽：Mon3tr 用预先建好的 Gaussian 化身摊销成本，码率低于 0.2 Mbps，端到端约 80 ms。(c) 语义编码或联合编码：GS-SCNet 把双目视频的语义编码与 feed-forward 3DGS 联合优化，在 PSNR 下相对“MV-HEVC + GPS-Gaussian”基线平均节省约 75% BD-rate。三条线共同未解决的问题是：怎样在采集、带宽、算力、延迟之间取得平衡，同时保证时间稳定和双目一致。Quark 和 Ha et al. 分别代表“单帧质量优先”和“一致性优先”的渲染核心，但两者都没有给出系统级的延迟和带宽数据。",
+   "key_ideas": [
+    {
+     "name_zh": "端到端延迟预算：逐段相加，而不只看网络推理",
+     "explain_zh": "直觉：观看者感受到的是“远端动作发生 → 本地屏幕显示”的总时间，任何一段都省不掉。VirtualCube 给出了最完整的拆解（三方会议）：RGB-D 采集 60 ms，在 RTX 3090 上渲染肖像 40 ms，拷贝与 JPEG 压缩 30 ms，网络传输 100 ms，解压与上屏 40 ms，合计约 270 ms，论文称端到端约 300 ms。各段是流水并行的，所以吞吐仍能达到 23 fps（三方）或 30 fps（一对一）。Starline 在回环模式下（完整 WebRTC 栈、两端在同一台机器上）测得 105.8 ms（标准差 9.1 ms），并且为了降低编解码延迟关闭了 B 帧。Tele-Aloha 在局域网内低于 150 ms。它的系统表（表 4）给出了逐段拆解：发送端采集 56 ms、上传显存 11 ms、去马赛克 13 ms、预处理 5 ms、编码 5 ms、回传内存 1 ms，RTC 传输 2 ms，接收端上传 1 ms、解码 5 ms、视图合成 28 ms、显示输出 27 ms，合计 149 ms。视图合成只占约五分之一，采集和显示两端加起来超过一半。其中新视角合成算法本身为 23.5 ms：视差 4.7 ms、编码器 6.1 ms、解码器与精修 9.3 ms、输入视图混合 1.4 ms、3DGS 光栅化 1.0 ms、其他 1.0 ms（RTX 4090，TensorRT FP16）。与锚点的联系：Quark 的 32.2 ms（1024×768）或 33.0 ms（2048×1536），以及 Ha et al. 的约 39 ms（前向 splat 10 ms + TSDF 6 ms + 融合网络 23 ms，TensorRT），都只对应上面“渲染”这一格。Ha et al. 还没有计入 RAFT-Stereo 立体深度的时间；Tele-Aloha 说明深度估计本身可以压到 5 ms 量级，前提是把它当作系统中的一段来设计。"
+    },
+    {
+     "name_zh": "渲染放在哪一端：视点相关表示的系统代价",
+     "explain_zh": "直觉：如果表示依赖目标视点（Quark 的 LDM、Ha et al. 的目标视角 TSDF 深度），渲染就必须在“知道观看者眼睛在哪”的一端完成，而且每个视点都要完整算一遍。Starline 选择在接收端渲染：收到 3 路深度和 4 路彩色后，每帧做 6 次光线步进（为 4 个彩色相机各做一张 shadow map，再为左右眼各做一张深度图），依靠 image-based fusion，这 6 次步进合计只花 1.5 ms，只占 60 Hz 每帧 16.6 ms 预算的一小部分。VirtualCube 选择在发送端渲染：发送端知道每个远端观看者的视点，为每人渲染一张带 alpha 的 2D 肖像再发出去，所以带宽只有约 7 Mbps；代价是每多一位参与者就多一路渲染，而且观看者视点要先经网络回传。数值例子：如果把 Quark 用在头部跟踪的自动立体屏上，每帧要为左右眼各推理一次，约 2×32.2=64.4 ms，已经超过 30 Hz 的 33.3 ms 帧预算，更远超 Beam 60 fps 对应的 16.7 ms；两位观看者还要再翻一倍。与锚点的联系：两篇锚点都没有讨论双目或多观看者，它们的“实时”只在单目、单视点条件下成立。这也部分解释了 Quark 团队的后续工作（LVT、Fuse-and-Refine）为什么转向“一次重建、多次渲染”的持久 3DGS 表示。"
+    },
+    {
+     "name_zh": "Image-based TSDF：不建体素网格的实时深度融合（Starline → Ha et al.）",
+     "explain_zh": "直觉：传统 TSDF（Curless & Levoy，见 d-tsdf）先把所有深度图累加进一个 3D 体素网格，再沿光线查表。Starline 反其道而行，只沿当前要渲染的光线前进：每走到一个点 p，就把 p 投影到每张深度图里读出深度，当场算出有符号距离并加权求和（公式 2）；检测到符号变化后，用二分法精确求出交点。为了省掉空跑，它还先把输入深度用点溅射光栅化到低分辨率的输出视图上，经过 2D min/max 滤波得到每条光线的搜索区间。数值：在 Titan RTX 上，体素融合（1152×896×768 网格）需要累积 2.5 ms 加光线步进 7.5 ms，共 10.0 ms；加入光栅化区间后降到 4.3 ms；换成 image-based fusion 后只要 1.5 ms。参数：截断距离 T=2 cm，步长 0.8·s，符号变化后做 3 次二分；深度权重 \\(w=\\min(0.001/\\sigma,1)\\)，σ 是 7×7 邻域内截断深度差的均方根，用来压低立体深度噪声大的区域的权重。与锚点的联系：Ha et al. 的 Sec. 3.2/A.1 几乎逐项沿用了这些数值（τ=0.02 m、0.8·s 步进、3 次二分、7×7 局部方差置信）。它新增的是两点：把上一帧的目标视角深度作为额外输入回灌（权重上限 η=15），以及对输入深度做颜色差分掩码滤波。不先读 Starline 的这一节，Ha et al. 附录 A.1 的公式几乎读不懂。反过来也能看出，Starline 原文明确写着渲染“逐帧独立处理、没有时间历史”，这正是 Ha et al. 要补的缺口。"
+    },
+    {
+     "name_zh": "视角相关纹理混合、接缝与时间稳定：blend weights 的系统演变",
+     "explain_zh": "直觉：几何总有误差。把多台相机的纹理贴到同一个表面上时，权重怎么分配，决定了画面是“糊”、“有缝”还是“闪”。Holoportation 用表面法向加权、多数投票和膨胀后的深度不连续区域来抑制重影。Montage4D 指出法向加权会导致模糊，改用偏向主导视角的视角相关权重，用测地距离场把权重从接缝处平滑地扩散开，再用“时间纹理场”对每个顶点的权重做指数滑动平均 \\(T_v^i(t)=(1-\\lambda)T_v^i(t-1)+\\lambda\\,\\tilde T_v^i(t)\\)，其中 \\(\\tilde T_v^i(t)\\) 是当前帧为顶点 v、相机 i 算出的原始权重，λ=0.05，时间常数约 1/λ=20 帧。它在五个数据集上的 PSNR 全部提升（例如 Timo 序列 38.60→40.23 dB），渲染速度仍超过 100 fps（114–135 fps）。Starline 以表面法向与相机方向夹角余弦的平方作为权重，并且像 ULR 那样提高面部变焦相机的权重；同时沿深度不连续处做自适应模糊（edge blending），压制剪影处的闪烁。VirtualCube 的 Lumi-Net 在 1/4 分辨率上用 CNN 预测混合权重（2 ms），在全分辨率上混合纹理后，再经过一个 20 ms 的后处理 CNN；它还对输出 alpha 做历史缓冲平滑 \\(\\alpha'=0.5\\,\\alpha+0.5\\,\\alpha_h\\)，并只在人像边界像素上做颜色的时间平滑。与锚点的联系：Quark 的 blend weights 由 One-to-many attention 产生，softmax 推迟到上采样之后才施加；Ha et al. 由 4 层 U-Net 预测 K 个权重和一个背景权重。两者都延续了 Lumi-Net 这条“学习权重”的路线，但都没有 Montage4D 或 VirtualCube 那样对权重或 alpha 做时间平滑。Quark 在最近 8 个输入视角的集合发生切换时会闪烁，Montage4D 式的 EMA 是最便宜的补丁，代价是运动时出现拖影。Ha et al. 用掩码下限 0.6 限制历史深度的占比，面对的是同一个权衡。"
+    },
+    {
+     "name_zh": "传输表示与带宽：从网格到 RGB-D 视频再到 2D 肖像",
+     "explain_zh": "直觉：传得越“原始”，接收端越自由（任意视点、双目都能做），但带宽越高；传得越接近“成品”，带宽越低，但视点被锁死。几个量级：Holoportation 传量化网格和去掉背景的彩色图（LZ4 无损压缩），30 fps 下约 1–2 Gbps。Collet 2015 离线把跟踪网格和纹理编码成 MPEG 流，平均 9.5 Mbps。Starline 用 GPU 的 NVENC/NVDEC 把 7 路视频编码为 H.265：彩色 8 bit、QP=22；深度 10 bit，存放在 Y 通道，UV 置为 512，QP=14；总码率 28.0–102.3 Mbit/s（穿纯色衣服静坐时 28.0，其中 3 路深度占 23.7；穿高频纹理衣服挥动手臂时 102.3）。Tele-Aloha 把 4 路图像裁成正方形后拼成一张 6000×6000 的大图送入 NVENC 做 H.265 编码，经 WebRTC 传输，实测约 100 Mbit/s。VirtualCube 发送渲染好的肖像，约 7 Mbps。Beam 要求每端至少 50 Mbps 的对称带宽。与锚点的联系：Quark 需要离目标最近的 8 路全分辨率 RGB；Ha et al. 需要 K 路 RGB 加上逐视角深度，而且“最近的 K 路”会随观看者位姿变化。如果在接收端渲染，就必须把全部 N 路都发过去（DyNeRF 阵列有 18–22 台相机）；如果只发 K 路，就要先把观看者位姿回传给发送端，多一次网络往返，切换到新相机流时还要等关键帧。两篇论文都没有讨论这一点（详见 a-compression）。"
+    },
+    {
+     "name_zh": "头部与眼睛跟踪：显示的是“预测出来”的视点",
+     "explain_zh": "直觉：渲染用的眼睛位置来自跟踪，而跟踪本身有延迟。等到画面亮起时，眼睛已经移动了，自动立体屏就可能把本该给左眼的图像送进右眼。Starline 用 4 台跟踪相机以 120 Hz 检测眼、嘴、耳的 2D 位置，再三角化成 3D。它用显示器前的光电探测器测得跟踪延迟约 33 ms，因此对 3D 特征点做外推，并用同时平滑位置和速度的双指数平滑来抑制外推放大的噪声（公式 3）；用户静止时残留的微小抖动，再用一个“change band”滞回滤波器去掉（输入在一个小区间内变动时保持输出不变）。数值例子：头部以 0.3 m/s 平移时，33 ms 的延迟对应约 1 cm 的眼位误差，大约是瞳距（约 6.3 cm）的六分之一，足以产生明显的串扰。Tele-Aloha 用微调过的 BlazeFace 在两路顶部相机中检测虹膜，再做三角化。与锚点的联系：对 Quark 和 Ha et al. 来说，“目标视角”就是这个预测出来的眼睛位姿。由于每个目标视角都要完整跑一遍网络，预测误差不仅影响显示，还决定了该选哪 K 路或 M 路输入。而这两篇论文在评测中都使用留出相机的真实位姿作为目标视角，从来没有在跟踪噪声下测试过。"
+    },
+    {
+     "name_zh": "显示与感知约束决定渲染的“有效分辨率”",
+     "explain_zh": "直觉：临场采用真人大小的显示，会把每一个伪影都放大。Starline 使用 65 英寸 8K 面板（3310 万全彩像素，60 Hz）的头部跟踪透镜阵列自动立体屏，在 1.25 m 的观看距离下，每只眼睛分到约 500 万个像素（每种原色），角分辨率约 45 像素/度。为了减轻串扰和辐辏-调节冲突（见 v-perception），它把远端人物放在显示平面附近。Tele-Aloha 在 27 英寸屏上以 0.5 的比例渲染上半身，同样把虚拟人放在显示平面附近。VirtualCube 在面部区域额外加了感知损失，因为人对脸部细节最敏感。与锚点的联系：Quark 的输出从 1024×768 提高到 2048×1536 时，RFF 上的 LPIPS 从 0.137 变为 0.233，Shiny 上的 PSNR 从 26.51 降到 24.66。它的内部几何固定在 288×512，高分辨率只来自 IBR 取样和上采样；在 45 px/deg 的真人大小显示上，这种退化会直接被看出来。两篇锚点都没有专门针对人像或人体的评测，而人脸、头发、手部恰恰是临场中最敏感的区域。"
+    }
+   ],
+   "equations": [
+    {
+     "tex": "T_{\\mathrm{e2e}}=T_{\\mathrm{cap}}+T_{\\mathrm{geo}}+T_{\\mathrm{render}}+T_{\\mathrm{enc}}+T_{\\mathrm{net}}+T_{\\mathrm{dec}}+T_{\\mathrm{disp}}",
+     "explain_zh": "端到端（motion-to-photon）延迟预算。T_cap：采集与同步（曝光、传感器读出、传输到主机）；T_geo：深度估计与融合；T_render：按目标视点合成；T_enc、T_dec：编码与解码；T_net：网络传输加抖动缓冲；T_disp：显示扫描与面板响应。在接收端渲染时，T_geo 和 T_render 移到 T_dec 之后，但总和不变。流水并行只能提高吞吐（fps），不能减少单帧延迟。例：VirtualCube 为 60+40+30+100+40=270 ms（论文称约 300 ms）；Tele-Aloha 表 4 合计 149 ms，其中 T_cap≈56+11+13 ms、T_disp≈27 ms，视图合成 28 ms；Starline 回环 105.8 ms；对话同步上限约 250 ms。锚点的 Quark 32.2 ms 和 Ha et al. 约 39 ms 都只是其中的 T_render，而 Ha et al. 连 T_geo 里的立体深度都没有计入。"
+    },
+    {
+     "tex": "s(\\mathbf p)=\\sum_{j} w_j\\,\\mathrm{clamp}\\!\\big(d_j(\\pi_j(\\mathbf p))-z_j(\\mathbf p),\\,-T,\\,T\\big),\\qquad w_j=\\min\\!\\Big(\\frac{0.001}{\\sigma_j},\\,1\\Big)",
+     "explain_zh": "Starline 的 image-based TSDF，Ha et al. 附录 A.1 使用的是同一个式子。p：沿目标光线的采样点；π_j(p)：p 在第 j 张深度图上的投影像素；d_j(·)：该像素的深度读数；z_j(p)：p 在相机 j 坐标系下的深度。两者之差就是有符号距离，正值表示 p 位于相机 j 看到的最前表面之前（两篇原文按各自坐标约定写成 z−d 的形式，含义相同）。T：截断距离（Starline 为 2 cm，Ha et al. 为 0.02 m）；σ_j：该像素 7×7 邻域内截断深度差的均方根，作为噪声的代理。差值小于 −T（p 在表面后方较远处）时令 w_j=0，防止“过度雕刻”；p 落在视锥外时同样令 w_j=0。沿光线以 0.8·s 为步长前进，s 变号后做 3 次二分求根。例：某点在相机 1 所见表面前 5 mm、在相机 2 所见表面后 3 mm，两处的 σ 分别为 1 mm 和 4 mm，则 w=(1, 0.25)，s=1×0.005+0.25×(−0.003)=0.00425>0，说明还没到表面，继续前进。"
+    },
+    {
+     "tex": "\\mathbf s_t=\\alpha\\,\\mathbf p_t+(1-\\alpha)(\\mathbf s_{t-1}+\\mathbf v_{t-1}),\\quad \\mathbf v_t=\\gamma(\\mathbf s_t-\\mathbf s_{t-1})+(1-\\gamma)\\mathbf v_{t-1},\\quad \\hat{\\mathbf p}_{t+k}=\\mathbf s_t+k\\,\\mathbf v_t",
+     "explain_zh": "双指数（Holt）平滑与外推。p_t：第 t 次跟踪测得的 3D 眼位；s_t：平滑后的位置；v_t：平滑后的每帧速度；α、γ∈(0,1]：位置和速度的平滑系数，越小越平滑，但滞后也越大；k：需要补偿的延迟帧数；\\(\\hat{\\mathbf p}_{t+k}\\)：送给渲染器的预测眼位。Starline 只说明采用了“同时滤波位置与速度”的双指数平滑来外推、补偿约 33 ms 的延迟，没有公开 α、γ 的取值；这里写的是标准的 Holt 形式。例：120 Hz 跟踪时，33 ms 约为 4 帧；若 v_t=2.5 mm/帧（即 0.3 m/s），外推量 k·v=1 cm。与锚点的联系：Quark 和 Ha et al. 的目标相机位姿就是 \\(\\hat{\\mathbf p}_{t+k}\\)，它的误差会直接变成渲染视点的误差。"
+    }
+   ],
+   "evolution": [
+    {
+     "year": 1998,
+     "milestone_zh": "Office of the Future（Raskar 等）提出用相机阵列实时采集、用投影构建沉浸式显示的远程协作设想。"
+    },
+    {
+     "year": 2003,
+     "milestone_zh": "blue-c（Gross 等，SIGGRAPH 2003）：3 面可在不透明（投影）与透明（拍摄）之间切换的液晶玻璃幕，16 台同步相机透过幕墙采集，实时生成基于点的 3D 视频（约 2.5 万点 5 fps），是早期完整的沉浸式 3D 视频临场系统。"
+    },
+    {
+     "year": 2011,
+     "milestone_zh": "Maimone 与 Fuchs 用多台消费级 Kinect 做出免穿戴、头部跟踪的实时 3D 临场原型。"
+    },
+    {
+     "year": 2015,
+     "milestone_zh": "Collet 等用 106 台相机（53 台 RGB + 53 台 IR）离线生成可流式传输的自由视点视频，跟踪网格编码为 MPEG 流，平均 9.5 Mbps。"
+    },
+    {
+     "year": 2016,
+     "milestone_zh": "Fusion4D 实现多视角 RGB-D 的实时非刚性融合；Holoportation 在此基础上做出端到端 AR/VR 双向临场，30 fps 下约 1–2 Gbps。"
+    },
+    {
+     "year": 2018,
+     "milestone_zh": "Montage4D 用测地扩散和时间纹理场消除接缝与闪烁；LookinGood 引入实时神经重渲染；Tang 等在 Holoportation 类数据上实现 30 fps 的实时 4D 压缩。"
+    },
+    {
+     "year": 2021,
+     "milestone_zh": "Project Starline（ACM TOG）：3 个主动立体采集舱，7 路 RGB-D H.265 流，image-based TSDF 融合只需 1.5 ms，头部跟踪自动立体屏，回环延迟 105.8 ms；117 人部署调查和 25 人组内对照实验都显示其优于 2D 视频会议。"
+    },
+    {
+     "year": 2022,
+     "milestone_zh": "VirtualCube（IEEE VR 2022 / TVCG）：6 台 Azure Kinect 的隔间系统，采用发送端渲染和学习式混合权重，支持三方会议，端到端约 300 ms。"
+    },
+    {
+     "year": 2024,
+     "milestone_zh": "Tele-Aloha（SIGGRAPH 2024）：4 台 RGB 相机加 1 块 RTX 4090，2048×2048、30 fps，端到端低于 150 ms，约 100 Mbit/s。"
+    },
+    {
+     "year": 2025,
+     "milestone_zh": "Starline 产品化为 Google Beam / HP Dimension：6 台高速相机、60 fps、65 英寸光场屏（约 3320 万像素），每端至少 50 Mbps 对称带宽；UIST 2025 的 GaussianNexus 等把 3DGS 用于房间尺度的 AR/VR 临场。"
+    },
+    {
+     "year": 2026,
+     "milestone_zh": "Tele360（未标定稀疏相机，feed-forward 3DGS 推流）、Mon3tr（化身摊销，低于 0.2 Mbps）、GS-SCNet（编码与 3DGS 联合）等把研究重点推向免标定、低带宽和端侧部署。"
+    }
+   ],
+   "papers": [
+    {
+     "title": "Project Starline: A High-Fidelity Telepresence System",
+     "authors": "Jason Lawrence et al.",
+     "year": 2021,
+     "venue": "ACM TOG 40(6) (SIGGRAPH Asia 2021)",
+     "url": "https://research.google/pubs/project-starline-a-high-fidelity-telepresence-system/",
+     "citations": 92,
+     "role_zh": "第一个经用户研究证明优于 2D 视频会议的 3D 临场系统：7 路 RGB-D H.265 流、image-based TSDF 融合（1.5 ms）、头部跟踪自动立体屏、105.8 ms 回环延迟。Ha et al. 的 TSDF 直接来自这里。",
+     "priority": "must"
+    },
+    {
+     "title": "Holoportation: Virtual 3D Teleportation in Real-time",
+     "authors": "Sergio Orts-Escolano et al.",
+     "year": 2016,
+     "venue": "UIST 2016",
+     "url": "https://doi.org/10.1145/2984511.2984517",
+     "citations": 753,
+     "role_zh": "第一个端到端实时的 AR/VR 双向 3D 临场系统：8 个 RGB-D 相机舱，Fusion4D 非刚性融合，传输网格加纹理，在 HoloLens/VR 上显示。",
+     "priority": "must"
+    },
+    {
+     "title": "VirtualCube: An Immersive 3D Video Communication System",
+     "authors": "Yizhong Zhang et al.",
+     "year": 2021,
+     "venue": "IEEE TVCG 2022 (IEEE VR 2022)",
+     "url": "https://arxiv.org/abs/2112.06730",
+     "citations": 69,
+     "role_zh": "多方临场隔间系统。V-Cube View 在 1/4 分辨率上估计目标视点深度和 Lumi-Net 混合权重，再在全分辨率上做 IBR 混合；采用发送端渲染，并给出端到端约 300 ms 的逐段延迟拆解。它是与两篇锚点结构最接近的系统。",
+     "priority": "must"
+    },
+    {
+     "title": "Tele-Aloha: A Low-budget and High-authenticity Telepresence System Using Sparse RGB Cameras",
+     "authors": "Hanzhang Tu et al.",
+     "year": 2024,
+     "venue": "SIGGRAPH 2024",
+     "url": "https://arxiv.org/abs/2405.14866",
+     "citations": 20,
+     "role_zh": "4 台 RGB 相机加 1 块 RTX 4090 的低成本临场系统：级联视差、Gaussian 光栅化特征、输入视图加权混合；2K、30 fps，新视角合成 23.5 ms，端到端低于 150 ms（表 4 逐段合计 149 ms），约 100 Mbit/s。",
+     "priority": "must"
+    },
+    {
+     "title": "Fusion4D: Real-time Performance Capture of Challenging Scenes",
+     "authors": "Mingsong Dou et al.",
+     "year": 2016,
+     "venue": "ACM TOG 35(4) (SIGGRAPH 2016)",
+     "url": "https://doi.org/10.1145/2897824.2925969",
+     "citations": 426,
+     "role_zh": "多视角 RGB-D 的实时非刚性融合，能应对大幅运动和拓扑变化，是 Holoportation 的几何引擎，也是“固定阵列 + 全局几何”路线的代表。",
+     "priority": "should"
+    },
+    {
+     "title": "Montage4D: Interactive Seamless Fusion of Multiview Video Textures",
+     "authors": "Ruofei Du et al.",
+     "year": 2018,
+     "venue": "ACM I3D 2018（JCGT 2019 扩展版）",
+     "url": "https://doi.org/10.1145/3190834.3190843",
+     "citations": 57,
+     "role_zh": "在 Holoportation 数据上做无缝纹理融合：视角相关权重、测地扩散消除接缝、时间纹理场（λ=0.05）抑制闪烁，速度超过 100 fps。这是 blend weights 做时间平滑的经典做法。",
+     "priority": "should"
+    },
+    {
+     "title": "High-quality streamable free-viewpoint video",
+     "authors": "Alvaro Collet et al.",
+     "year": 2015,
+     "venue": "ACM TOG 34(4) (SIGGRAPH 2015)",
+     "url": "https://doi.org/10.1145/2766945",
+     "citations": 676,
+     "role_zh": "106 台相机的离线自由视点视频管线：多模态 MVS、自适应网格、网格跟踪，编码为 MPEG 流（平均 9.5 Mbps），是体积视频产业化的起点。",
+     "priority": "should"
+    },
+    {
+     "title": "LookinGood: Enhancing Performance Capture with Real-time Neural Re-Rendering",
+     "authors": "Ricardo Martin-Brualla et al.",
+     "year": 2018,
+     "venue": "ACM TOG 37(6) (SIGGRAPH Asia 2018)",
+     "url": "https://arxiv.org/abs/1811.05029",
+     "citations": 59,
+     "role_zh": "第一次在实时性能捕捉之后接一个神经重渲染网络，做补洞、超分和去噪，并显式约束双目一致与时间稳定，标志着学习式后处理进入临场系统。",
+     "priority": "optional"
+    },
+    {
+     "title": "Encumbrance-free telepresence system with real-time 3D capture and display using commodity depth cameras",
+     "authors": "Andrew Maimone, Henry Fuchs",
+     "year": 2011,
+     "venue": "IEEE ISMAR 2011",
+     "url": "https://doi.org/10.1109/ISMAR.2011.6092379",
+     "citations": 266,
+     "role_zh": "用多台消费级 Kinect 实现免穿戴、头部跟踪的实时 3D 临场原型，开启了“商品深度相机临场”这条路线。",
+     "priority": "optional"
+    },
+    {
+     "title": "The office of the future: a unified approach to image-based modeling and spatially immersive displays",
+     "authors": "Ramesh Raskar et al.",
+     "year": 1998,
+     "venue": "SIGGRAPH 1998",
+     "url": "https://doi.org/10.1145/280814.280861",
+     "citations": 1020,
+     "role_zh": "提出用相机阵列实时采集、用投影构建沉浸式显示的远程协作设想，Tele-Aloha 等论文把它视为 3D 临场研究的起点。",
+     "priority": "optional"
+    },
+    {
+     "title": "blue-c: a spatially immersive display and 3D video portal for telepresence",
+     "authors": "Markus Gross et al.",
+     "year": 2003,
+     "venue": "ACM TOG 22(3) (SIGGRAPH 2003)",
+     "url": "https://doi.org/10.1145/882262.882350",
+     "citations": 163,
+     "role_zh": "早期完整的沉浸式 3D 视频临场系统：CAVE 式房间的 3 面投影幕由液晶玻璃制成，与投影仪、快门眼镜、相机同步切换，让 16 台相机能“透过幕墙”拍摄用户；重建结果以不规则点样本作为 3D 视频图元进行编码、传输和溅射渲染。“显示与采集同时进行”和“点表示 + 流式传输”这两个后来反复出现的系统问题，在这里第一次被放在一起解决。",
+     "priority": "optional"
+    }
+   ],
+   "prereqs": [
+    "v-codec",
+    "v-perception",
+    "d-tsdf",
+    "d-stereo",
+    "g-rig",
+    "d-sensors",
+    "i-blending",
+    "i-warping",
+    "v-temporal"
+   ],
+   "relation_to_anchors_zh": "Quark 出自 Google 团队（与 DeepView、Immersive LF Video 是同一批作者）。它的设定（8 路已标定相机、基线不超过 30 cm、单卡 1080p/30 fps）正好落在 Starline/Beam 这类固定舱体的舒适区，但论文没有任何系统级数据：没有采集、编码、传输和显示延迟，没有双目或多观看者，也没有人像评测。放回系统中看，它相当于替换了 Starline 接收端“image-based fusion + cos² 法向权重混合”这一格的学习式模块，用 32.2 ms 换来了不再需要深度传感器，以及对非朗伯外观更好的处理。作为对照，Starline 这一格的几何部分只用 1.5 ms，而且这 1.5 ms 已包含双眼两个视点。Ha et al. 直接从 Starline 继承了 image-based TSDF，参数逐项一致；它把适用范围从“主动立体 RGB-D 采集舱 + 人物”推广到“RAFT-Stereo 深度 + 一般动态场景”，并补上了 Starline 明确缺失的时间历史。它“一致性优先”的思路与 Montage4D 的时间纹理场一脉相承。VirtualCube 的 V-Cube View 是理解两篇锚点最好的“系统版”入门：目标视点深度在 1/4 分辨率上用 MVS 代价体估计（5 ms），Lumi-Net 在 1/4 分辨率上预测混合权重（2 ms），在全分辨率上混合纹理后再做 20 ms 的后处理。这与 Quark 的“在低分辨率上求几何和权重、在全分辨率上做 IBR 取样”，以及 Ha et al. 的“目标视点深度引导 + U-Net 预测融合权重”在结构上一一对应。Tele-Aloha 则补上了 Ha et al. 缺失的那一段：把级联视差估计（4.7 ms）、Gaussian 光栅化特征和输入视图加权混合一起放进 23.5 ms，并报告了低于 150 ms 的端到端延迟。",
+   "debates_zh": [
+    "主动深度传感器还是纯 RGB：Holoportation、Starline、VirtualCube 依赖近红外或 ToF 深度；Tele-Aloha、Beam、Quark、Ha et al. 走纯 RGB 加学习的路线。前者在弱纹理和暗光下更稳，后者便宜、分辨率高，但依赖训练数据的分布。",
+    "发送端渲染、接收端渲染还是云端渲染：需要在带宽、视点回传延迟、多方扩展性和隐私之间取舍。",
+    "显式几何 + IBR（Starline、Ha et al.）、学习式表示（Quark 的 LDM、feed-forward 3DGS）还是化身（Codec Avatars、Mon3tr）：这是保真度、带宽与“看到的是否真实”之间的取舍。",
+    "头显还是裸眼 3D：HMD 天然提供双目画面，但遮住了面部，妨碍目光接触；自动立体屏或光场屏免穿戴，但通常只服务一位观看者，可视角度也有限。",
+    "评价标准：逐帧 PSNR 和用户研究哪个更有说服力？Starline 同时做了 117 人、308 次真实会议的部署调查（超过 87% 的反馈认为优于常规视频会议）和 25 人的组内对照实验（回忆对话内容时多写 27.87%）；实验室条件与真实网络条件之间的差距有多大，仍缺少数据。"
+   ],
+   "open_questions_zh": [
+    "在单块消费级 GPU 上，包含深度估计、双目渲染和编解码的完整管线能否稳定做到端到端 100 ms 以内、60 Hz？",
+    "怎样把逐帧无状态的渲染核心（Quark、Ha et al.）改造成带时间记忆的版本，并在视点切换和输入相机集合切换时不跳变？",
+    "多方会议与多观看者：视点相关表示的算力随观看者人数线性增长，是共享计算，还是改用可复用的持久表示？",
+    "标定与同步漂移的在线检测和校正（例如 Tele360 用可微 Levenberg–Marquardt 在线优化相机参数）怎样成为标准模块？",
+    "需要统一的系统级基准：同时报告 motion-to-photon 延迟、带宽、时间闪烁、双目一致性和主观评测。"
+   ],
+   "resources": [
+    {
+     "title": "Project Starline: A High-Fidelity Telepresence System（论文页，含 PDF）",
+     "url": "https://research.google/pubs/project-starline-a-high-fidelity-telepresence-system/",
+     "type": "paper",
+     "note_zh": "系统论文的范本。第 4 节逐一给出采集、跟踪、压缩（4.5 节，表 1 列出各路码率）、image-based fusion（4.6 节）和显示的设计与数字，附录有深度压缩消融。读 Ha et al. 之前必读 4.6 节。"
+    },
+    {
+     "title": "Google Beam technology specifications",
+     "url": "https://beam.google/technology/",
+     "type": "blog",
+     "note_zh": "Starline 产品化后的官方参数：6 台高速相机、65 英寸光场屏（3320 万像素）、60 fps、每端至少 50 Mbps 对称带宽且到每台设备的网络延迟低于 100 ms、通话功耗 600 W，可以作为系统设计的真实约束。"
+    },
+    {
+     "title": "Montage4D project page",
+     "url": "https://montage4d.com/",
+     "type": "paper",
+     "note_zh": "论文（I3D 2018 与 JCGT 2019 扩展版）和演示视频的入口，另附几个风格化/重光照 shader 示例。配合论文阅读，可以理解 Holoportation 的纹理融合方式和时间纹理场。"
+    },
+    {
+     "title": "Latency in Real-Time 3D Volumetric Streaming: A Comprehensive Study",
+     "url": "https://arxiv.org/abs/2605.22131",
+     "type": "paper",
+     "note_zh": "2026 年的实测研究，把体积视频流的延迟拆成应用层、传输协议层和网络层逐层测量并定位瓶颈，正好补上锚点论文缺失的系统延迟视角。"
+    }
+   ]
+  },
+  {
+   "id": "a-compression",
+   "title_zh": "体积视频与神经表示的压缩传输",
+   "title_en": "Compression & streaming of volumetric and neural representations",
+   "overview_zh": "三维临场的数据量远远超过 2D 视频。8 路 1080p、30 fps 的原始 RGB 约为 8×1920×1080×24 bit×30 ≈ 11.9 Gbit/s。原版 3DGS 每个 Gaussian 存 59 个 float（236 字节），Mip-NeRF360 场景平均 734 MB；如果每帧都存一份，根本无法流式传输。可用的网络预算却只有几十 Mbit/s：Starline 的 7 路流实测为 28–102 Mbit/s，Google Beam 要求每端至少 50 Mbps。压缩传输要回答三个问题：传什么（多视角 RGB(-D)、点云或网格、Gaussian 参数、神经特征，还是渲染好的 2D 画面）；怎样消除空间、视间和时间上的冗余；压缩误差怎样传导到新视角的渲染质量上。\n\n核心思想分两大流派。第一派是“借用 2D 视频编码器”：把 3D 数据排成 2D 图像序列，交给 HEVC/VVC 这类有硬件支持的编解码器。MPEG V-PCC 把点云切成补丁，投影为几何图、属性图和占用图；MIV 把多视角纹理加深度中冗余的像素修剪掉，剩余补丁打包成 atlas，并用 10 bit 归一化视差表示深度；Starline 直接把 3 路深度（10 bit，放在 Y 通道）和 4 路彩色编码为 H.265；VideoRF、V^3、Self-Organizing Gaussians 把神经特征或 Gaussian 属性排成平滑的 2D 图，再交给图像或视频编码器。这一派的优势是有硬件编解码、延迟低、功耗低、码率控制成熟。第二派是“学习式率失真优化”：以 L=R+λD 为目标联合训练量化和概率模型，用算术编码逼近熵下限，代表是 Ballé 的 hyperprior。在 3DGS 上，这一派发展出剪枝加矢量量化（LightGaussian）和以 hash grid 为上下文的熵编码（HAC）；在动态场景上，则发展为只编码帧间残差（ReRF、3DGStream、QUEEN）。此外，MPEG G-PCC 用原生的八叉树编码几何。\n\n演化。2014–2015 年 MV-HEVC（HEVC 第 2 版）与 3D-HEVC（第 3 版）把视间预测和深度编码工具写进标准，Tech 等在 2016 年发表了官方综述。2015 年 Collet 等把跟踪网格和纹理编码为 MPEG 流，平均 9.5 Mbps，但完全离线（据 Tang 等引述，处理约 30 s/帧，需要约 70 台工作站的集群）。2018 年 Ballé 提出 hyperprior；Tang 等在 Holoportation 类数据上用 TSDF 块潜空间做到 30 fps 的实时 4D 压缩，几何部分约 7 Mbps。2019 年 Schwarz 等综述了 V-PCC 和 G-PCC，DVC 提出端到端的学习式视频编码。2021 年 MIV 进入国际标准流程，Starline 采用 7 路 RGB-D H.265 流。2023–2024 年神经表示压缩集中涌现：ReRF（约三个数量级压缩）、VideoRF、LightGaussian（15×）、SOG（17–42×）、HAC（相对 3DGS 超过 75×）、3DGStream 与 QUEEN（流式动态 Gaussian）。2025–2026 年进入“率感知 + 标准化 + 前馈”阶段，代表是 4DGC、D-FCGS、MPEG 高斯溅射编码（GSC）的 V-PCC/G-PCC 修正案，以及 GS-SCNet 这类联合编码方案。\n\n现状（截至 2026-09）。静态 3DGS 的压缩已达百倍量级，而且渲染不一定降速：HAC 在 BungeeNeRF 上为 283 FPS，高于原版 3DGS 的 75 FPS（在 Synthetic-NeRF 上则是 341 对 401 FPS）。动态流式仍不适合实时临场：QUEEN 的 0.7 MB/帧在 30 fps 下约为 168 Mbit/s，且每帧需要不到 5 s 的在线训练；3DGStream 约 12 s/帧。面向临场的前沿因此转向两个方向。(a) 前馈式编码：编码器直接输出紧凑的 Gaussian 或语义潜变量，例如 D-FCGS 和 GS-SCNet（发送端 52 ms、接收端 31 ms；在 PSNR 下相对“MV-HEVC + GPS-Gaussian”基线平均节省约 75% BD-rate）。(b) 继续传多视角视频，在解码端重建，例如 MIV 的解码端视图合成，以及在 MIV 的解码端深度估计（DSDE）配置下，把解码端的深度估计换成前馈 3DGS 推理的 DSGS。标准层面，MPEG 的 Gaussian Splat Coding 修正案在 2026 年到达 CDAM 阶段。Quark 和 Ha et al. 这类方法“逐帧、逐视点、用完即丢”，真正需要压缩的是它们的输入，即多视角 RGB(-D) 视频；而压缩伪影与 IBR 混合、深度融合之间的相互作用，目前研究很少。DSGS 报告了一个反直觉的结果：对前馈 3DGS 而言，有损 2D 编码相当于在输入端做了低通滤波，合成质量反而更好；这个结论能否推广到 Quark、Ha et al. 这类依赖精确像素对应的 IBR 方法，尚未验证。",
+   "key_ideas": [
+    {
+     "name_zh": "率失真优化与熵编码：比特从哪里省",
+     "explain_zh": "直觉：压缩 = 量化（丢掉看不出来的精度）+ 熵编码（常见的值用短码）。如果概率模型给某个符号的概率是 p，算术编码大约要用 \\(-\\log_2 p\\) 比特：p=0.5 时 1 bit，p=0.01 时约 6.64 bit。所以“压得好”等价于“预测得准”。学习式编解码器把编码器、量化和概率模型放在一起训练，目标是公式 1 的 R+λD；因为取整不可导，训练时用加均匀噪声来代替。Ballé 2018 的 hyperprior 额外传一小段“边信息” z，用它预测主潜变量每个元素的尺度（方差），让概率模型随图像内容自适应，作用相当于传统编解码器中的量化参数和上下文模型。HAC 把同样的思路搬到 3DGS 上：以 Scaffold-GS 的锚点为编码对象，用一个二值 hash grid 在锚点位置插值出上下文特征，再由 MLP 预测每个属性的高斯分布均值和方差，之后做自适应量化和算术编码。它相对原版 3DGS 压缩超过 75×，相对 Scaffold-GS 超过 11×。与锚点的联系：两篇锚点都完全没有码率的概念。但它们需要的输入（Quark 的 8 路 RGB，Ha et al. 的 K 路 RGB 加深度）在进入网络之前，必然已经被某个编解码器按 R+λD 处理过。λ 取多少、失真 D 用什么度量，决定了锚点网络实际看到的图像是什么样子。"
+    },
+    {
+     "name_zh": "把 3D 变成 2D 视频：V-PCC、MIV 与 RGB-D 流",
+     "explain_zh": "直觉：硬件视频编码器是现成的“压缩引擎”，只要把 3D 数据排成时间上连贯、空间上平滑的 2D 图像，就能直接使用。V-PCC 把点云分割成法向相近的补丁，投影成几何图（深度）、属性图（颜色）和占用图，打包后用 HEVC 编码。MPEG 在 2018 年 10 月第 124 次会议（澳门）上公布，当时的 V-PCC 编码器压缩比约 125:1，100 万点的动态点云约 8 Mbit/s 即可有较好的主观质量；Graziosi 等 2020 年的综述报告，参考软件 TMC2 v8 在 10–15 Mbps 下已有良好视觉质量，而 v1 需要 30–40 Mbps。G-PCC 直接用八叉树编码几何，更适合稀疏的激光雷达点云。MIV 面向多相机视频：一部分视图被标为“基础视图”并完整保留；其余“附加视图”中，能由基础视图重投影得到的像素被修剪掉，剩余像素聚成补丁并打包成 atlas；在通用测试条件（CTC）中，纹理和几何都用 HEVC Main10（10 bit）编码（MIV 本身与具体编解码器无关）。解码端先重建各视图，然后做一个只基于深度的可见性 pass，再做着色 pass，按“视图离当前视口越近、权重越大”的规则混合。与锚点的联系：MIV 的解码端渲染器本质上就是一个不带学习的 Ha et al.：输入若干视图的纹理和深度，做前向投影、可见性判断和按距离加权的混合。Ha et al. 的消融中，“Distance-based Blending”只有 26.08 dB，完整模型为 31.17 dB。这说明把 MIV 的渲染器换成学习式融合网络（或者像 DSGS 那样换成解码端 Gaussian splatting）还有很大的提升空间。"
+    },
+    {
+     "name_zh": "深度怎么编码：视差量化、位深，以及“深度比颜色更贵”",
+     "explain_zh": "直觉：视频编码器是为人眼看颜色设计的，而深度误差会被几何放大成像素错位，所以深度通常需要更高的位深和更小的量化步长。MIV 按公式 2 把归一化视差（1/深度）线性量化到 10 bit：近处精细、远处粗糙，这与立体视觉的误差特性一致（见 g-depth）。数值例子：设 z_near=0.5 m、z_far=3 m，视差范围为 2−0.333=1.667 m⁻¹，10 bit 的步长约为 0.00163 m⁻¹。在 2 m 处，对应的深度步长约为 \\(z^2\\Delta d=4\\times0.00163\\approx6.5\\) mm；在 3 m 处约为 14.7 mm；如果只用 8 bit，2 m 处的步长约为 26 mm。Ha et al. 的 TSDF 截断距离 τ 只有 20 mm：一个 8 bit 量化台阶就比整个截断带还宽（最大取整误差约 13 mm，也已达到 τ 的三分之二），表面过零点的位置只能以远粗于 τ 的精度确定。Starline 同样用 10 bit 深度（放在 Y 通道，UV 置为 512），深度 QP=14、彩色 QP=22。它的表 1 显示，穿纯色衣服静坐时总码率 28.0 Mbit/s 中，3 路深度占了 23.7 Mbit/s（约 85%）；穿高频纹理衣服挥动手臂时，总码率 102.3 Mbit/s 中深度占 49.7 Mbit/s（约 49%）；附录实验表明，10 bit 的 H.265 深度压缩对最终渲染没有明显影响。MIV 还观察到，压缩伪影会在前景与背景的过渡处造成明显的视图合成伪影，因此标准允许降低几何图的分辨率。与锚点的联系：Quark 的 LDM 各层同样在近、远平面之间按等视差间隔排布（anchor δ=(ℓ−0.5)/L），与 MIV 的视差量化遵循同一个“逆深度均匀采样”原理。Ha et al. 依赖公制的 τ=0.02 m 和 RAFT-Stereo 深度；深度一旦经过有损传输，这个阈值是否仍然合适，论文从未检验过。"
+    },
+    {
+     "name_zh": "静态 3DGS 压缩：剪枝、量化与结构化排列",
+     "explain_zh": "直觉：3DGS 的存储大头不在位置，而在外观。每个 Gaussian 有 59 个 float：位置 3、尺度 3、旋转四元数 4、不透明度 1、三阶球谐系数 16×3=48，其中球谐占了 81%。相应的压缩手段有三类：减少 Gaussian 的数量（剪枝）；降低每个属性的比特数（量化或降阶）；利用属性之间的空间相关性（结构化排列加熵编码）。LightGaussian 按“全局重要性”剪枝并做恢复训练，再用知识蒸馏把球谐降到更低的阶，最后按重要性做矢量量化。它平均压缩 15×，同时把渲染速度从 144 FPS 提到 237 FPS（Mip-NeRF360 上原版 3DGS 平均 734 MB）。Self-Organizing Gaussians 把 Gaussian 属性排列到 2D 网格上，并在训练中约束邻域平滑，使之可以直接用成熟的图像编解码器压缩，达到 17–42×。HAC 在 Scaffold-GS 的锚点结构上做上下文熵编码（见第 1 条），压缩超过 75×。与锚点的联系：Ha et al. 的“像素级 Gaussian”正是一个极端情况。它为每个输入像素生成一个完全不透明、各向同性、尺度按解析式确定的 Gaussian，因此不需要传输任何 Gaussian 参数，只需要传 RGB 图和深度图，Gaussian 在接收端由深度即时生成。这说明“传图像加深度，在接收端生成 Gaussian”本身就是一种极致的参数压缩，代价是无法表达半透明和视角相关的外观。"
+    },
+    {
+     "name_zh": "动态场景：只编码“变化”",
+     "explain_zh": "直觉：视频中大部分内容在帧与帧之间几乎不变，传统编码用运动补偿加残差来利用这一点，体积视频也一样。ReRF 用紧凑的运动网格加残差特征网格表示相邻帧之间的差异，配合专门设计的 FVV 编解码器，达到约三个数量级的压缩。3DGStream 用由 hash grid 和小 MLP 组成的 Neural Transformation Cache 预测每个 Gaussian 的平移和旋转，再自适应地添加新 Gaussian 来处理新出现的物体；每帧在线训练约 12 s，渲染 200 FPS。QUEEN 直接学习相邻帧之间所有 Gaussian 属性的残差：用学习的潜变量解码器量化位置以外的残差，用门控模块把位置残差稀疏化，并以视图空间梯度差区分静态和动态区域。在高动态场景下，它约为 0.7 MB/帧，每帧训练不到 5 s，渲染约 350 FPS。数值例子：0.7 MB/帧 × 8 bit × 30 fps ≈ 168 Mbit/s，仍然高于 Starline 的 30–100 Mbit/s 区间，更不用说每帧数秒的训练延迟。与锚点的联系：Ha et al. 的颜色差分掩码 \\(M=\\min(|I^t-I^{t-1}|/\\lambda_t+\\beta,1)\\) 与 QUEEN 的静动分离利用的是同一个事实：机位固定时，画面的大部分是静态的。前者用它来稳定深度，后者用它来节省比特。两者是“时间冗余”的两种用法，一个系统完全可以共用这个信号。"
+    },
+    {
+     "name_zh": "让神经表示“长得像视频”：硬件解码与神经前后处理",
+     "explain_zh": "直觉：学习式编解码器压得更好，但手机和头显上通常只有视频硬解码单元。折中的办法有两种：改造表示去适应现成的编解码器，或者在标准编解码器的前后各加一个神经网络。VideoRF 把 4D 辐射场序列化成 2D 特征图像流，训练时就约束它的时空冗余，从而可以用 2D 视频编码器压缩、借助硬件解码，在移动端实时渲染。V^3 同样把动态 Gaussian 当作 2D 视频处理，并配套了多平台播放器。Starline 选择 GPU 上的 NVENC/NVDEC，四块 GPU 的硬件编解码单元足以在 60 Hz 下处理 7 路全分辨率视频流。面向立体视频会议的 Sandwiched RGB-D 压缩（Hu、Guleryuz、Chou 等，Google，CVPR 2024 Workshop）在标准编解码器前后各包一个神经网络，用图像编解码器的可微代理端到端训练，并使用几何感知损失；在新视角渲染质量相同时，它比常规编码和 MV-HEVC 节省约 30% 码率，而且不需要升级硬件。与锚点的联系：要把 Quark 或 Ha et al. 部署进真实系统，这条“神经前后处理 + 硬件编解码”的路线最容易落地，因为它不改变锚点网络的输入格式，输入仍然是多视角 RGB 或 RGB-D。"
+    },
+    {
+     "name_zh": "压缩误差怎样传到新视角：以渲染质量为目标的编码",
+     "explain_zh": "直觉：编解码器最小化的是每一路视频自身的失真，而观看者看到的是由多路视频合成出的新视角，两者并不等价。MIV 标准化过程中的经验是，压缩伪影会在前景与背景的边缘被视图合成放大。多路视频各自独立编码时，同一个表面在不同视图中的颜色偏差、块效应，以及 GOP 边界处 I 帧引起的“呼吸”效应也各不相同。对 Quark 来说，这种跨视图的颜色不一致正是它自述的弱点：输入曝光不一致或标定有误差时，会出现硬边和闪烁。对 Ha et al. 来说，编码噪声会被颜色差分掩码误当成运动，导致少用历史深度；深度的编码误差则会直接进入 τ=2 cm 的 TSDF。两篇论文都只在没有经过有损传输的数据上训练和评测。任务感知编码试图直接优化“渲染之后的质量”：GS-SCNet 把视差引导的并行语义编解码器与 feed-forward 3DGS 参数预测器联合训练，编码端 52 ms、解码端 31 ms（19.2 FPS），在 PSNR 下相对“MV-HEVC + GPS-Gaussian”基线平均节省约 75% BD-rate。DSGS 则发现，对 MIV 解码端的前馈 3DGS 而言，有损编码起到了低通滤波的作用，合成质量不降反升。度量本身也有问题：GScomp-QA 的主观实验（331 段视频、9 种 GS 压缩方法）显示，18 种常用客观指标都不能完整反映 GS 压缩失真。"
+    }
+   ],
+   "equations": [
+    {
+     "tex": "\\min_{\\theta}\\ \\mathcal L=R+\\lambda D=\\mathbb E_{\\mathbf x}\\big[-\\log_2 p_\\theta(\\hat{\\mathbf y})\\big]+\\lambda\\,\\mathbb E_{\\mathbf x}\\big[d(\\mathbf x,\\hat{\\mathbf x})\\big],\\qquad \\hat{\\mathbf y}=\\mathrm{round}\\big(g_a(\\mathbf x)\\big),\\quad \\hat{\\mathbf x}=g_s(\\hat{\\mathbf y})",
+     "explain_zh": "学习式编解码的率失真目标（Ballé 等）。x：待压缩的信号（图像、Gaussian 属性或特征网格）；g_a：分析变换，即编码器，输出潜变量 y；round：量化，训练时用加 U(−½,½) 均匀噪声来代替；g_s：合成变换，即解码器；p_θ：学习的概率模型（hyperprior，或 HAC 的 hash-grid 上下文模型），\\(-\\log_2 p_\\theta(\\hat{\\mathbf y})\\) 是算术编码所需的比特数，其期望就是码率 R；d：失真度量（MSE、1−MS-SSIM 或渲染损失）；λ：拉格朗日乘子，用来调节码率与质量，一个 λ 对应率失真曲线上的一个点。例：若 p_θ 给某个量化值的概率是 0.25，这个值约花 2 bit；把 λ 加倍，模型会倾向于多花比特来换更低的失真。"
+    },
+    {
+     "tex": "d_{q}=\\mathrm{round}\\!\\left(1023\\cdot\\frac{d-d_{\\mathrm{far}}}{d_{\\mathrm{near}}-d_{\\mathrm{far}}}\\right),\\qquad d=\\frac{1}{z},\\qquad \\Delta z\\approx z^{2}\\,\\frac{d_{\\mathrm{near}}-d_{\\mathrm{far}}}{1023}",
+     "explain_zh": "MIV 的 10 bit 几何（深度）量化，对应 Boyce 等 2021 的式 (1)；取整和误差近似是本页补充的。z：深度，单位米；d=1/z：视差（归一化视差）；d_near=1/z_near 和 d_far=1/z_far：随每个视图元数据传输的视差上下限；d_q∈[0,1023]：写进 10 bit 视频亮度通道的整数；Δz：一个量化步对应的深度间隔（最大取整误差是它的一半），由 \\(\\mathrm dz=-z^2\\,\\mathrm dd\\) 得到，随深度的平方增长。例：z_near=0.5 m、z_far=3 m 时，2 m 处 Δz≈6.5 mm，3 m 处约 14.7 mm；换成 8 bit（把 1023 换成 255）后，2 m 处约 26 mm，一个台阶就超过了 Ha et al. 的 TSDF 截断 τ=20 mm。Quark 的 LDM 层深度同样在视差区间 [1/f, 1/η] 内按等间隔的 anchor 排布（η 为近平面深度、f 为远平面深度），原理相同。"
+    },
+    {
+     "tex": "S_{\\mathrm{3DGS}}=N\\times(3+3+4+1+48)\\times4\\ \\mathrm{B}=236\\,N\\ \\mathrm{B},\\qquad B_{\\mathrm{stream}}=8\\,S_{\\mathrm{frame}}\\,f",
+     "explain_zh": "原版 3DGS 的存储量与流式码率估算。N：Gaussian 的个数；括号里依次是位置 3、尺度 3、旋转四元数 4、不透明度 1、三阶球谐 16 个系数×RGB 3 通道=48，每个 float32 占 4 字节；S_frame：每帧需要传输的字节数；f：帧率；B_stream：比特率，乘 8 是把字节换成比特。例：N=100 万时每帧 236 MB，如果每帧都传一份完整的 3DGS，30 fps 需要约 56.6 Gbit/s。QUEEN 把残差压到 0.7 MB/帧后，码率为 0.7×8×30≈168 Mbit/s。对照 Starline 的 30–100 Mbit/s 和 Beam 的 50 Mbps 下限，动态 Gaussian 流还需要再压一个量级，否则就应该改为传输多视角视频、在接收端重建。"
+    }
+   ],
+   "evolution": [
+    {
+     "year": 2015,
+     "milestone_zh": "MV-HEVC（2014 年 HEVC 第 2 版）与 3D-HEVC（2015 年第 3 版）定稿，标准化了视间预测和深度图编码工具；Tech 等 2016 年发表官方综述。"
+    },
+    {
+     "year": 2015,
+     "milestone_zh": "Collet 等把跟踪网格和纹理编码为 MPEG 流（平均 9.5 Mbps），但处理完全离线：据 Tang 等引述，约 30 s/帧，需要约 70 台高端工作站组成的集群。"
+    },
+    {
+     "year": 2018,
+     "milestone_zh": "Ballé 等提出 hyperprior 学习式图像压缩；Tang 等用 TSDF 块潜空间实现 30 fps 的实时 4D 压缩（几何约 7 Mbps）。"
+    },
+    {
+     "year": 2019,
+     "milestone_zh": "Schwarz 等系统介绍 MPEG V-PCC 与 G-PCC；DVC 提出端到端的学习式视频编码。"
+    },
+    {
+     "year": 2021,
+     "milestone_zh": "MIV（ISO/IEC 23090-12）综述发表，第 1 版进入 DIS/FDIS 阶段，确立“视图 + 视差深度 atlas + 解码端视图合成”的框架；Starline 采用 7 路 RGB-D H.265 流，码率 28–102 Mbit/s。"
+    },
+    {
+     "year": 2023,
+     "milestone_zh": "ReRF 用运动网格加残差网格实现约三个数量级的动态辐射场压缩，并支持长序列流式播放。"
+    },
+    {
+     "year": 2024,
+     "milestone_zh": "3DGS 压缩集中涌现：LightGaussian（15×）、SOG（17–42×）、HAC（超过 75×）；流式方面有 3DGStream（约 12 s/帧）、QUEEN（0.7 MB/帧）、VideoRF、V^3；Sandwiched RGB-D 压缩比 MV-HEVC 节省约 30% 码率。"
+    },
+    {
+     "year": 2025,
+     "milestone_zh": "4DGC 做率感知的 4D Gaussian 压缩，D-FCGS 实现前馈式动态 Gaussian 压缩；MIV 第 2 版到达 FDIS 阶段，V-DMC 到达 FDIS 阶段。"
+    },
+    {
+     "year": 2026,
+     "milestone_zh": "MPEG Gaussian Splat Coding 的 V-PCC 修正案（1 月，第 153 次会议）和 G-PCC 修正案（第 154 次会议）先后到达 CDAM 阶段；GS-SCNet（联合编码与 feed-forward 3DGS）、DSGS（MIV 解码端前馈 Gaussian splatting）把压缩与渲染联合设计；GScomp-QA 发布 GS 压缩的主观质量数据集。"
+    }
+   ],
+   "papers": [
+    {
+     "title": "Emerging MPEG Standards for Point Cloud Compression",
+     "authors": "Sebastian Schwarz et al.",
+     "year": 2019,
+     "venue": "IEEE JETCAS 9(1)",
+     "url": "https://doi.org/10.1109/JETCAS.2018.2885981",
+     "citations": 748,
+     "role_zh": "V-PCC 与 G-PCC 的权威介绍：补丁投影加 2D 视频编码，对比八叉树几何编码。这是理解“把 3D 变成 2D 视频”的起点。",
+     "priority": "must"
+    },
+    {
+     "title": "MPEG Immersive Video Coding Standard",
+     "authors": "Jill M. Boyce et al.",
+     "year": 2021,
+     "venue": "Proceedings of the IEEE 109(9)",
+     "url": "https://doi.org/10.1109/JPROC.2021.3062590",
+     "citations": 134,
+     "role_zh": "MIV 标准与 TMIV 参考软件：基础视图与附加视图、修剪、atlas 打包、10 bit 视差量化、解码端视图合成。它是与 Ha et al. 和 Quark 的输入格式最接近的标准。",
+     "priority": "must"
+    },
+    {
+     "title": "Variational image compression with a scale hyperprior",
+     "authors": "Johannes Ballé et al.",
+     "year": 2018,
+     "venue": "ICLR 2018",
+     "url": "https://arxiv.org/abs/1802.01436",
+     "citations": 2513,
+     "role_zh": "学习式图像压缩的 hyperprior 框架：编码器与熵模型联合训练，以率失真为目标。HAC 等 3DGS 熵编码方法的方法论都来源于此。",
+     "priority": "must"
+    },
+    {
+     "title": "HAC: Hash-grid Assisted Context for 3D Gaussian Splatting Compression",
+     "authors": "Yihang Chen et al.",
+     "year": 2024,
+     "venue": "ECCV 2024",
+     "url": "https://arxiv.org/abs/2403.14530",
+     "citations": 300,
+     "role_zh": "第一个面向 3DGS 的上下文熵编码方法：用 hash grid 提供锚点上下文，以高斯分布估计概率，结合自适应量化和算术编码，相对原版 3DGS 压缩超过 75×。",
+     "priority": "must"
+    },
+    {
+     "title": "3DGStream: On-the-Fly Training of 3D Gaussians for Efficient Streaming of Photo-Realistic Free-Viewpoint Videos",
+     "authors": "Jiakai Sun et al.",
+     "year": 2024,
+     "venue": "CVPR 2024 (Highlight)",
+     "url": "https://arxiv.org/abs/2403.01444",
+     "citations": 210,
+     "role_zh": "在线流式自由视点视频：用 NTC 预测 Gaussian 的平移和旋转，并自适应添加新 Gaussian；每帧约 12 s，渲染 200 FPS，是动态 Gaussian 流式传输的基线。",
+     "priority": "must"
+    },
+    {
+     "title": "Overview of the Multiview and 3D Extensions of High Efficiency Video Coding",
+     "authors": "Gerhard Tech et al.",
+     "year": 2016,
+     "venue": "IEEE TCSVT 26(1)",
+     "url": "https://doi.org/10.1109/TCSVT.2015.2477935",
+     "citations": 442,
+     "role_zh": "MV-HEVC 与 3D-HEVC 的官方综述，涵盖视间预测和深度图编码工具，是 RGB-D 与多视角视频编码的基础。",
+     "priority": "should"
+    },
+    {
+     "title": "LightGaussian: Unbounded 3D Gaussian Compression with 15x Reduction and 200+ FPS",
+     "authors": "Zhiwen Fan et al.",
+     "year": 2023,
+     "venue": "NeurIPS 2024",
+     "url": "https://arxiv.org/abs/2311.17245",
+     "citations": 663,
+     "role_zh": "全局重要性剪枝、球谐蒸馏降阶加矢量量化，平均压缩 15×，并把渲染速度从 144 FPS 提到 237 FPS。",
+     "priority": "should"
+    },
+    {
+     "title": "Compact 3D Scene Representation via Self-Organizing Gaussian Grids",
+     "authors": "Wieland Morgenstern et al.",
+     "year": 2023,
+     "venue": "ECCV 2024",
+     "url": "https://arxiv.org/abs/2312.13299",
+     "citations": 207,
+     "role_zh": "把 Gaussian 属性排成局部平滑的 2D 网格，再用现成的图像编解码器压缩（17–42×），体现了“把神经表示图像化、视频化”的思路。",
+     "priority": "should"
+    },
+    {
+     "title": "QUEEN: QUantized Efficient ENcoding of Dynamic Gaussians for Streaming Free-viewpoint Videos",
+     "authors": "Sharath Girish et al.",
+     "year": 2024,
+     "venue": "NeurIPS 2024",
+     "url": "https://arxiv.org/abs/2412.04469",
+     "citations": 36,
+     "role_zh": "学习帧间属性残差，采用量化-稀疏框架并做静动分离；0.7 MB/帧，每帧训练不到 5 s，渲染 350 FPS，明确以 3D 视频会议为目标场景。",
+     "priority": "should"
+    },
+    {
+     "title": "Neural Residual Radiance Fields for Streamably Free-Viewpoint Videos",
+     "authors": "Liao Wang et al.",
+     "year": 2023,
+     "venue": "CVPR 2023",
+     "url": "https://arxiv.org/abs/2304.04452",
+     "citations": 105,
+     "role_zh": "用运动网格加残差特征网格表示相邻帧的差异，配套 FVV 编解码器，实现约三个数量级的压缩和长序列流式播放。",
+     "priority": "should"
+    },
+    {
+     "title": "VideoRF: Rendering Dynamic Radiance Fields as 2D Feature Video Streams",
+     "authors": "Liao Wang et al.",
+     "year": 2023,
+     "venue": "CVPR 2024",
+     "url": "https://arxiv.org/abs/2312.01407",
+     "citations": 31,
+     "role_zh": "把动态辐射场序列化成 2D 特征图像流，用标准视频编码和硬件解码在移动端实时播放。",
+     "priority": "optional"
+    },
+    {
+     "title": "Real-time compression and streaming of 4D performances",
+     "authors": "Danhang Tang et al.",
+     "year": 2018,
+     "venue": "ACM TOG 37(6) (SIGGRAPH Asia 2018)",
+     "url": "https://doi.org/10.1145/3272127.3275096",
+     "citations": 37,
+     "role_zh": "在 Holoportation 类的 8 路 RGB-D 数据上实时压缩 TSDF：把 TSDF 块投影到学习得到的低维 SDF 潜空间，再量化编码；30 fps，几何约 7 Mbps，比基于网格的方法快两个数量级。",
+     "priority": "optional"
+    },
+    {
+     "title": "One-Click Upgrade from 2D to 3D: Sandwiched RGB-D Video Compression for Stereoscopic Teleconferencing",
+     "authors": "Yueyu Hu et al.",
+     "year": 2024,
+     "venue": "CVPR 2024 Workshops (AIS)",
+     "url": "https://arxiv.org/abs/2404.09979",
+     "citations": 2,
+     "role_zh": "在标准 H.264/HEVC 编解码器前后各加一个神经网络（sandwich），用几何感知损失端到端训练，让现成的 2D 硬件编解码器直接承载立体 RGB-D 视频；在新视角渲染质量相同时比常规编码和 MV-HEVC 省约 30% 码率。它是“不改锚点网络输入格式、只改传输层”的最直接范例。",
+     "priority": "optional"
+    }
+   ],
+   "prereqs": [
+    "v-codec",
+    "r-reps",
+    "g-depth",
+    "n-3dgs",
+    "n-dynamic",
+    "f-prob",
+    "i-layered",
+    "v-metrics"
+   ],
+   "relation_to_anchors_zh": "（1）两篇锚点都完全没有带宽分析。Quark 没有报告采集、编码和传输；Ha et al. 没有说明渲染放在发送端还是接收端，也没有给出码率数据。它们的中间表示（Quark 的逐目标视点 LDM，Ha et al. 的目标视点 TSDF 深度和前向 splat 图）每帧即时生成、用完即丢，因此不存在可以压缩并复用的 3D 表示。能传输的只有输入（多视角 RGB，或 RGB 加深度），或者渲染好的 2D 画面。（2）如果在接收端渲染：Quark 需要离观看者最近的 8 路 RGB。粗略计算，8 路 1080p30 的原始数据约 11.9 Gbit/s；参照 Starline 表 1 中单路彩色流 0.9–20.8 Mbit/s 的实测范围，8 路 HEVC 大约在 7–170 Mbit/s 之间（本页按 8 倍粗略估算，未考虑分辨率差异）。Ha et al. 需要 K 路 RGB 和深度。深度流比彩色流更贵（Starline 穿纯色衣服静坐时深度占总码率约 85%，挥臂时约 49%），而且按公式 2 的例子（深度范围 0.5–3 m），要用 10 bit 视差量化，2 m 处的量化台阶（约 6.5 mm）才能明显小于 τ=2 cm。（3）MIV 与 Ha et al. 在结构上同构：MIV 传输“视图纹理 + 视差深度”的 atlas，解码端做深度可见性判断加按距离加权的混合；Ha et al. 做的事，正是把按距离加权混合（26.08 dB）换成几何引导的学习式融合（31.17 dB）。Quark 则可以看作一个不需要深度通道的 MIV 解码端渲染器（MIV 第 1 版就有只传纹理、在解码端估计几何的 Geometry Absent profile）；DSGS 正是沿这个思路，把解码端的深度估计换成了前馈 3DGS。（4）与持久表示路线的对照：3DGStream、QUEEN 等把动态场景压缩成 Gaussian 流，接收端可以为任意多个视点和双眼渲染，这也是 Quark 团队后续的 LVT、Fuse-and-Refine 转向 3DGS 的动机之一。不过这些方法目前每帧仍需数秒优化，只有 GS-SCNet、D-FCGS 这类前馈式编码才有可能跟上 Quark 和 Ha et al. 的实时性。（5）风险：两篇锚点都在无损或高质量的数据上训练和测试。Quark 自述对输入曝光差异和标定误差敏感，出错时是硬边而不是模糊；Ha et al. 的颜色差分掩码对噪声敏感。有损编码可能放大这些弱点，而这一点从未被评测过。",
+   "debates_zh": [
+    "传什么：多视角视频（在接收端渲染，视点自由，但带宽高）、3D 表示（可供多个视点复用，但编码前要先重建），还是渲染好的 2D 画面（带宽最低，但需要回传视点，增加延迟）。",
+    "标准编解码器还是学习式编解码器：前者有硬件支持，延迟和功耗都低；后者率失真性能更好，但需要 GPU 或 NPU，端侧功耗和延迟尚不清楚。",
+    "逐帧优化的流式 Gaussian（QUEEN、3DGStream，每帧秒级）还是前馈式编码（毫秒级）：这是质量与实时性之间的取舍。",
+    "失真怎么度量：看每路视频的 PSNR/BD-rate、合成视点的质量，还是时间一致性？GScomp-QA 等主观数据集显示，客观指标与主观感受并不完全一致。",
+    "标准化之争：MPEG GSC、MIV 与业界的事实格式（例如 Niantic 的 SPZ），谁会成为 Gaussian 交换和流式传输的主流？"
+   ],
+   "open_questions_zh": [
+    "面向逐帧、逐视点 NVS（Quark、Ha et al.）的率失真问题：码率给定时，彩色与深度之间、各视图之间应怎样分配比特，才能让合成视点的质量最优？",
+    "NVS 网络对编码伪影的鲁棒性：在压缩数据上训练或微调能否消除这个域差？压缩伪影对时间闪烁指标的影响有多大？",
+    "在低延迟约束下（不用 B 帧、只缓冲一帧），学习式和混合式编解码器还能保留多少优势？",
+    "视点自适应流：观看者头动时只请求最近的 K 路视图，怎样隐藏视图切换的延迟和关键帧开销？",
+    "动态 Gaussian 流的实时编码：能否在 33 ms 内完成一帧的“重建 + 编码”，同时把码率控制在 50 Mbit/s 以内？"
+   ],
+   "resources": [
+    {
+     "title": "3DGS.zip: A survey on 3D Gaussian Splatting Compression Methods（交互式对比页）",
+     "url": "https://w-m.github.io/3dgs-compression-survey/",
+     "type": "tutorial",
+     "note_zh": "Fraunhofer HHI、柏林洪堡大学和柏林工业大学维护的 3DGS 压缩方法对比表，在 Tanks&Temples、Mip-NeRF360、Deep Blending、Synthetic-NeRF 上汇总文件大小、PSNR/SSIM/LPIPS、Gaussian 数量和每个 Gaussian 的比特数，可以快速查到 LightGaussian、HAC、SOG 等方法的表现。"
+    },
+    {
+     "title": "CompressAI",
+     "url": "https://github.com/InterDigitalInc/CompressAI",
+     "type": "code",
+     "note_zh": "PyTorch 学习式压缩库和评测平台，包含 Ballé hyperprior 等经典模型的实现，可以直接复现公式 1 的率失真训练。"
+    },
+    {
+     "title": "MPEG V-PCC Test Model (mpeg-pcc-tmc2)",
+     "url": "https://github.com/MPEGGroup/mpeg-pcc-tmc2",
+     "type": "code",
+     "note_zh": "V-PCC 官方测试模型（编码器和解码器），可以观察补丁投影以及几何图、属性图、占用图的实际生成过程。"
+    },
+    {
+     "title": "An overview of ongoing point cloud compression standardization activities: video-based (V-PCC) and geometry-based (G-PCC)",
+     "url": "https://doi.org/10.1017/ATSIP.2020.12",
+     "type": "paper",
+     "note_zh": "Graziosi 等发表在 APSIPA Trans. 2020 的开放获取综述，比 Schwarz 2019 更新，详细描述 TMC2（V-PCC）与 TMC13（G-PCC）的算法，并给出性能量级：例如 TMC2 v8 在 10–15 Mbps 下已有良好视觉质量，G-PCC 无损压缩平均约 3:1。"
+    }
+   ]
+  }
+ ],
+ "change_log": [
+  "Method: re-checked every paper against Semantic Scholar (match and batch lookups, retried after HTTP 429), Crossref and arXiv. Read the full text of Starline, VirtualCube, Tele-Aloha, Tang 2018, Montage4D (I3D), MIV (Boyce 2021), Graziosi 2020, blue-c, Difix3D+, CAT3D, CausVid, SVD, Self Forcing, RealCam, GS-SCNet, Tele360, HAC, DreamFusion and MVDream, and grepped the numeric claims. Checked the Quark and Ha et al. statements against anchor_quark.json, anchor_ha.json and deepread.md. Recomputed the diffusion schedule values (DDPM t=200: 0.81/0.58; t=500: 0.28; SD schedule t=200: 0.87/0.49) and the depth-quantization numbers (6.5 mm, 14.7 mm, 26 mm); all match.",
+  "Citation counts refreshed from Semantic Scholar: DDPM 35360, LDM 27573, Zero-1-to-3 1868, Difix3D+ 188, ReconFusion 405, ADD 876, Ballé 2018 2513. All other counts matched the draft. Starline's TOG record (92) was confirmed.",
+  "[diffusion] Difix3D+ venue changed to 'CVPR 2025 (Oral, Best Paper Finalist)'. Fixed the τ-sweep claim: τ=10 gives PSNR 17.72, about the same as τ=200's 17.73, but the paper says most artifacts stay. The draft had said τ=10 had 'no repair effect'. Added the frozen-VAE-encoder / LoRA-decoder details to the paper role.",
+  "[diffusion] Fixed a logic error. A convex combination of input colors can produce colors that are in no input, so 'cannot produce any colour absent from the inputs' was wrong. It now says Quark can only interpolate between input colors and cannot create content for regions no input sees. Also 'network outputs the average' is now 'conditional mean under L2 / median under L1'.",
+  "[diffusion] Removed an unsupported claim that Ha et al. explicitly list diffusion/generative inpainting as a rejected alternative. It now says they use no generative prior.",
+  "[diffusion] Changed '0.09 dB' to '≈0.08 dB' (30.4071−30.3227) and noted this ablation used the half-resolution, 250K-step setting.",
+  "[diffusion] Clarified two Quark claims. One-to-many attention is nearly constant in view count only for the attention part; encoding and per-view update are still O(M). Quark's γ encodes the input-vs-target ray offset, while CAT3D's raymap encodes absolute rays.",
+  "[diffusion] Fixed attribution: 'Scaling Transformer-Based NVS' is by Nair et al., with Quark authors Kaza, Luo and Lombardi as co-authors. The draft said 'Kaza, Luo et al.'.",
+  "[diffusion] RealCam latencies are now labelled as first-frame latency on H20: 0.72 s (5B) and 1.15 s (1.3B). CausVid timing is labelled as H100. Self Forcing is noted as NeurIPS 2025.",
+  "[diffusion] Added two missing foundational papers: Classifier-Free Diffusion Guidance (Ho & Salimans, should; S2 7173) and 3DiM 'Novel View Synthesis with Diffusion Models' (Watson et al., ICLR 2023, optional; S2 351).",
+  "[telepresence] Fixed a misattribution: Starline's '27.87% more recalled' comes from the N=25 within-subjects experiment, not the 117-person deployment. Debates, overview and evolution now name both studies. Added the verified '>87% of survey responses' figure.",
+  "[telepresence] Added Tele-Aloha's full system latency table (Table 4, 149 ms). View synthesis is 28 ms of that; capture plus display account for more than half. Also added its NVENC packing (four square crops tiled into one 6000×6000 frame, WebRTC transport).",
+  "[telepresence] Corrected Starline wording. The paper says image-based fusion (1.5 ms for all 6 raycasts) is a small fraction of the 16.6 ms budget; the draft had said 'whole rendering fits'. The tracker latency was measured with a photodetector, not a phototube. Added the change-band hysteresis filter and '3 active-stereo RGB-D pods'.",
+  "[telepresence] Fixed the Montage4D EMA notation (the same symbol appeared on both sides) and added the verified 114–135 fps. The resource type changed from 'code' to 'paper' because the project page has only shader demos, no system code. Added VirtualCube's alpha history smoothing (w=0.5) and border-only color smoothing, both verified in the paper.",
+  "[telepresence] Beam's spec page gives a 65-inch light field display with 33.2M pixels and does not say '8K'; wording adjusted. Tele360 uses 4–6 cameras, and '~35 ms' is the network module time on an RTX 5090 with 6 views (Table 9). For GS-SCNet, the ~75% BD-rate saving is measured against MV-HEVC+GPS-Gaussian under PSNR (−75.18%); the draft had said 'encoder + GPS/EVA-Gaussian'.",
+  "[telepresence] Added a missing foundational system: blue-c (Gross et al., SIGGRAPH 2003 / TOG 22(3); 16 cameras, switchable LC-glass screens, point-based 3D video at ~25k points and 5 fps). Added it as a paper, an evolution entry and a sentence in the overview. Softened Holoportation's '1–2 Gbps' (only secondary sources confirm it) and added d-stereo to prereqs.",
+  "[compression] Fixed a misattribution: V-PCC '125:1, 1M points ≈ 8 Mbit/s' comes from MPEG's 124th meeting communiqué (Oct 2018), not Graziosi et al. Graziosi's verified figures (TMC2 v8 good quality at 10–15 Mbps vs 30–40 Mbps for v1; lossless G-PCC ~3:1) are now in the key idea and the resource note.",
+  "[compression] MV-HEVC/3D-HEVC were finalized in 2014–2015 (HEVC v2/v3); 2016 is the year of the Tech et al. overview. Timeline and overview corrected.",
+  "[compression] Fixed a technical error. The 8-bit quantization step at 2 m (26 mm) exceeds τ=20 mm, but the maximum rounding error is about 13 mm, so the claim 'the 8-bit error already exceeds τ' was wrong. It now reads: one step is wider than the whole truncation band. Δz is now described as the step size. Quark's disparity interval is written [1/f, 1/η] with η and f defined.",
+  "[compression] HAC's 'no rendering slowdown' now carries the Synthetic-NeRF counter-example (341 vs 401 FPS). The DSGS description is corrected: it replaces MIV's decoder-side depth estimation with feed-forward 3DGS. Added DSGS's verified finding that lossy coding acts as a low-pass filter and improves synthesis, and softened 'almost nobody has studied this'.",
+  "[compression] Removed an unverifiable claim ('a 2026 study on compression vs temporal-consistency metrics'). Replaced it with verified GScomp-QA findings: 331 stimuli, 9 codecs, and 18 objective metrics that fail to capture GS distortions. Starline's depth share now reads ~85% (stationary, uniform shirt) vs ~49% (moving arms). The 8-stream estimate is now 7–170 Mbit/s, labelled as a rough estimate.",
+  "[compression] Removed the unsupported 'same lineage as Starline' framing for Sandwiched RGB-D; it is now credited to the Google authors Hu, Guleryuz, Chou et al. Added it as an optional paper (arXiv 2404.09979, CVPRW 2024). Checked the MPEG status items: the GSC V-PCC amendment reached CDAM at the 153rd meeting and the G-PCC amendment at the 154th; MIV 2nd edition and V-DMC reached FDIS in 2025. Fixed the 3DGS.zip survey maintainers (Fraunhofer HHI, HU Berlin, TU Berlin) and added v-metrics to prereqs.",
+  "All ids unchanged; every prereq id comes from the allowed list. The added URLs (arXiv abs pages and DOIs) were opened or checked via Crossref/arXiv. Temp work was done in a mktemp directory; no files were written under survey/data."
+ ]
+}

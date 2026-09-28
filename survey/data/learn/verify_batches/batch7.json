@@ -1,0 +1,289 @@
+[
+ {
+  "title": "Adding Conditional Control to Text-to-Image Diffusion Models",
+  "authors": "Lvmin Zhang et al. (Stanford University)",
+  "year": 2023,
+  "venue": "ICCV 2023",
+  "url": "https://arxiv.org/abs/2302.05543",
+  "citations": 7807,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "ControlNet 给出了在不破坏大模型原有能力的前提下，为扩散模型加入空间条件（边缘、深度、分割、人体姿态等）的标准做法，训练数据少于 50k 或多于 1M 时都能稳定训练。它让“几何条件 → 真实感图像”成为通用工具，其条件注入结构也被大量 3D 和视频生成工作沿用。",
+  "contributions_zh": "做法是冻结原 UNet 的编码块，另复制一份可训练副本来接收条件 c，两者通过“零卷积”（权重初始化为 0 的 1×1 卷积）相连：\\( y_c=\\mathcal F(x;\\Theta)+\\mathcal Z(\\mathcal F(x+\\mathcal Z(c;\\Theta_{z1});\\Theta_c);\\Theta_{z2}) \\)。其中 F 是网络块，Θ 是冻结参数，Θ_c 是可训练副本的参数，Z 是零卷积。训练开始时两个 Z 的输出都为 0，模型行为与原模型完全相同；随着训练，条件分支从零逐渐“长出来”，不会一开始就引入有害噪声。例：输入一张深度图和文本“客厅”，生成的图像布局会和深度图一致。",
+  "anchor_link_zh": "锚点没有使用 ControlNet。它与临场的关联在于“深度条件生成”：Ha et al. 每帧都有由 TSDF 光线步进得到的目标视角深度 𝒟^t，Quark 也输出每层的深度。如果要把这些几何信息交给生成模型去填补 disocclusion 空洞，ControlNet 式的深度条件是最直接的接口。这是一个可能的扩展方向，锚点没有做。",
+  "concept_ids": [
+   "l-diffusion",
+   "l-cnn",
+   "g-depth"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "Stable Video Diffusion: Scaling Latent Video Diffusion Models to Large Datasets",
+  "authors": "Andreas Blattmann et al. (Stability AI)",
+  "year": 2023,
+  "venue": "arXiv 技术报告 2023",
+  "url": "https://arxiv.org/abs/2311.15127",
+  "citations": 2928,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "报告系统总结了视频潜扩散模型的三阶段训练（文生图预训练 → 大规模视频预训练 → 高质量视频微调）和数据筛选策略。开源权重成了图生视频和相机控制视频生成的通用底座。报告还表明，视频模型本身就是很强的多视角 3D 先验，可以微调成一次前向生成多个视角的模型（后续有 SV3D 等）。",
+  "contributions_zh": "模型在图像 LDM 中插入时间层，让一段视频所有帧的潜变量在同一个去噪过程中联合生成。报告强调数据策展对基础模型质量起决定作用，包括生成字幕、用光流过滤几乎静止的片段、用 OCR 去除带大量文字的片段等。报告还展示了相机运动 LoRA 和多视角微调。关键直觉：时间一致性来自模型内部跨帧的注意力，而不是事后处理。",
+  "anchor_link_zh": "锚点没有使用视频扩散模型。三者的时间一致性机制可以对比着看：Quark 完全没有时间机制；Ha et al. 靠差分掩码、递归滤波和前一帧 TSDF 回灌这类启发式手段；视频扩散则在网络内部联合建模多帧。2026 年的 LiveStre4m 用扩散 Transformer 做时间插值和超分辨率，代表了用生成先验取代启发式时间滤波的方向，代价是多步采样的延迟和生成“幻觉”内容的风险。",
+  "concept_ids": [
+   "l-diffusion",
+   "v-temporal",
+   "l-attention"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "DreamFusion: Text-to-3D using 2D Diffusion",
+  "authors": "Ben Poole et al. (Google Research / UC Berkeley)",
+  "year": 2023,
+  "venue": "ICLR 2023",
+  "url": "https://arxiv.org/abs/2209.14988",
+  "citations": 3866,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "论文提出 Score Distillation Sampling（SDS），首次证明不需要任何 3D 训练数据，只用一个冻结的 2D 文生图扩散模型，就能优化出 3D NeRF。它开启了“把 2D 先验提升到 3D”的整条研究线，包括 Magic3D、ProlificDreamer，以及 MVDream 中的多视图 SDS。",
+  "contributions_zh": "从一个随机初始化的 NeRF 出发，每次随机选一个相机渲染出图像 x=g(θ)，加噪得到 x_t，再用冻结的扩散模型预测噪声。SDS 梯度为 \\( \\nabla_\\theta L_{SDS}=\\mathbb E_{t,\\epsilon}[\\,w(t)(\\hat\\epsilon_\\phi(x_t;y,t)-\\epsilon)\\frac{\\partial x}{\\partial\\theta}] \\)：y 是文本，w(t) 是时间步权重，\\( \\hat\\epsilon_\\phi \\) 是扩散模型预测的噪声，并省略了 UNet 的雅可比。直觉是让渲染图在扩散模型看来更像符合该文本的图片。NeRF 带有基于法线的着色，并随机渲染无纹理版本，以防形状退化成贴在平面上的图案。多个随机视角反复施加 SDS 后，逐渐得到三维一致的形状。",
+  "anchor_link_zh": "锚点没有使用 SDS，但在概念上可以和 Quark 对照：两者都是“用一个网络为 3D 表示提供更新方向”。SDS 把冻结扩散模型的去噪残差当作梯度，对每个场景迭代优化；Quark 继承 DeepView 的 learned gradient descent，由训练好的 Update/Fusion 模块直接预测更新量，只迭代 5 步就能实时运行。分清这两种做法（生成式、逐场景、慢，对比重建式、前馈、快），有助于判断生成式先验在临场管线中适合放在哪个环节。",
+  "concept_ids": [
+   "l-diffusion",
+   "n-nerf",
+   "f-optim",
+   "l-iterative"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "Zero-1-to-3: Zero-shot One Image to 3D Object",
+  "authors": "Ruoshi Liu et al. (Columbia University / Toyota Research Institute)",
+  "year": 2023,
+  "venue": "ICCV 2023",
+  "url": "https://arxiv.org/abs/2303.11328",
+  "citations": 1867,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "这是首个把大规模预训练图像扩散模型微调成“给定相对相机变换的新视角生成器”的工作。它只在合成数据（Objaverse 渲染）上训练，却能零样本泛化到真实照片甚至绘画。由此开启了视角条件扩散（Zero123++、SyncDreamer 等）和“先生成多视图、再重建 3D”的路线。",
+  "contributions_zh": "以 Stable Diffusion 为初始化，用两种方式输入条件：一是把输入图像的 CLIP 嵌入与相对相机参数（极角、方位角、半径的变化）拼接后作为全局条件；二是把输入图像的潜变量与噪声潜变量按通道拼接。模型在 Objaverse 物体的成对渲染图上微调，生成的新视角可以配合 SDS 用于单图 3D 重建。例：给一张杯子的正面照和“方位角 +90°”，模型生成杯子的侧面图，包括原图中看不到的把手。",
+  "anchor_link_zh": "Quark §2.3（Single-view Methods）把 Zero-1-to-3（Liu et al., 2023）和 Tseng et al. 2023 等列为“使用带学习先验的生成式算法”的方法，认为这类方法能简化采集硬件，但属于另一类问题，所以没有与之比较。这说明 Quark 坚持多视角输入和忠实重建，不让模型凭先验编造没观测到的内容。对于临场中人脸身份这类对可信度要求很高的内容，这是有意的取舍。",
+  "concept_ids": [
+   "l-diffusion",
+   "g-pinhole",
+   "n-generalizable"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "MVDream: Multi-view Diffusion for 3D Generation",
+  "authors": "Yichun Shi et al. (ByteDance)",
+  "year": 2024,
+  "venue": "ICLR 2024",
+  "url": "https://arxiv.org/abs/2308.16512",
+  "citations": 1094,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "MVDream 证明，让扩散模型一次联合生成多张相互一致的视图，就能得到一个与具体 3D 表示无关、可泛化的 3D 先验。它显著缓解了 SDS 类方法中的多面（Janus）问题。“把 2D 自注意力扩展为跨视图的 3D 自注意力，再加相机嵌入”这一结构被 ImageDream、CAT3D 等广泛沿用。",
+  "contributions_zh": "在 Stable Diffusion 中，把每层的自注意力改为对 4 个视图的全部 token 联合计算（3D self-attention），并把相机外参经 MLP 编码后加到时间步嵌入上。训练数据混合了 Objaverse 多视角渲染和 LAION 2D 图文数据，这样既保留了 2D 模型的泛化能力，又获得了 3D 一致性。生成的多视图可以通过多视图 SDS 优化 NeRF，也支持类似 DreamBooth 的少样本个性化。",
+  "anchor_link_zh": "锚点没有使用 MVDream，但它和 Quark 的跨视角融合是同一个问题的两种解法。MVDream 对 4 个视图的全部 token 做完全自注意力，计算量随视图数平方增长。Quark 的 One-to-many attention 只让目标 LDM 的特征作为唯一的 query，去关注 M=8 个输入视角的 Δ，并把 K/V 投影折叠进 Q 和输出投影。按其附录 A，输入视角从 4 个增加到 64 个时，One-to-many 的计算量只增加到 1.9 倍，标准 cross-attention 则增加到 13 倍。理解 MVDream 的 3D 自注意力，就能理解 Quark 为什么必须设计更省的注意力，才能在 1080p 下实时运行。",
+  "concept_ids": [
+   "l-diffusion",
+   "l-attention",
+   "l-encoding"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "CAT3D: Create Anything in 3D with Multi-View Diffusion Models",
+  "authors": "Ruiqi Gao et al. (Google DeepMind / Google Research)",
+  "year": 2024,
+  "venue": "NeurIPS 2024",
+  "url": "https://arxiv.org/abs/2405.10314",
+  "citations": 484,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "CAT3D 把“用多视图扩散模型模拟真实采集，再做鲁棒 3D 重建”做成了通用的场景级流程。输入可以是 1 张、少量或任意数量的图像，最快约 1 分钟生成完整 3D 场景，在单图和少视图场景生成上超过 ReconFusion、ZeroNVS。它把生成式 3D 先验从物体级推进到了场景级。",
+  "contributions_zh": "模型基于潜扩散，仿照视频扩散模型把 2D 自注意力“膨胀”成 3D 自注意力，联合处理共 8 个视图：1 个条件视图加 7 个目标视图，或 3 个条件视图加 5 个目标视图。相机用 raymap 表示：它和潜变量同尺寸，每个位置编码对应射线的原点和方向，坐标相对第一个条件相机。生成时先生成一组覆盖整个场景的 anchor 视图，再分组并行生成其余视图（单图输入时共 80 张）。最后用 Zip-NeRF 重建，额外加入 LPIPS 损失，并给离观测视角更近的生成视图更高权重，以容忍生成视图之间的轻微不一致。",
+  "anchor_link_zh": "锚点没有使用 CAT3D，但它和 Quark 团队直接相关：Quark 作者 Kaza、Luo、Lombardi 参与的 Tok-D（ICCV 2025）用 CAT3D 生成大规模合成多视角数据，训练 LVSM 式的前馈 NVS 模型，并在相关工作中称 Quark 能在高得多的分辨率下达到 SOTA。CAT3D 的 raymap 和 Quark 的射线方向编码 γ 解决的是同一个问题：告诉网络每个像素对应哪条射线。CAT3D 的生成视图并不完全一致、需要鲁棒重建来兜底，这也提醒我们：在临场中用生成模型补洞，必须控制视角一致性，而 Ha et al. 的 SDV 衡量的正是这一点。",
+  "concept_ids": [
+   "l-diffusion",
+   "l-attention",
+   "l-encoding",
+   "n-nerf",
+   "n-generalizable"
+  ],
+  "difficulty": "专家",
+  "must_read": false,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "Difix3D+: Improving 3D Reconstructions with Single-Step Diffusion Models",
+  "authors": "Jay Zhangjie Wu et al. (NVIDIA / NUS)",
+  "year": 2025,
+  "venue": "CVPR 2025",
+  "url": "https://arxiv.org/abs/2503.01774",
+  "citations": 187,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "论文证明，单步扩散模型就能充当 NeRF/3DGS 渲染伪影的通用修复器。它有两种用法：在重建阶段清理伪训练视图，再蒸馏回 3D；在推理阶段作为实时后处理增强器。FID 平均提升约 2 倍，生成式先验的开销降到了接近交互式的水平。",
+  "contributions_zh": "Difix 从单步扩散模型 SD-Turbo 微调而来，冻结 VAE 编码器，用 LoRA 微调解码器。关键观察是：带渲染伪影的图像，其分布类似于扩散训练中噪声水平 τ≈200（而不是 1000）的样本。因此可以直接把渲染图当作 x_τ，做一步“去噪”。在 τ 的消融中，τ=200 的 PSNR/SSIM 最好。模型还加入了参考视图混合层，以保持多视图一致。作为推理后处理时，在 A100 上只增加 76 ms，比多步扩散快 10 倍以上。例：稀疏视角下 3DGS 在外推视角出现的漂浮物和模糊，经过一步 Difix 后被清理掉。",
+  "anchor_link_zh": "锚点没有使用 Difix3D+，但它对应两篇锚点共同的弱点。Ha et al. 用 4 层 U-Net 预测背景图 I_BG，来填补前向 warping 留下的 disocclusion 空洞（Fig. 11）；Quark 在视角覆盖不足的 Deep Blending 上出现硬边伪影（23.61 dB，3DGS 为 30.04 dB）。Difix 是生成式补洞的代表，但 76 ms 仍然超过 30 fps 的 33 ms 帧预算，而且它逐帧独立处理，会引入新的闪烁。这类闪烁正是 TCC、STED 和 warping error 应当检测出来的问题。",
+  "concept_ids": [
+   "l-diffusion",
+   "n-3dgs",
+   "v-metrics",
+   "i-warping"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "LRM: Large Reconstruction Model for Single Image to 3D",
+  "authors": "Yicong Hong et al. (Adobe Research / ANU)",
+  "year": 2024,
+  "venue": "ICLR 2024",
+  "url": "https://arxiv.org/abs/2311.04400",
+  "citations": 989,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "这是首个“大重建模型”：用 5 亿参数的 Transformer，在约 100 万个物体上端到端训练，单张图像 5 秒内直接回归出 NeRF（triplane）。它证明了“大规模数据 + 通用 Transformer + 可微渲染监督”可以替代逐场景优化和类别特定模型，由此衍生出 Instant3D、GS-LRM、Long-LRM、iLRM 等整个 LRM 家族。",
+  "contributions_zh": "网络结构：先用预训练的 DINO ViT 把输入图像编码成 patch token；再由 image-to-triplane Transformer 解码，以可学习的 triplane token 作为 query，通过 cross-attention 读取图像特征，相机信息作为调制输入。输出是三平面（triplane）特征，由 MLP 解码出密度和颜色后做体渲染，用多视角渲染图的 MSE 加 LPIPS 监督。训练数据包括 Objaverse 合成渲染和 MVImgNet 真实采集。",
+  "anchor_link_zh": "锚点没有使用 LRM，但把 LRM 家族和 Quark 对比，是理解 Quark 定位的关键。LRM 一次前向输出一个持久的 3D 表示（triplane 或 Gaussians）；Quark 则为每个目标视角迭代重建一个 LDM，这个 LDM 只在该视锥内有效。Quark 的后续工作 iLRM（2025）明确批评 Quark 的表示绑定在目标视角上、缺少显式持久的 3D 表示，并把类似 Quark 的迭代细化引入了 LRM 框架。",
+  "concept_ids": [
+   "l-attention",
+   "r-reps",
+   "r-volume",
+   "n-generalizable"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "pixelSplat: 3D Gaussian Splats from Image Pairs for Scalable Generalizable 3D Reconstruction",
+  "authors": "David Charatan et al. (MIT 等)",
+  "year": 2024,
+  "venue": "CVPR 2024",
+  "url": "https://arxiv.org/abs/2312.12337",
+  "citations": 812,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "它是前馈 3DGS 的开山之作之一：从一对图像直接预测逐像素的 3D Gaussian。与光场 Transformer 类方法相比，渲染快约 2.5 个数量级，而且得到的是可解释、可编辑的显式 3D 表示。它奠定了 pixel-aligned Gaussians 这种表示，MVSplat、GPS-Gaussian、GS-LRM 后来都沿用了它。",
+  "contributions_zh": "编码器用极线 Transformer 沿极线匹配两视图的特征，同时估计场景尺度。核心难点在于：直接回归 Gaussian 位置很容易陷入局部极小。pixelSplat 的做法是为每条射线预测一个沿深度 bin 的概率分布，从中采样 Gaussian 中心，并把被采中 bin 的概率作为这个 Gaussian 的不透明度。这是一种重参数化技巧，使采样变得可微，梯度可以穿过 splatting 回传。在 RealEstate10K 和 ACID 上以 256×256 分辨率做宽基线 NVS，超过了当时的方法。",
+  "anchor_link_zh": "Ha et al. §2 把 pixelSplat [8] 列为只处理稀疏静态场景的前馈模型之一。Ha 同样每个像素放一个 Gaussian，但做法相反：Gaussian 中心直接由 RAFT-Stereo 深度反投影得到，尺度设为恰好覆盖 1 个像素（附录 A.3），参数不交给网络预测。它给出的理由是，在稠密像素网格上预测出的尺度、不透明度和旋转会收敛成近似常数。和 pixelSplat 对照，才能看清 Ha 的设计思路：几何交给深度，网络只负责融合。",
+  "concept_ids": [
+   "n-3dgs",
+   "n-generalizable",
+   "g-epipolar",
+   "g-depth",
+   "r-raster"
+  ],
+  "difficulty": "专家",
+  "must_read": true,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "MVSplat: Efficient 3D Gaussian Splatting from Sparse Multi-View Images",
+  "authors": "Yuedong Chen et al. (Monash University / ETH Zürich 等)",
+  "year": 2024,
+  "venue": "ECCV 2024",
+  "url": "https://arxiv.org/abs/2403.14627",
+  "citations": 628,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "MVSplat 用平面扫描代价体（cost volume）为前馈 3DGS 提供显式的几何线索。与 pixelSplat 相比，参数量少 10 倍，推理快 2 倍以上（22 fps），跨数据集泛化也更好。它确立了“MVS 代价体 + 逐像素 Gaussian”这一最常用的前馈 3DGS 基线，DepthSplat 等后续工作都沿用了这个设计。",
+  "contributions_zh": "流程：多视图 Transformer 提取各视图特征；在一组深度候选（按逆深度均匀采样）上，把其他视图的特征 warp 到参考视图，计算特征相关，得到代价体（即 plane sweep）；2D U-Net 细化代价体后做 softmax 得到深度，反投影成 Gaussian 中心。不透明度、协方差、颜色等其余参数同时预测，整个模型只用光度损失监督。直觉例：某个像素在深度候选 d_k 处与另一视图的特征最相似，代价体就在第 k 个 bin 上出现峰值，这个像素的深度就取在 d_k 附近。",
+  "anchor_link_zh": "Ha et al. 附录 A.8 的 Fig. 12 在 ENeRF-Outdoor 上与 MVSplat 做了定性比较，称 MVSplat（预训练的稀疏视角模型）结果模糊；§2 也把它列为静态前馈模型。代价体的概念可以直接对应到 Quark：Quark 的初始 LDM 各层放在等视差的 anchor 上；每次 Update 后，按当前深度把各视角的特征反投影回 LDM 的层空间，得到 Δ，本质上就是学习化的 plane-sweep volume。读懂 MVSplat 的代价体，就能读懂 Quark 第 3 阶段中的 (c) 步。",
+  "concept_ids": [
+   "d-mvs",
+   "i-psv",
+   "n-3dgs",
+   "n-generalizable",
+   "g-depth"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "GS-LRM: Large Reconstruction Model for 3D Gaussian Splatting",
+  "authors": "Kai Zhang et al. (Adobe Research)",
+  "year": 2024,
+  "venue": "ECCV 2024",
+  "url": "https://arxiv.org/abs/2404.19702",
+  "citations": 375,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "GS-LRM 把 LRM 的规模化思路和逐像素 Gaussian 结合起来：用一个极简的纯 Transformer，从 2–4 张带位姿的图像在单张 A100 上 0.23 秒预测出高质量 3DGS，物体（Objaverse）和场景（RealEstate10K）都能处理，效果大幅超过此前方法。它是 Long-LRM、LVSM 等工作的直接对照。",
+  "contributions_zh": "每张图像与它的逐像素 Plücker 射线坐标按通道拼接。Plücker 坐标是 \\( r=(d,\\,o\\times d) \\)，o 是相机光心，d 是射线方向，共 6 维。拼接后切成 patch token，所有视图的 token 连在一起，送入一串标准的自注意力 Transformer 块。每个输出 token 被线性解码为该 patch 内每个像素的 Gaussian 参数：沿射线的距离、颜色、尺度、旋转和不透明度。解码后直接渲染，用 MSE 加感知损失监督。模型没有代价体、极线这类显式几何模块。",
+  "anchor_link_zh": "Ha et al. §3.1 直接点名 GS-LRM（Zhang et al. [79]）：把所有输入视角的 Gaussian 一次性渲染到目标视角，既解决不了空洞和飞点，还会因 Z-fighting 让边缘更差（Fig. 4）。因此 Ha 改为逐视角单独渲染，再由网络融合。其消融中的 “No Blending”（仿照 GPS-Gaussian 一次渲染全部 Gaussian）只有 PSNR 24.64、STED 483.3，完整模型为 31.17 和 68.76。这组数字是 Ha 采用“逐视角渲染 + 融合”的定量依据。",
+  "concept_ids": [
+   "l-attention",
+   "l-encoding",
+   "n-3dgs",
+   "n-generalizable",
+   "r-raster"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-generative-ff"
+  ]
+ },
+ {
+  "title": "LVSM: A Large View Synthesis Model with Minimal 3D Inductive Bias",
+  "authors": "Haian Jin et al. (Cornell / Adobe Research 等)",
+  "year": 2025,
+  "venue": "ICLR 2025",
+  "url": "https://arxiv.org/abs/2410.17242",
+  "citations": 188,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-generative-ff",
+  "influence_zh": "LVSM 证明，几乎不带 3D 归纳偏置的纯 Transformer，也能做高质量的可泛化 NVS，而且效果随数据和算力增长，比此前 SOTA 高 1.5–3.5 dB PSNR。这里的“不带偏置”指没有 NeRF/3DGS 表示，也没有极线或平面扫描模块。它把承接 SRT 的“几何无关大模型 NVS”推成了 2025 年以后的主流范式之一，Tok-D 等后续工作都在它的基础上改进。",
+  "contributions_zh": "输入图像切成 patch，并与逐像素的 Plücker 射线嵌入融合成 token；目标视角只用它的 Plücker 射线作为 query token。论文给出两种结构。encoder-decoder：先把输入压成固定数量的 1D 潜 token，作为学习到的场景表示，推理更快。decoder-only：输入 token 和目标 token 一起经过完全自注意力，质量和零样本泛化更好。模型只用渲染损失（MSE 加感知损失）训练，即使只用 1–2 张 GPU 训练，也能超过此前方法。场景级实验在 RealEstate10K 上以 256×256 评测，沿用 pixelSplat 的数据划分。",
+  "anchor_link_zh": "LVSM 和两篇锚点形成对照。Quark 保留了大量 3D 偏置：LDM、等视差分层、反投影、用全分辨率输入像素做 IBR 混合，以此实现 1080p 实时；LVSM 去掉了几乎所有这类偏置，但场景级结果只在 256×256 上报告。Quark 团队的后续工作 Tok-D（Kaza、Luo、Lombardi）改进了 LVSM 的 Transformer 块，用 CAT3D 合成数据扩大训练集，并在相关工作中称 Quark 能在高得多的分辨率下达到 SOTA。LVT（SIGGRAPH Asia 2025，Flynn 等）则只在局部视角邻域内做注意力，以避免二次复杂度。理解 LVSM，才能理解 2025 年以后“保留 3D 偏置还是追求可扩展性”这一核心争论。",
+  "concept_ids": [
+   "l-attention",
+   "l-encoding",
+   "n-generalizable"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-generative-ff"
+  ]
+ }
+]

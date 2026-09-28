@@ -1,0 +1,366 @@
+1000+ FPS 4D Gaussian Splatting for Dynamic Scene Rendering
+3D Photography using Context-aware Layered Depth Inpainting
+3D Reconstruction with Spatial Memory (Spann3R)
+3DGS-IEval-15K: A Large-scale Image Quality Evaluation Database for 3D Gaussian-Splatting
+3DGStream: On-the-Fly Training of 3D Gaussians for Efficient Streaming of Photo-Realistic Free-Viewpoint Videos
+3DGStream: On-the-fly Training of 3D Gaussians for Efficient Streaming of Photo-Realistic Free-Viewpoint Videos
+3DTV: A Feedforward Interpolation Network for Real-Time View Synthesis
+4D Gaussian Splatting for Real-Time Dynamic Scene Rendering
+4DGC: Rate-Aware 4D Gaussian Compression for Efficient Streamable Free-Viewpoint Video
+4DGCPro: Efficient Hierarchical 4D Gaussian Compression for Progressive Volumetric Video Streaming
+4DGS-Fixer: Generative Sparse-View 4D Gaussian Splatting with Iterative Refinement Guided by Video Diffusion Priors
+4DGT: Learning a 4D Gaussian Transformer Using Real-World Monocular Videos
+4DV.ai WebXR demo of 6DoF volumetric video
+4DViews HOLOSYS+ adds Gaussian Splatting export
+4K4D: Real-Time 4D View Synthesis at 4K Resolution
+A First Look at Immersive Telepresence on Apple Vision Pro
+A Multi-Layer System for Ultra-High-Resolution Static 360-Degree Telepresence
+A Novel Real-Time Full-Color 3D Holographic (Diffractive) Video Capture, Processing, and Transmission Pipeline Using Off-The-Shelf Hardware
+A Single Atlas is All You Need: Decoder-Side Gaussian Splatting for Immersive Video (DSGS)
+A new experiment brings better group meetings to Google Beam
+A3RT: Attention-Aware AR Teleconferencing with Life-Size 2.5D Video Avatars
+AI-Mediated 3D Video Conferencing
+ATGS: Anchored Temporal Gaussian Splatting for Long Volumetric Video Representation
+AirGS: Real-Time 4D Gaussian Streaming for Free-Viewpoint Video Experiences
+An Evaluation Study of 2D and 3D Teleconferencing for Remote Physical Therapy
+An experimental comparison of participants' experience in face-to-face, video, and virtual reality meetings
+An overview of ongoing point cloud compression standardization activities: video-based (V-PCC) and geometry-based (G-PCC)
+Android XR Likeness photorealistic avatars
+Animatable Gaussians: Learning Pose-dependent Gaussian Maps for High-fidelity Human Avatar Modeling
+Any4D: Unified Feed-Forward Metric 4D Reconstruction
+AnySplat: Feed-forward 3D Gaussian Splatting from Unconstrained Views
+Apple Vision Pro Personas (visionOS 26)
+ArtiFixer: Enhancing and Extending 3D Reconstruction with Auto-Regressive Diffusion Models
+Audio Driven Real-Time Facial Animation for Social Telepresence
+Audio-Driven Universal Gaussian Head Avatars (UniGAHA)
+Authentic Volumetric Avatars from a Phone Scan
+Avat3r: Large Animatable Gaussian Reconstruction Model for High-fidelity 3D Head Avatars
+Bolt3D: Generating 3D Scenes in Seconds
+Building in Depth: An Exploratory Comparison of 2D, Stereo, and RGB-D Representations for XR Remote Training
+CAGS: Color-Adaptive Volumetric Video Streaming with Dynamic 3D Gaussian Splatting
+CAT3D: Create Anything in 3D with Multi-View Diffusion Models
+CAT4D: Create Anything in 4D with Multi-View Video Diffusion Models
+CameraCtrl: Enabling Camera Control for Text-to-Video Generation
+Can These Views Be One Scene? Evaluating Multiview 3D Consistency when 3D Foundation Models Hallucinate
+Charge: A Comprehensive Novel View Synthesis Benchmark and Dataset to Bind Them All
+Cisco Spatial Meetings for Apple Vision Pro
+ClipGStream: Clip-Stream Gaussian Splatting for Any Length and Any Motion Multi-View Dynamic Scene Reconstruction
+Codec Avatar Studio: Paired Human Captures for Complete, Driveable, and Generalizable Avatars
+CoherentRaster: Efficient 3D Gaussian Splatting for Light Field Displays
+ColorVideoVDP: A visual difference predictor for image, video and display distortions
+Consistent Video Depth Estimation
+Continuous 3D Perception Model with Persistent State (CUT3R)
+Controlling Space and Time with Diffusion Models (4DiM)
+Cosmos World Foundation Model Platform for Physical AI
+DGS-LRM: Real-Time Deformable 3D Gaussian Reconstruction From Monocular Videos
+DL3DV-10K: A Large-Scale Scene Dataset for Deep Learning-based 3D Vision
+DNA-Rendering: A Diverse Neural Actor Repository for High-Fidelity Human-centric Rendering
+DUSt3R: Geometric 3D Vision Made Easy
+DVSM: Decoder-only View Synthesis Model Done Right
+Dataset and Pipeline for Multi-View Light-Field Video
+DecoGS: Adaptive Static-Dynamic Decoupling of 3D Gaussians for Free-Viewpoint Video Streaming
+Deep Appearance Models for Face Rendering
+DeepView: View Synthesis with Learned Gradient Descent
+Delay Threshold for Social Interaction in Volumetric eXtended Reality Communication
+Depth Anything 3: Recovering the Visual Space from Any Views
+Depth Anything V2
+DepthSplat: Connecting Gaussian Splatting and Depth
+Diffuman4D: 4D Consistent Human View Synthesis from Sparse-View Videos with Spatio-Temporal Diffusion Models
+Diffusion Models Are Real-Time Game Engines (GameNGen)
+DiffusionHarmonizer: Bridging Neural Reconstruction and Photorealistic Simulation with Online Diffusion Enhancer
+DiffusionRenderer: Neural Inverse and Forward Rendering with Video Diffusion Models
+Difix3D+: Improving 3D Reconstructions with Single-Step Diffusion Models
+DirectL: Efficient Radiance Fields Rendering for 3D Light Field Displays
+Dissociable Spatial and Temporal Effects of Interaction Latency in Virtual Reality
+DreamFusion: Text-to-3D using 2D Diffusion
+Dynamic 3D Gaussians: Tracking by Persistent Dynamic View Synthesis
+DynamicStereo: Consistent Dynamic Depth from Stereo Videos
+E3D-Bench: A Benchmark for End-to-End 3D Geometric Foundation Models
+ELITE: Efficient Gaussian Head Avatar from a Monocular Video via Learned Initialization and TEst-time Generative Adaptation
+EVA-Gaussian: 3D Gaussian-based Real-time Human Novel View Synthesis under Diverse Multi-view Camera Settings
+Efficient Neural Radiance Fields for Interactive Free-viewpoint Video
+Efficient Neural Radiance Fields for Interactive Free-viewpoint Video (ENeRF)
+Efficient-LVSM: Faster, Cheaper, and Better Large View Synthesis Model via Decoupled Co-Refinement Attention
+EgoAvatar: Egocentric View-Driven and Photorealistic Full-body Avatars
+EgoRelight: Egocentric Human Capture and Illumination Recovery for Relightable and Photoreal Avatar Rendering
+Emerging Immersive Communication Systems: Overview, Taxonomy, and Good Practises for QoE Assessment
+Encumbrance-free telepresence system with real-time 3D capture and display using commodity depth cameras
+Evaluating Human Perception of Novel View Synthesis: Subjective Quality Assessment of Gaussian Splatting and NeRF in Dynamic Scenes
+Evaluating the Effect of Compression on Video Temporal Consistency Using Objective Quality Metrics
+Expressive Whole-Body 3D Gaussian Avatar (ExAvatar)
+Eye Contact Correction using Deep Neural Networks
+FVV Live: A real-time free-viewpoint video system with consumer electronics hardware
+FWD: Real-time Novel View Synthesis with Forward Warping and Depth
+Fast-FoundationStereo: Real-Time Zero-Shot Stereo Matching
+Fast3R: Towards 3D Reconstruction of 1000+ Images in One Forward Pass
+FastGHA: Generalized Few-Shot 3D Gaussian Head Avatars with Real-Time Animation
+Feed-Forward Bullet-Time Reconstruction of Dynamic Scenes from Monocular Videos (BTimer)
+FiCA: Feed-forward Instant Gaussian Codec Avatars from a Single Portrait Image
+FlashDepth: Real-time Streaming Video Depth Estimation at 2K Resolution
+FlashVSR: Towards Real-Time Diffusion-Based Streaming Video Super-Resolution
+Flex4DHuman: Flexible Multi-view Video Diffusion for 4D Human Reconstruction
+Forge4D: Feed-Forward 4D Human Reconstruction and Interpolation from Uncalibrated Sparse-view Videos
+FoundationStereo: Zero-Shot Stereo Matching
+Foveated Compression for Immersive Telepresence Visualization
+Free View Synthesis
+FreeTimeGS: Free Gaussian Primitives at Anytime and Anywhere for Dynamic Scene Reconstruction
+From Audio to Photoreal Embodiment: Synthesizing Humans in Conversations (Audio2Photoreal)
+From Explicit References to Scene Manifolds: Distributional Fidelity and Realism for Radiance Field Quality Assessment
+From Perception to Cognition: How Latency Affects Interaction Fluency and Social Presence in VR Conferencing
+From Slow Bidirectional to Fast Autoregressive Video Diffusion Models (CausVid)
+Fully Explicit Dynamic Gaussian Splatting
+GEN3C: 3D-Informed World-Consistent Video Generation with Precise Camera Control
+GPS-Gaussian+: Generalizable Pixel-wise 3D Gaussian Splatting for Real-Time Human-Scene Rendering from Sparse Views
+GPS-Gaussian: Generalizable Pixel-wise 3D Gaussian Splatting for Real-time Human Novel View Synthesis
+GS-LRM: Large Reconstruction Model for 3D Gaussian Splatting
+GS-QA: Comprehensive Quality Assessment Benchmark for Gaussian Splatting View Synthesis
+GScomp-QA: A Subjective Dataset for Quality Assessment of Compressed Gaussian Splatting
+GUAVA: Generalizable Upper Body 3D Gaussian Avatar
+Gaussian Head Avatar: Ultra High-fidelity Head Avatar via Dynamic Gaussians
+Gaussian Pixel Codec Avatars: A Hybrid Representation for Efficient Rendering
+GaussianAvatars: Photorealistic Head Avatars with Rigged 3D Gaussians
+Gaze correction for home video conferencing
+GazeGaussian: High-Fidelity Gaze Redirection with 3D Gaussian Splatting
+Gazing Heads: Investigating Gaze Perception in Video-Mediated Communication
+GenLCA: 3D Diffusion for Full-Body Avatars from In-the-Wild Videos
+Generalizable 3D Gaussian Splatting enabled Semantic Coding for Real-Time Immersive Video Communications (GS-SCNet)
+Generalizable Patch-Based Neural Rendering (GPNR)
+Generalizable and Animatable Gaussian Head Avatar (GAGAvatar)
+Generative Head-Mounted Camera Captures for Photorealistic Avatars (GenHMC)
+Generative Novel View Synthesis with 3D-Aware Diffusion Models (GeNVS)
+Generative World Renderer at the Speed of Play (AlayaRenderer-Flash)
+Genie 3: A New Frontier for World Models
+GeoStream: Toward Precise Camera Controlled Streaming Video Generation
+Geometry-Aware Video Inpainting for Joint Headset Occlusion Removal and Face Reconstruction in Social XR
+Geometry-guided Online 3D Video Synthesis with Multi-View Temporal Consistency
+Google Beam (Project Starline productization; HP Dimension)
+Google Beam / HP Dimension (formerly Project Starline)
+Google Beam expands with new regions, partners, and customers
+Google Beam technology specifications
+Google Beam: Our AI-first 3D video communication platform
+Gracia: moving volumetric captures are now streamable
+Grounding Image Matching in 3D with MASt3R
+HP Dimension with Google Beam
+HP Dimension with Google Beam (InfoComm 2025)
+HairCUP: Hair Compositional Universal Prior for 3D Gaussian Avatars
+Hear We Are: Spatial Audio Benefits Perceptions of Turn-Taking and Social Presence in Video Meetings
+HiCoM: Hierarchical Coherent Motion for Streamable Dynamic Scene with 3D Gaussian Splatting
+HiFi4G: High-Fidelity Human Performance Rendering via Compact Gaussian Splatting
+HiReFF: High-Resolution Feedforward Human Reconstruction from Uncalibrated Sparse-View Video
+High-Quality Streamable Free-Viewpoint Video
+High-quality streamable free-viewpoint video
+Holographic Parallax Improves 3D Perceptual Realism
+Holoportation: Virtual 3D Teleportation in Real-time
+Holoported Characters: Real-time Free-viewpoint Rendering of Humans from Sparse RGB Cameras
+Horizon Hyperscape adds invites and local rendering
+HumanRAM: Feed-forward Human Reconstruction and Animation Model using Transformers
+HumanRF: High-Fidelity Neural Radiance Fields for Humans in Motion
+Hybrid Scan: A Multi-Viewer True-Perspective Strong Parallax Display with Algorithmicly Controlled Directionality
+HyperReel: High-Fidelity 6-DoF Video with Ray-Conditioned Sampling
+IBRNet: Learning Multi-View Image-Based Rendering
+ITU-T P.1320: Quality of experience assessment of extended reality meetings
+ImViD: Immersive Volumetric Videos for Enhanced VR Engagement
+Immersive Light Field Video with a Layered Mesh Representation
+Influence of Audiovisual Realism on Communication Behaviour in Group-to-Group Telepresence
+Instant Gaussian Stream: Fast and Generalizable Streaming of Dynamic Scene Reconstruction via Gaussian Splatting
+InstantViR: Real-Time Video Inverse Problem Solver with Distilled Diffusion Prior
+K-Planes: Explicit Radiance Fields in Space, Time, and Appearance
+KHR_gaussian_splatting glTF 2.0 extension
+LAM: Large Avatar Model for One-shot Animatable Gaussian Head
+LASER: Layer-wise Scale Alignment for Training-Free Streaming 4D Reconstruction
+LHM: Large Animatable Human Reconstruction Model from a Single Image in Seconds
+LRM: Large Reconstruction Model for Single Image to 3D
+LUCAS: Layered Universal Codec Avatars
+LVSM: A Large View Synthesis Model with Minimal 3D Inductive Bias
+LVT: Large-Scale Scene Reconstruction via Local View Transformers
+LagerNVS: Latent Geometry for Fully Neural Real-time Novel View Synthesis
+Large-scale Codec Avatars: The Unreasonable Effectiveness of Large-scale Avatar Pretraining
+Latency in Real-Time 3D Volumetric Streaming: A Comprehensive Study
+Learning Blind Video Temporal Consistency
+Learning Efficient Fuse-and-Refine for Feed-Forward 3D Gaussian Splatting
+Learning Global Motion with Compact Gaussians for Feed-Forward 4D Reconstruction (C4G)
+Learning Temporal Coherence via Self-Supervision for GAN-based Video Generation
+LentiAvatar: Pseudo-Multiview Reconstruction and Subpixel Prism Rendering for Real-Time Stereoscopic Communication
+Less Gaussians, Texture More: 4K Feed-Forward Textured Splatting (LGTM)
+LiVo: Toward Bandwidth-adaptive Fully-Immersive Volumetric Video Conferencing
+LingBot-Map: Geometric Context Transformer for Streaming 3D Reconstruction
+Lite Any Stereo V2: Faster and Stronger Efficient Zero-Shot Stereo Matching
+LiveSplat: Live Gaussian Splatting for RGBD Camera Streams
+LiveStre4m: Feed-Forward Live Streaming of Novel Views from Unposed Multi-View Video
+Local Light Field Fusion: Practical View Synthesis with Prescriptive Sampling Guidelines
+Long-LRM: Long-sequence Large Reconstruction Model for Wide-coverage Gaussian Splats
+Long-Term Photometric Consistent Novel View Synthesis with Diffusion Models
+LookAtChat: Visualizing Gaze Awareness for Remote Small-Group Conversations
+LookinGood: Enhancing Performance Capture with Real-time Neural Re-Rendering
+Looking Glass Hololuminescent Display (HLD)
+Lyra: Generative 3D Scene Reconstruction via Video Diffusion Model Self-Distillation
+MEt3R: Measuring Multi-View Consistency in Generated Images
+MPEG 149th meeting: MIV 2nd edition FDIS and Avatar Representation Format CD
+MPEG 152nd meeting: V3C 4th edition (incl. V-DMC) to FDIS
+MPEG 155th meeting: Avatar Representation Format (ISO/IEC 23090-39) to FDIS
+MPEG Gaussian Splat Coding: V-PCC and G-PCC amendments reach CDAM
+MPEG Immersive Video Coding Standard
+MPEG-I Gaussian Splat Coding (GSC) standardization
+MVGBench: Comprehensive Benchmark for Multi-view Generation Models
+MVHumanNet++: A Large-scale Dataset of Multi-view Daily Dressing Human Captures with Richer Annotations for 3D Human Digitization
+MVHumanNet: A Large-scale Dataset of Multi-view Daily Dressing Human Captures
+MVSAnywhere: Zero-Shot Multi-View Stereo
+MVSplat: Efficient 3D Gaussian Splatting from Sparse Multi-View Images
+MagicStream: Bandwidth-conserving Immersive Telepresence via Semantic Communication
+MapAnything: Universal Feed-Forward Metric 3D Reconstruction
+MatryODShka: Real-time 6DoF Video View Synthesis using Multi-Sphere Images
+Measuring how Project Starline improves remote communication with behavioral science
+Meta Horizon Hyperscape Capture (Early Access)
+Meta VR Glasses and Hologram calling (Connect 2026)
+Meta shutters VR Horizon Worlds after discontinuing Horizon Workrooms
+MetaStream: Live Volumetric Content Capture, Creation, Delivery, and Rendering in Real Time
+Microsoft Mesh becomes generally available in Teams
+Microsoft retires Mesh app, launches immersive events for Teams
+Mind the Gap: Standard 3DGS Evaluation Primarily Measures Near-Trajectory Interpolation
+MiniMates: Miniature Avatars for AR Remote Meetings within Limited Physical Spaces
+Mixture of Volumetric Primitives for Efficient Neural Rendering
+MoGe-2: Accurate Monocular Geometry with Metric Scale and Sharp Details
+MoVieS: Motion-Aware 4D Dynamic View Synthesis in One Second
+Mon3tr: Monocular 3D Telepresence with Pre-built Gaussian Avatars as Amortization
+MonST3R: A Simple Approach for Estimating Geometry in the Presence of Motion
+MonSter: Marry Monodepth to Stereo Unleashes Power (extended as MonSter++)
+MonoFlex3D: Low-Latency Glasses-Free 3D Teleconference from a Single Camera
+Monocular Dynamic View Synthesis: A Reality Check
+Motion Matters: Compact Gaussian Streaming for Free-Viewpoint Video Reconstruction
+Multi-party Holomeetings: Toward a New Era of Low-Cost Volumetric Holographic Meetings in Virtual Reality
+MultiEgo: A Multi-View Egocentric Video Dataset for 4D Scene Reconstruction
+Multiface: A Dataset for Neural Face Rendering
+NeRSemble: Multi-view Radiance Field Reconstruction of Human Heads
+NeX: Real-time View Synthesis with Neural Basis Expansion
+Neural 3D Video Synthesis from Multi-view Video
+Neural Residual Radiance Fields for Streamably Free-Viewpoint Videos
+Neural Residual Radiance Fields for Streamably Free-Viewpoint Videos (ReRF)
+NeuralPassthrough: Learned Real-Time View Synthesis for VR
+No Pose, No Problem in 4D: Feed-Forward Dynamic Gaussians from Unposed Multi-View Videos (NoPo4D)
+No Pose, No Problem: Surprisingly Simple 3D Gaussian Splats from Sparse Unposed Images (NoPoSplat)
+Novel View Synthesis with Diffusion Models
+OmniView: An All-Seeing Diffusion Model for 3D and 4D View Synthesis
+One-Click Upgrade from 2D to 3D: Sandwiched RGB-D Video Compression for Stereoscopic Teleconferencing
+Online Neural Space Time Memory for Dynamic Novel View Synthesis
+Online Neural Space Time Memory for Dynamic Novel View Synthesis (NSTM)
+OpenXR 1.1
+PackUV: Packed Gaussian UV Maps for 4D Volumetric Video
+Panoptic Studio: A Massively Multiview System for Social Interaction Capture
+Perceptual Quality Assessment of NeRF and Neural View Synthesis Methods for Front-Facing Views
+Peripheral Labs brings volumetric video to live sports
+Photorealistic Codec Avatars demo on Lex Fridman Podcast #398
+Pippo: High-Resolution Multi-View Humans from a Single Image
+Pixel Codec Avatars
+Pixel-Perfect Visual Geometry Estimation
+Play4D: Accelerated and Interactive Free-viewpoint Video Streaming for Virtual Reality and Light Field Displays
+Pow3R: Empowering Unconstrained 3D Reconstruction with Camera and Scene Priors
+Privacy-Enabled Parallax Display
+Project Starline: A High-Fidelity Telepresence System
+Project Starline: A High-fidelity Telepresence System
+Project Starline: A high-fidelity telepresence system
+Project Starline: A high-fidelity telepresence system (Emerging Technologies)
+Project Starline: the new prototype (Google I/O 2023)
+Proto hologram expands in India (Proto Epic / Luma / M)
+QUEEN: QUantized Efficient ENcoding of Dynamic Gaussians for Streaming Free-viewpoint Videos
+Quark: Real-time, High-resolution, and General Neural View Synthesis
+RAFT-Stereo: Multilevel Recurrent Field Transforms for Stereo Matching
+RFC 10034: RTP Payload Format for Visual Volumetric Video-Based Coding (V3C)
+RTFM: A Real-Time Frame Model
+RTGaze: Real-Time 3D-Aware Gaze Redirection from a Single Image
+RayZer: A Self-supervised Large View Synthesis Model
+ReCamMaster: Camera-Controlled Generative Rendering from A Single Video
+ReCon-GS: Continuum-Preserved Gaussian Streaming for Fast and Compact Reconstruction of Dynamic Scenes
+ReVo: A Cross-Layer Reliable Volumetric Videoconferencing System
+Real-Time Human Reconstruction and Animation using Feed-Forward Gaussian Splatting (HumanGS)
+Real-Time Radiance Fields for Single-Image Portrait View Synthesis (Live 3D Portrait)
+Real-Time View Synthesis with Multiplane Image Network using Multimodal Supervision
+Real-time 3D Visualization of Radiance Fields on Light Field Displays
+Real-time Free-view Human Rendering from Sparse-view RGB Videos using Double Unprojected Textures (DUT)
+Real-time Photorealistic Dynamic Scene Representation and Rendering with 4D Gaussian Splatting
+RealCam: Real-Time Novel-View Video Generation with Interactive Camera Control
+ReconFusion: 3D Reconstruction with Diffusion Priors
+RegVGGT: Sustainable Visual Geometry Grounding for Streaming via Regulated Memory
+Relightable Full-Body Gaussian Codec Avatars
+Relightable Gaussian Codec Avatars
+Relightable Holoported Characters: Capturing and Relighting Dynamic Human Performance from Sparse Views
+Representing Long Volumetric Video with Temporal Gaussian Hierarchy
+Rig3R: Rig-Aware Conditioning for Learned 3D Reconstruction
+Robust Dual Gaussian Splatting for Immersive Human-centric Volumetric Videos
+SPZ: open-source compressed file format for 3D Gaussian splats
+STORM: Spatio-Temporal Reconstruction Model for Large-Scale Outdoor Scenes
+Scaling View Synthesis Transformers (SVSM)
+Self Forcing: Bridging the Train-Test Gap in Autoregressive Video Diffusion
+Self-improving Multiplane-to-layer Images for Novel View Synthesis
+Sharp Monocular View Synthesis in Less Than a Second
+Sharp Monocular View Synthesis in Less Than a Second (SHARP)
+SoLAR: Error-Resilient Streamable Long-Horizon Free-Viewpoint Video Reconstruction with Anchor Activation and Latent Recalibration
+Spacetime Gaussian Feature Splatting for Real-Time Dynamic View Synthesis
+Spatial Audio Rendering for Real-Time Speech Translation in Virtual Meetings
+Spatial Personas beta for Apple Vision Pro (visionOS 1.1)
+SqueezeMe: Mobile-Ready Distillation of Gaussian Full-Body Avatars
+Stabilizing Streaming Video Geometry via Dynamic Feature Normalization (DyFN)
+Stable Video Diffusion: Scaling Latent Video Diffusion Models to Large Datasets
+Stable View Synthesis
+Stable Virtual Camera: Generative View Synthesis with Diffusion Models
+Stereo Any Video: Temporally Consistent Stereo Matching
+Stereo Magnification: Learning View Synthesis using Multiplane Images
+StereoCrafter: Diffusion-based Generation of Long and High-fidelity Stereoscopic 3D from Monocular Videos
+Stream4D: 4D-Consistency for Streaming Autoregressive Diffusion Video Models
+StreamAvatar: Streaming Diffusion Models for Real-Time Interactive Human Avatars
+StreamDiffusion: A Pipeline-level Solution for Real-time Interactive Generation
+StreamDiffusionV2: A Streaming System for Dynamic and Interactive Video Generation
+StreamSplat: Streaming Feed-Forward 3D Gaussian Splatting (VACC)
+StreamSplat: Towards Online Dynamic 3D Reconstruction from Uncalibrated Video Streams
+Streaming 4D Visual Geometry Transformer (StreamVGGT)
+Streaming Radiance Fields for 3D Video Synthesis
+Subjective and Objective Quality Assessment of Rendered Human Avatar Videos in Virtual Reality
+SyncFix: Fixing 3D Reconstructions via Multi-View Synchronization
+TTT3R: 3D Reconstruction as Test-Time Training
+TaoAvatar: Real-Time Lifelike Full-Body Talking Avatars for Augmented Reality via 3D Gaussian Splatting
+Tele-Aloha: A Low-budget and High-authenticity Telepresence System Using Sparse RGB Cameras
+Tele360: Real-Time Feed-Forward Human Reconstruction from Sparse Unposed Cameras
+Test-Time Training Done Right (LaCT)
+The office of the future: A unified approach to image-based modeling and spatially immersive displays
+Topology-Aware Optimization of Gaussian Primitives for Human-Centric Volumetric Videos
+Towards Accurate Generative Models of Video: A New Metric & Challenges
+Towards Robust Monocular Depth Estimation: Mixing Datasets for Zero-shot Cross-dataset Transfer (MiDaS)
+TrajectoryCrafter: Redirecting Camera Trajectory for Monocular Videos via Diffusion Models
+UIKA: Fast Universal Head Avatar from Pose-Free Images
+URAvatar: Universal Relightable Gaussian Codec Avatars
+UniFusion: Sparse-View 4D Reconstruction via Unified Spatio-temporal Depth Alignment
+Universal Facial Encoding of Codec Avatars from VR Headsets
+VASA-1: Lifelike Audio-Driven Talking Faces Generated in Real Time
+VGGT-Prime: Compute-Adaptive Mixture-of-Heads for Efficient Visual Geometry Transformers
+VGGT-Ω
+VGGT: Visual Geometry Grounded Transformer
+VMAF: Video Multi-Method Assessment Fusion
+VR-NeRF: High-Fidelity Virtualized Walkable Spaces
+V^3: Viewing Volumetric Videos on Mobiles via Streamable 2D Dynamic Gaussians
+ViVo: Visibility-aware Mobile Volumetric Video Streaming
+Video Depth Anything: Consistent Depth Estimation for Super-Long Videos
+Video Quality Assessment by Reduced Reference Spatio-Temporal Entropic Differencing
+Video generation models as world simulators (Sora)
+Video-rate wavefront capture and replay via single-shot reference-free measurement: toward holographic telepresence
+VideoRF: Rendering Dynamic Radiance Fields as 2D Feature Video Streams
+View Synthesis of Dynamic Scenes based on Deep 3D Mask Volume
+ViewCrafter: Taming Video Diffusion Models for High-fidelity Novel View Synthesis
+VirtualCube: An Immersive 3D Video Communication System
+Visual Sync: Multi-Camera Synchronization via Cross-View Object Motion (VisualSync)
+VoluMe: Authentic 3D Video Calls from Live Gaussian Splat Prediction
+Volumetric Hybrid Workspaces: Interactions with Objects in Remote and Co-located Telepresence
+Volumetric videos overcome a major hurdle on the path to the mainstream
+Voronoi Rooms: Dynamic Visibility Modulation of Overlapping Spaces for Telepresence
+WorldPlay: Towards Long-Term Geometric Consistency for Real-Time Interactive World Modeling
+X-Lens: Real-Time Metric Depth Estimation with Heterogeneous Cameras
+YoNoSplat: You Only Need One Model for Feedforward 3D Gaussian Splatting
+YuZu: Neural-Enhanced Volumetric Video Streaming
+Zero-1-to-3: Zero-shot One Image to 3D Object
+Zero-Shot Novel Depth Synthesis Using 3D Foundation Models Scene Representations (Z3D)
+ZipMap: Linear-Time Stateful 3D Reconstruction via Test-Time Training
+Zoom for Google Beam (Zoom Spaces, 2026)
+pixelNeRF: Neural Radiance Fields from One or Few Images
+pixelSplat: 3D Gaussian Splats from Image Pairs for Scalable Generalizable 3D Reconstruction
+tttLRM: Test-Time Training for Long Context and Autoregressive 3D Reconstruction
+visionOS 26: Personas with volumetric rendering and shared spatial experiences
+visionOS 27 adds native Gaussian splat rendering
+π^3: Permutation-Equivariant Visual Geometry Learning

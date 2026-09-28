@@ -1,0 +1,119 @@
+{
+  "note": "Fixed curriculum skeleton. Concept ids (f-*, g-*, d-*, r-*, i-*, l-*, n-*, v-*) and advanced-topic ids (a-*) are the only valid cross-link targets. Anchors: Quark (arXiv 2411.16680, SIGGRAPH Asia 2024) and Ha et al. (arXiv 2505.18932, CVPR 2025).",
+  "modules": [
+    {
+      "id": "M1", "title_zh": "数学与图像基础", "title_en": "Math & imaging basics",
+      "goal_zh": "能读懂 3D 视觉论文里的矩阵、坐标变换、优化与概率滤波记号，理解图像的采样与插值。",
+      "concepts": [
+        { "id": "f-linalg", "name_zh": "线性代数、齐次坐标与刚体变换", "name_en": "Linear algebra, homogeneous coordinates & rigid transforms", "scope_zh": "向量/矩阵、SVD 与最小二乘、齐次坐标、旋转表示（旋转矩阵/四元数/轴角）、SE(3) 位姿与坐标系约定（OpenCV vs OpenGL）", "prereqs": [], "anchor_hooks_zh": "两篇都用相机位姿把像素反投影/投影；Quark 在投影空间计算射线方向编码" },
+        { "id": "f-optim", "name_zh": "优化、鲁棒估计与梯度下降", "name_en": "Optimization, robust estimation & gradient descent", "scope_zh": "最小二乘、Gauss-Newton/LM、鲁棒损失（Huber）、RANSAC、梯度下降/Adam、学习率 warmup 与 cosine 衰减", "prereqs": ["f-linalg"], "anchor_hooks_zh": "Quark 的 render-and-refine 被解释为学习化的梯度下降；两篇的训练细节（Adam、warmup、cosine）" },
+        { "id": "f-prob", "name_zh": "概率、加权平均与递归滤波", "name_en": "Probability, weighted averaging & recursive filtering", "scope_zh": "高斯噪声、方差与置信度、逆方差加权融合、指数滑动平均（EMA）、卡尔曼滤波的直觉（预测-更新、增益）", "prereqs": ["f-linalg"], "anchor_hooks_zh": "Ha et al. 的时间深度滤波是 EMA，TSDF 融合是加权平均，权重来自局部深度方差" },
+        { "id": "f-image", "name_zh": "数字图像：颜色、采样、插值与金字塔", "name_en": "Digital images: color, sampling, interpolation & pyramids", "scope_zh": "像素与 sRGB/线性颜色、曝光与白平衡、采样定理与走样、双线性插值、卷积滤波、图像金字塔、max-pool/mean-pool", "prereqs": [], "anchor_hooks_zh": "Quark 的特征金字塔与双线性上采样（post-activation）；Ha 的差分掩码在 1/4 分辨率计算后 max-pool 再上采样" }
+      ]
+    },
+    {
+      "id": "M2", "title_zh": "相机与多视几何", "title_en": "Cameras & multi-view geometry",
+      "goal_zh": "会用内外参在像素、射线、三维点之间来回转换，理解视差-深度关系和相机阵列的标定与同步。",
+      "concepts": [
+        { "id": "g-pinhole", "name_zh": "针孔相机模型：内参、外参、投影与反投影", "name_en": "Pinhole camera: intrinsics, extrinsics, projection & unprojection", "scope_zh": "K 矩阵、[R|t]、世界/相机/图像坐标系、用深度反投影像素为 3D 点、射线参数化、镜头畸变、视锥", "prereqs": ["f-linalg"], "anchor_hooks_zh": "Ha 把每个像素用深度反投影成 3D 高斯；Quark 在目标视锥内建 LDM 并把层反投影到输入视角" },
+        { "id": "g-epipolar", "name_zh": "对极几何、三角化与单应", "name_en": "Epipolar geometry, triangulation & homography", "scope_zh": "本质/基础矩阵、极线约束、三角化、平面诱导单应（plane-induced homography）、立体校正", "prereqs": ["g-pinhole"], "anchor_hooks_zh": "平面扫描/MPI 渲染本质是逐平面单应变换；立体匹配依赖校正后的极线" },
+        { "id": "g-depth", "name_zh": "深度、视差与逆深度采样", "name_en": "Depth, disparity & inverse-depth sampling", "scope_zh": "视差 d=f·b/Z、深度误差随 Z² 增长、逆深度（等视差）采样、近/远平面、度量尺度 vs 相对尺度", "prereqs": ["g-pinhole", "g-epipolar"], "anchor_hooks_zh": "Quark 的层按等视差间隔放置并限制在各自视差带内；Ha 的 TSDF 截断 τ=0.02m 依赖度量尺度" },
+        { "id": "g-sfm", "name_zh": "运动恢复结构（SfM）与光束法平差", "name_en": "Structure-from-Motion & bundle adjustment", "scope_zh": "特征匹配、增量式 SfM、BA、COLMAP 的用法、SfM 点用于估计近远平面", "prereqs": ["g-epipolar", "f-optim"], "anchor_hooks_zh": "两篇的相机位姿都来自 COLMAP 或数据集提供；Quark 用 SfM 点深度设定近/远平面" },
+        { "id": "g-rig", "name_zh": "多相机阵列：标定、同步与卷帘快门", "name_en": "Multi-camera rigs: calibration, synchronization & rolling shutter", "scope_zh": "张正友标定、阵列外参标定、颜色标定、硬件同步（genlock/触发）、时间戳抖动、卷帘快门", "prereqs": ["g-pinhole"], "anchor_hooks_zh": "Ha 明确要求同步且标定良好的相机，ENeRF-Outdoor 的同步误差导致其降分辨率评测；Quark 假设已标定输入" }
+      ]
+    },
+    {
+      "id": "M3", "title_zh": "深度估计与三维重建", "title_en": "Depth estimation & 3D reconstruction",
+      "goal_zh": "理解深度从哪里来、有多不准，以及如何把多张不一致的深度图融合成一致的几何。",
+      "concepts": [
+        { "id": "d-stereo", "name_zh": "双目立体匹配：从 SGM 到 RAFT-Stereo", "name_en": "Stereo matching: from SGM to RAFT-Stereo", "scope_zh": "匹配代价、代价体、SGM、深度学习立体（相关体 + 迭代更新）、置信度、遮挡与弱纹理/高光失败", "prereqs": ["g-epipolar", "g-depth"], "anchor_hooks_zh": "Ha 的逐视角深度来自 RAFT-Stereo（高光区域失败是其主要局限）" },
+        { "id": "d-mvs", "name_zh": "多视角立体（MVS）与平面扫描", "name_en": "Multi-view stereo & plane sweep", "scope_zh": "光度一致性、平面扫描（plane sweep）、代价体、MVSNet 式学习 MVS、可见性推理", "prereqs": ["d-stereo", "g-epipolar"], "anchor_hooks_zh": "Quark 把 update feature 按当前深度反投影回层空间，形成类似平面扫描体的 Δ" },
+        { "id": "d-mono", "name_zh": "单目与视频深度估计", "name_en": "Monocular & video depth estimation", "scope_zh": "MiDaS/DPT、Depth Anything、尺度/平移歧义、视频深度的时间一致性问题", "prereqs": ["g-depth"], "anchor_hooks_zh": "可作为 Ha 深度来源的替代；两篇均未使用，但后续工作大量使用" },
+        { "id": "d-flow", "name_zh": "光流、场景流与图像 warping", "name_en": "Optical flow, scene flow & image warping", "scope_zh": "亮度恒定假设、RAFT、前向/后向光流、遮挡检测、场景流、用光流做时间对齐", "prereqs": ["f-image", "g-pinhole"], "anchor_hooks_zh": "Ha 的时间滤波不用光流而用颜色差分掩码（只在静止区域滤波）；时间一致性指标常用光流 warping 误差" },
+        { "id": "d-tsdf", "name_zh": "截断符号距离场（TSDF）与深度融合", "name_en": "Truncated signed distance fields & depth fusion", "scope_zh": "SDF 定义、截断、Curless & Levoy 加权平均、KinectFusion、体素 TSDF vs 基于图像的 TSDF（Starline）、零交叉提取表面", "prereqs": ["g-pinhole", "f-prob", "d-stereo"], "anchor_hooks_zh": "Ha 的核心：沿目标射线把样本投影到 K 个输入视角求 s_k = z_k − D_k，截断到 τ 后加权融合，找零交叉得到一致深度" },
+        { "id": "d-sensors", "name_zh": "深度传感器与噪声特性", "name_en": "Depth sensors & noise characteristics", "scope_zh": "结构光、ToF、主动立体、LiDAR；飞点（flying pixels）、多路径、边缘噪声；Kinect/Azure Kinect/RealSense/iPhone LiDAR", "prereqs": ["g-depth"], "anchor_hooks_zh": "Ha 在 ScanNet 上用传感器深度训练；飞点问题是其拒绝一次性渲染所有视角的原因之一" }
+      ]
+    },
+    {
+      "id": "M4", "title_zh": "图形学与渲染基础", "title_en": "Graphics & rendering fundamentals",
+      "goal_zh": "理解光栅化、alpha 合成、体渲染和光线步进，这是读懂所有神经渲染论文的共同语言。",
+      "concepts": [
+        { "id": "r-raster", "name_zh": "光栅化、z-buffer 与点溅射（splatting）", "name_en": "Rasterization, z-buffer & point splatting", "scope_zh": "图形管线、深度测试、点/面片溅射、EWA splatting、可见性与 z-fighting", "prereqs": ["g-pinhole"], "anchor_hooks_zh": "Ha 用 3DGS 光栅器把像素高斯逐视角渲染到目标视角；Quark 用双线性 splat 把 LDM 投到输入视角" },
+        { "id": "r-alpha", "name_zh": "Alpha 合成与 over 算子", "name_en": "Alpha compositing & the over operator", "scope_zh": "Porter-Duff over、预乘 alpha、前到后/后到前合成、累积不透明度与透射率", "prereqs": ["f-image"], "anchor_hooks_zh": "Quark 按 density 从后向前 over 合成 LDM 各层；Ha 输出每视角累积 opacity α_k 并用于混合" },
+        { "id": "r-volume", "name_zh": "体渲染方程与离散化", "name_en": "The volume rendering equation & its discretization", "scope_zh": "发射-吸收模型、透射率 T、NeRF 的离散求积公式、与 alpha 合成的等价性、深度期望", "prereqs": ["r-alpha"], "anchor_hooks_zh": "Quark 的 LDM 层数相当于体渲染的采样步；理解为何分层表示是体渲染的稀疏近似" },
+        { "id": "r-raymarch", "name_zh": "光线步进、球面追踪与隐式表面求交", "name_en": "Ray marching, sphere tracing & implicit surface intersection", "scope_zh": "沿射线采样、按 SDF 步长前进、符号变化检测、二分细化、近/远边界", "prereqs": ["d-tsdf", "g-pinhole"], "anchor_hooks_zh": "Ha 的 TSDF 深度：按 0.8·s 步长前进直到符号变化，再做 3 次二分" },
+        { "id": "r-appearance", "name_zh": "反射模型、视角相关外观与光照", "name_en": "Reflectance, view-dependent appearance & lighting", "scope_zh": "BRDF、Lambertian vs 高光、菲涅尔、球谐（SH）颜色、为何多视角颜色不一致、重光照基础", "prereqs": ["f-linalg"], "anchor_hooks_zh": "Ha 在高光区域失败；Quark 靠逐目标视角的 blend weights 部分模拟反射，射线方向编码偏向近邻视角" },
+        { "id": "r-reps", "name_zh": "三维表示总览：点、网格、体素、隐式场、高斯", "name_en": "3D representations: points, meshes, voxels, implicit fields, Gaussians", "scope_zh": "各表示的存储/渲染/编辑/时间一致性权衡；显式 vs 隐式；全局表示 vs 逐视角表示", "prereqs": ["r-raster", "r-volume"], "anchor_hooks_zh": "Quark 选逐帧即时生成、用完即丢的 LDM；Ha 选逐像素高斯 + 图像空间 TSDF，都是“逐视角”而非全局表示" }
+      ]
+    },
+    {
+      "id": "M5", "title_zh": "基于图像的渲染（IBR）", "title_en": "Image-based rendering",
+      "goal_zh": "理解“直接复用输入像素”的新视角合成思路：光场、混合权重、前向 warping 的洞与飞点、分层表示。",
+      "concepts": [
+        { "id": "i-lightfield", "name_zh": "全光函数、光场与 Lumigraph", "name_en": "Plenoptic function, light fields & the Lumigraph", "scope_zh": "7D 全光函数到 4D 光场、双平面参数化、光场采样与几何代理、plenoptic sampling 的深度-采样率关系", "prereqs": ["g-pinhole"], "anchor_hooks_zh": "两篇都是 IBR：最终像素颜色是输入像素的加权组合，几何只是“代理”" },
+        { "id": "i-blending", "name_zh": "视角相关纹理映射与混合权重（ULR）", "name_en": "View-dependent texture mapping & blending weights (ULR)", "scope_zh": "VDTM、非结构化 Lumigraph（ULR）的混合权重准则：角度偏差、分辨率、连续性、可见性；学习式混合权重", "prereqs": ["i-lightfield", "r-appearance"], "anchor_hooks_zh": "Ha 的 U-Net 预测 K 个视角的逐像素混合权重，输入含相机距离与夹角特征；Quark 用注意力产生 M 维 blend weights" },
+        { "id": "i-warping", "name_zh": "基于深度的渲染：前向/后向 warping、空洞与飞点", "name_en": "Depth-image-based rendering: forward/backward warping, holes & flying pixels", "scope_zh": "DIBR、前向 warping 的裂缝与空洞、后向 warping 需要目标深度、去遮挡（disocclusion）、飞点与 z-fighting、像素大小的 splat", "prereqs": ["g-pinhole", "r-raster"], "anchor_hooks_zh": "Ha 第一阶段：每个像素变成像素大小的不透明各向同性高斯，逐视角单独前向渲染，避免多视角一次渲染的飞点与 z-fighting" },
+        { "id": "i-layered", "name_zh": "分层表示：MPI、LDI 与分层深度图（LDM）", "name_en": "Layered representations: MPI, LDI & layered depth maps", "scope_zh": "多平面图像（MPI）、分层深度图像（LDI）、多球面图像（MSI）、LDM（每层有深度）、渲染 = 单应变换 + over 合成", "prereqs": ["r-alpha", "g-epipolar", "g-depth"], "anchor_hooks_zh": "Quark 的核心表示：每层含 depth、density 与对各输入图的 blend weights，由粗到细并做 layer collapse" },
+        { "id": "i-psv", "name_zh": "平面扫描体与学习式视图合成", "name_en": "Plane-sweep volumes & learned view synthesis", "scope_zh": "把输入重投影到一组深度平面形成 PSV、DeepStereo/Stereo Magnification 的学习方式、代价 vs 颜色两类特征", "prereqs": ["d-mvs", "i-layered"], "anchor_hooks_zh": "Quark 的 Δ（按深度反投影 update feature）与初始化时的 back-projection 都是 PSV 思想" }
+      ]
+    },
+    {
+      "id": "M6", "title_zh": "深度学习基础（3D 视觉视角）", "title_en": "Deep learning for 3D vision",
+      "goal_zh": "掌握读懂两篇论文网络部分所需的结构与训练知识：U-Net、注意力、编码、损失、迭代细化。",
+      "concepts": [
+        { "id": "l-cnn", "name_zh": "卷积网络、残差块与 U-Net", "name_en": "CNNs, residual blocks & U-Net", "scope_zh": "卷积与感受野、残差连接、编码器-解码器、跳连、多尺度特征金字塔、推理加速（TensorRT）", "prereqs": ["f-image"], "anchor_hooks_zh": "Ha 的混合网络是 4 层 U-Net（TensorRT 23ms）；Quark 整体是 UNet 式由粗到细结构，编码器是残差 CNN" },
+        { "id": "l-attention", "name_zh": "注意力机制与 Transformer", "name_en": "Attention & Transformers", "scope_zh": "Q/K/V、缩放点积、多头、self vs cross attention、复杂度、pre-LN、置换不变性与集合聚合", "prereqs": ["f-linalg"], "anchor_hooks_zh": "Quark 的 One-to-many attention：单个 query 对 M 个视角做 cross-attention，并把 W^K 折叠进 W^Q、W^V 折叠进 W^O 以省去逐视角 K/V 投影" },
+        { "id": "l-encoding", "name_zh": "位置编码、傅里叶特征与射线编码", "name_en": "Positional encoding, Fourier features & ray encodings", "scope_zh": "正弦位置编码、频谱偏置、NeRF 位置编码、射线/方向编码、Plücker 坐标、相机条件化", "prereqs": ["l-attention", "g-pinhole"], "anchor_hooks_zh": "Quark 的射线方向编码 γ（投影空间 2D 差向量 → tanh → 8 octave 正弦）；Ha 用相机距离与方向点积作为特征" },
+        { "id": "l-loss", "name_zh": "损失函数与训练实践", "name_en": "Losses & training practice", "scope_zh": "L1/L2、SSIM 损失、感知损失（VGG/LPIPS）、辅助损失（深度、掩码）、残差缩放、数据混合权重、裁剪训练", "prereqs": ["l-cnn"], "anchor_hooks_zh": "Quark：10·L1 + LPIPS；Ha：0.8·L1 + 0.2·SSIM + 0.1·L_depth + 0.1·L_mask" },
+        { "id": "l-iterative", "name_zh": "学习式迭代细化与展开优化", "name_en": "Learned iterative refinement & unrolled optimization", "scope_zh": "learned gradient descent、展开优化、RAFT 式循环更新、DeepView 的 render-and-refine", "prereqs": ["f-optim", "l-cnn"], "anchor_hooks_zh": "Quark 的 5 步 Update & Fuse：把当前 LDM 渲染回输入视角，比较差异后更新" },
+        { "id": "l-diffusion", "name_zh": "扩散模型入门", "name_en": "Diffusion models primer", "scope_zh": "前向加噪/反向去噪、DDPM/DDIM、潜空间扩散、条件生成、少步蒸馏，以及为何生成模型会闪烁", "prereqs": ["f-prob", "l-cnn"], "anchor_hooks_zh": "两篇都没用生成先验；这是理解后续工作（生成补全、修复器）与研究方向的前置" }
+      ]
+    },
+    {
+      "id": "M7", "title_zh": "神经渲染核心", "title_en": "Neural rendering essentials",
+      "goal_zh": "理解 NeRF、3DGS、可泛化/前馈新视角合成与动态场景表示，知道两篇锚点论文在这张地图上的位置。",
+      "concepts": [
+        { "id": "n-nerf", "name_zh": "神经辐射场（NeRF）", "name_en": "Neural Radiance Fields", "scope_zh": "MLP 场、体渲染、分层采样、视角相关颜色、逐场景优化的代价、加速（Instant-NGP 等）", "prereqs": ["r-volume", "l-encoding"], "anchor_hooks_zh": "两篇都与“逐场景优化”路线对照：Quark 在 DL3DV 上超过 Zip-NeRF；两者都不做逐场景训练" },
+        { "id": "n-3dgs", "name_zh": "3D Gaussian Splatting", "name_en": "3D Gaussian Splatting", "scope_zh": "各向异性高斯、协方差投影（EWA）、tile 光栅化、前到后 alpha 混合、SH 颜色、致密化", "prereqs": ["r-raster", "r-alpha", "r-appearance"], "anchor_hooks_zh": "Ha 用原版 3DGS 光栅器，但高斯是解析设定（像素大小、各向同性、完全不透明）而非优化得到" },
+        { "id": "n-generalizable", "name_zh": "可泛化 / 前馈式新视角合成", "name_en": "Generalizable / feed-forward novel view synthesis", "scope_zh": "IBRNet、pixelNeRF、MVSNeRF、ENeRF、前馈 3DGS（pixelSplat/MVSplat/GPS-Gaussian）、无几何 Transformer（LVSM）", "prereqs": ["n-nerf", "i-psv", "l-attention"], "anchor_hooks_zh": "两篇都属于这一类：跨场景训练、推理时不优化；基线正是 IBRNet、ENeRF、GPNR、GPS-Gaussian" },
+        { "id": "n-dynamic", "name_zh": "动态场景与 4D 表示", "name_en": "Dynamic scenes & 4D representations", "scope_zh": "变形场、规范空间、4D 高斯、逐帧 vs 流式、多视角视频数据集（DyNeRF/N3DV）", "prereqs": ["n-nerf", "n-3dgs"], "anchor_hooks_zh": "Ha 面向多视角视频在线合成；Quark 逐帧处理视频（N3DV），无时间状态" }
+      ]
+    },
+    {
+      "id": "M8", "title_zh": "视频、时间一致性、评测与系统", "title_en": "Video, temporal consistency, evaluation & systems",
+      "goal_zh": "理解“闪烁”从哪来、如何度量，以及实时 3D 临场系统在延迟、带宽和人眼感知上的约束。",
+      "concepts": [
+        { "id": "v-temporal", "name_zh": "时间一致性、闪烁与时域滤波", "name_en": "Temporal consistency, flicker & temporal filtering", "scope_zh": "闪烁的来源（逐帧独立预测）、EMA/递归滤波、运动补偿滤波、鬼影-延迟权衡、静止/运动区域判别", "prereqs": ["f-prob", "d-flow"], "anchor_hooks_zh": "Ha 的软差分掩码 M = min(|I_t − I_{t−1}|/0.7 + 0.6, 1) 与深度 EMA；前一帧新视角深度回灌 TSDF；Quark 自承逐帧重建会闪烁" },
+        { "id": "v-metrics", "name_zh": "图像与视频质量指标", "name_en": "Image & video quality metrics", "scope_zh": "PSNR、SSIM、LPIPS、FLIP、VMAF；时间指标（光流 warping 误差、tOF、TCC、STED）；视角一致性（EPI、SDV）；FVD", "prereqs": ["f-image", "d-flow"], "anchor_hooks_zh": "两篇的实验表格：Quark 报 PSNR/SSIM/LPIPS 与运行时间；Ha 另报 TCC/STED/SDT/SDV 与 EPI" },
+        { "id": "v-codec", "name_zh": "视频编码、传输与延迟预算", "name_en": "Video coding, transport & latency budgets", "scope_zh": "H.264/HEVC/AV1、码率与 GOP、低延迟编码、深度图编码难点、WebRTC/RTP、端到端延迟分解（采集→编码→网络→渲染→显示）", "prereqs": ["f-image"], "anchor_hooks_zh": "两篇都未讨论传输；Starline 的端到端 105.8 ms 是系统标杆" },
+        { "id": "v-perception", "name_zh": "立体视觉感知与 3D 显示", "name_en": "Stereo perception & 3D displays", "scope_zh": "双目视差与融合、辐辏-调节冲突、运动到光子延迟、闪烁感知、裸眼 3D/光场屏、头显重投影（ATW/ASW）", "prereqs": ["g-depth"], "anchor_hooks_zh": "双目要渲染两份、光场屏要几十个视角：两篇都是单视角逐次渲染，成本线性增长" }
+      ]
+    }
+  ],
+  "advanced_topics": [
+    { "id": "a-learned-stereo", "title_zh": "深度立体匹配到立体基础模型", "title_en": "Deep stereo to stereo foundation models", "scope_zh": "GC-Net、PSMNet、RAFT-Stereo、CREStereo、IGEV、FoundationStereo、时间一致的视频立体", "prereqs": ["d-stereo"] },
+    { "id": "a-learned-mvs", "title_zh": "学习式多视角立体与代价体", "title_en": "Learned MVS & cost volumes", "scope_zh": "MVSNet、R-MVSNet、CasMVSNet、PatchmatchNet、TransMVSNet、MVS 与 NVS 的结合", "prereqs": ["d-mvs"] },
+    { "id": "a-geo-fm", "title_zh": "前馈三维几何基础模型", "title_en": "Feed-forward 3D geometry foundation models", "scope_zh": "DUSt3R、MASt3R、Spann3R、CUT3R、VGGT、π3、MapAnything、Depth Anything 3、流式几何", "prereqs": ["g-sfm", "l-attention", "d-mono"] },
+    { "id": "a-nerf-fast", "title_zh": "NeRF 的加速与抗锯齿", "title_en": "Fast & anti-aliased NeRFs", "scope_zh": "Instant-NGP、Plenoxels、TensoRF、Mip-NeRF、Mip-NeRF 360、Zip-NeRF、实时烘焙（SNeRG/MERF）", "prereqs": ["n-nerf"] },
+    { "id": "a-3dgs-ext", "title_zh": "3D Gaussian Splatting 的扩展", "title_en": "Extensions of 3D Gaussian Splatting", "scope_zh": "Mip-Splatting、2DGS、表面重建、压缩与紧凑表示、抗锯齿、gsplat 等工具链", "prereqs": ["n-3dgs"] },
+    { "id": "a-layered-nvs", "title_zh": "学习式分层表示：从 Stereo Magnification 到 Quark", "title_en": "Learned layered representations: Stereo Magnification to Quark", "scope_zh": "Stereo Magnification、LLFF、DeepView、Immersive Light Field Video、SIMPLI、MatryODShka、Quark", "prereqs": ["i-layered", "l-iterative"] },
+    { "id": "a-generalizable-ibr", "title_zh": "可泛化 NeRF 与学习式 IBR", "title_en": "Generalizable NeRF & learned IBR", "scope_zh": "FVS/SVS、IBRNet、pixelNeRF、MVSNeRF、GPNR、ENeRF、FWD、NeuRay", "prereqs": ["n-generalizable", "i-blending"] },
+    { "id": "a-ff-3dgs", "title_zh": "前馈 3DGS 与大重建模型", "title_en": "Feed-forward 3DGS & large reconstruction models", "scope_zh": "pixelSplat、MVSplat、DepthSplat、GPS-Gaussian、LRM、GS-LRM、Long-LRM", "prereqs": ["n-3dgs", "n-generalizable"] },
+    { "id": "a-geometry-free", "title_zh": "无几何 Transformer 渲染器", "title_en": "Geometry-free transformer renderers", "scope_zh": "SRT、GPNR、LVSM、RayZer 等：不显式建模几何，直接从 token 生成新视角", "prereqs": ["l-attention", "l-encoding"] },
+    { "id": "a-dynamic-4d", "title_zh": "动态 NeRF、4D 高斯与流式重建", "title_en": "Dynamic NeRF, 4D Gaussians & streaming reconstruction", "scope_zh": "D-NeRF、Nerfies、HyperNeRF、DyNeRF、K-Planes/HexPlane、4DGS、Dynamic 3D Gaussians、Spacetime Gaussians、3DGStream、4K4D", "prereqs": ["n-dynamic"] },
+    { "id": "a-human-capture", "title_zh": "人体表演捕捉与数字人", "title_en": "Human performance capture & avatars", "scope_zh": "Holoportation/Fusion4D、Codec Avatars、Neural Volumes/MVP、Neural Body、HumanNeRF、Animatable Gaussians、GPS-Gaussian", "prereqs": ["n-dynamic", "d-tsdf"] },
+    { "id": "a-diffusion-3d", "title_zh": "扩散模型与三维/新视角生成先验", "title_en": "Diffusion models as 3D / novel-view priors", "scope_zh": "DDPM、LDM、DreamFusion、Zero-1-to-3、MVDream、CAT3D、视频扩散（SVD）、Difix3D+ 等修复器、少步/因果化", "prereqs": ["l-diffusion"] },
+    { "id": "a-temporal-video", "title_zh": "视频时间一致性方法", "title_en": "Temporal consistency methods for video", "scope_zh": "盲视频时间一致性、一致视频深度、去闪烁、循环/记忆网络、时间一致的深度与重建", "prereqs": ["v-temporal", "d-flow"] },
+    { "id": "a-telepresence-sys", "title_zh": "三维临场系统设计", "title_en": "3D telepresence system design", "scope_zh": "Holoportation、Montage4D、Project Starline、VirtualCube、Tele-Aloha：采集、融合、渲染、传输、显示的端到端设计与延迟预算", "prereqs": ["v-codec", "v-perception", "d-tsdf"] },
+    { "id": "a-compression", "title_zh": "体积视频与神经表示的压缩传输", "title_en": "Compression & streaming of volumetric and neural representations", "scope_zh": "MPEG V-PCC/G-PCC、MIV、RGB-D 视频编码、紧凑 3DGS、动态高斯压缩、神经编解码", "prereqs": ["v-codec", "r-reps"] },
+    { "id": "a-diff-render", "title_zh": "可微渲染与逆渲染", "title_en": "Differentiable & inverse rendering", "scope_zh": "OpenDR、Soft Rasterizer、神经点渲染（NPBG/Pulsar）、可微 splatting、材质与光照分解", "prereqs": ["r-raster", "r-appearance", "f-optim"] }
+  ],
+  "classic_themes": [
+    { "id": "t-ibr-geometry", "title_zh": "经典 IBR、光场与多视几何（1981–2019）", "scope": "light field / lumigraph / VDTM / ULR / plenoptic sampling / layered video interpolation / calibration / SfM / MVS / stereo (SGM, PatchMatch) / MVS benchmarks" },
+    { "id": "t-fusion-capture", "title_zh": "深度融合、表演捕捉与临场系统（1996–2024）", "scope": "Curless & Levoy, KinectFusion, DynamicFusion, Fusion4D, Holoportation, Montage4D, Starline, VirtualCube, high-quality free-viewpoint video (Collet 2015), Codec Avatars, Neural Volumes, MVP, Panoptic Studio" },
+    { "id": "t-deep-geometry", "title_zh": "深度学习几何：光流、立体、MVS、单目深度、匹配（2015–2025）", "scope": "FlowNet, PWC-Net, RAFT, GC-Net, PSMNet, RAFT-Stereo, MVSNet, CasMVSNet, MiDaS, DPT, Depth Anything, SuperPoint/SuperGlue, LoFTR, DUSt3R, MASt3R, VGGT" },
+    { "id": "t-neural-rendering", "title_zh": "神经渲染与新视角合成（2016–2025）", "scope": "DeepStereo, Stereo Magnification, LLFF, DeepView, Immersive LF Video, SRN, NPBG, FVS/SVS, NeRF, Mip-NeRF (360), Instant-NGP, Plenoxels, TensoRF, IBRNet, pixelNeRF, MVSNeRF, ENeRF, 3DGS, 2DGS, Mip-Splatting, neural rendering STARs" },
+    { "id": "t-dynamic-human", "title_zh": "动态场景、4D 与人体（2019–2025）", "scope": "D-NeRF, Nerfies, HyperNeRF, NSFF, DyNeRF (N3DV), K-Planes, HexPlane, 4DGS, Dynamic 3D Gaussians, Spacetime Gaussians, 4K4D, 3DGStream, Neural Body, HumanNeRF, GPS-Gaussian, Animatable Gaussians, GaussianAvatars" },
+    { "id": "t-generative-ff", "title_zh": "生成式先验、前馈重建与评测基础（2014–2025）", "scope": "DDPM, DDIM, LDM, ControlNet, SVD, DreamFusion, Zero-1-to-3, MVDream, CAT3D, LRM, pixelSplat, MVSplat, GS-LRM, LVSM; metrics & data foundations: SSIM, LPIPS, FLIP, blind video temporal consistency, DTU, Tanks&Temples, ScanNet, RealEstate10K, DL3DV, DyNeRF dataset" }
+  ]
+}

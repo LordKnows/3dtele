@@ -1,0 +1,1073 @@
+{
+ "topics": [
+  {
+   "id": "a-layered-nvs",
+   "title_zh": "学习式分层表示：从 Stereo Magnification 到 Quark",
+   "title_en": "Learned layered representations: Stereo Magnification to Quark",
+   "overview_zh": "分层表示针对这样一个问题：只有少量已标定图像时，怎样得到一个实时可渲染的三维中间表示，同时还要处理好遮挡边界、半透明和被遮挡内容。单张深度图（见 i-warping）每个像素只有一个深度，warp 到新视角后，前景边缘会出现飞点，背景里会露出空洞。分层表示把场景切成若干张带 alpha 的图层，渲染时只需把每层 warp 到新视角，再从后往前做 over 合成（见 r-alpha、i-layered）；遮挡、半透明这些难点都交给一个 2D 网络去预测图层内容。本专题讲的是学习式分层表示：网络跨场景训练，推理时从输入图像经一次前向（或几次迭代）直接预测图层，不做逐场景优化。其中从 MPI、DeepView、Immersive Light Field Video 到 Quark 这条主干，主要由 Google 的同一批作者（Flynn、Tucker、Snavely、Broxton、Overbeck 等）推动。\n\n2018–2019 年的奠基工作确立了三个核心构件。第一个是 Stereo Magnification（Zhou et al., SIGGRAPH 2018）提出的多平面图像 MPI：在参考相机视锥内放置 D=32 个前平行平面，在视差（逆深度）上等间隔分布，近平面 1 m、远平面 100 m。网络的输入是参考图 I_1，加上第二张图在这些平面上的平面扫描体（PSV），共 H×W×3(D+1) 个通道；输出是每层的 alpha、每层的混合权重和一张全局背景图，每层颜色由参考图与背景图逐像素加权得到。训练数据是用 ORB-SLAM2 跟踪 YouTube 房产视频的相机、再筛选出的约 7000 个片段（约 75 万帧），即后来的 RealEstate10K。第二个是 LLFF（Mildenhall et al., SIGGRAPH 2019）：它把每张输入图都扩展成一个局部 MPI（参考视角与 4 个近邻共 5 个视角的 PSV 送入 3D CNN，每个体素输出 1 个 alpha 和 5 路和为 1 的颜色选择权重），渲染时按累积 alpha 调制的权重融合相邻的 MPI。它还从全光采样理论推出，只要相邻视角之间最近点的最大视差不超过 min(D, W/2) 像素即可，二维视角采样因此可比 Nyquist 少 D² 倍（D=64 时约 4000 倍）。第三个是 DeepView（Flynn et al., CVPR 2019），它把求解 MPI 写成 learned gradient descent：把当前 MPI 渲染回每个输入视角，把输入 PSV、渲染 PSV、累积 over 和净透射率这几个梯度分量交给更新 CNN，跨视角用 max-pool 聚合，共迭代 3 次。DeepView 同时发布了 16 相机、100 个场景的 Spaces 数据集；处理 4 张输入在 P100 上约需 50 s。\n\nMPI 的通病有三个：层数多，大部分体素是透明的，视点偏离参考视角后会露出“纸片感”。2020–2023 年的改进沿三个方向展开。第一个方向是换几何形状：MatryODShka（ECCV 2020）把 ODS 立体全景转成 32 层同心球面（MSI，半径 1–100 m），在 640×320 下推理 alpha 与混合权重，用 GPU 联合双边上采样把 alpha 对齐到 4K×2K 原图，颜色直接取原图；MSI 推理 30 Hz，笔记本 GPU 上渲染 60 Hz 以上。Immersive Light Field Video（SIGGRAPH 2020）用直径 92 cm 半球上的 46 台同步相机采集，以 DeepView 式方法求解多球壳 MSI，再把大量球壳层压缩成少量 RGBA+depth 层（layered mesh），经纹理图集与视频编码后可以在网页浏览器和移动 VR/AR 设备上播放。第二个方向是让层贴合表面：StereoLayers（CVPR 2022）从一对立体图分两阶段推断少量随场景自适应的非平面层（先几何，后颜色与透明度）；SIMPLI（WACV 2023）先预测 P=40 个平面，再用注意力池化把它们合并成 L=4 或 8 个带逐像素深度的层，并反复把表示投影回源视角、比较差异，做前馈的误差校正。第三个方向是视角相关外观：NeX（CVPR 2021）把每层每像素的颜色写成神经基函数的线性组合，但需要逐场景优化。此外，Pushing the Boundaries（CVPR 2019）证明 MPI 可渲染的视角范围随视差采样频率线性增长；Single-view MPI（CVPR 2020）把 MPI 推广到单图输入。\n\nQuark（Flynn et al., SIGGRAPH Asia 2024）把这条线上的部件组装成了一个实时系统。表示方面，它用目标视角对齐的分层深度图（LDM）取代 MPI：每层有逐像素深度（限制在各自的等视差带内）、density，以及对 M=8 个输入视角的 blend weights；LDM 每帧、每个目标视角重新生成，用完即丢弃。求解方面，它把 DeepView 的 render-and-refine 嵌入 UNet 式多尺度结构，共 5 次 Update & Fuse，从 24 层×36×64 逐级升到 6 层×288×512，层数靠 layer collapse 减半；跨视角聚合也从 max-pool 换成了 One-to-many attention。输出方面，它沿用 LLFF 和 MatryODShka 的思路，即低分辨率求几何、用全分辨率输入像素着色：先把未激活的层属性双线性上采样 3.75 倍，再施加激活函数，最后用 CUDA IBR 渲染器合成（1080p 约 1.3 ms）。在 8 路输入下，Quark 在单张 A100 上重建加渲染合计达到 1080p/30 fps；在同一硬件上重测的 SIMPLI 需要 4.4 s，DeepView 原文报告约 50 s（P100，4 路输入）。\n\n截至 2026-09，据我们检索，Quark 仍是学习式分层加 IBR 路线在质量与速度上的代表作，但代码未开源，而且研究重心已经转移。Quark 团队自己的 LVT（SIGGRAPH Asia 2025）与 Fuse-and-Refine（NeurIPS 2025）把输出换成了一次重建、多次渲染的 3DGS；Online Neural Space Time Memory（2026）用 test-time training 记忆保存长时历史，补的正是 Quark 缺失的时间维度。MPI 本身只在移动端轻量化等方向还有新工作，例如 2026 年 6 月的可微 MPI 轻量 NVS（用几何基础模型预测的点图初始化 MPI，再做可微优化，并用单步扩散补洞）。不过，分层表示留下的设计原则仍是理解 Quark 的钥匙：以目标或参考视角为中心，用少量深度可学习的层，颜色直接取自输入像素，并迭代地把结果渲染回输入视角再做修正。Ha et al. 虽然没有使用分层表示，但它的流程（逐视角前向 warp，按累积 alpha 与学习到的权重融合，再用背景图补洞）几乎逐项对应 LLFF 的多 MPI 融合公式和 Stereo Magnification 的背景图设计。",
+   "key_ideas": [
+    {
+     "name_zh": "颜色参数化：从“参考图 + 背景图”到 M 路 blend weights",
+     "explain_zh": "直觉：如果让网络为 D 层各输出一张完整的 RGBA，输出量是 W·H·4D，而且网络得自己把每层的颜色“画”出来，结果容易发糊。Stereo Magnification 注意到，场景颜色大多可以从两张图里挑出来：参考图 I_1 提供前景，网络预测的背景图 Î_b 提供被前景挡住的内容。这样每层只需预测一张 alpha 和一张混合权重 w_d（再加一张共享的 3 通道背景图），输出量降为 W·H·(2D+3)。数值例子：1024×576、D=32 时，直接预测约需 7550 万个输出（589,824×128），换成这种参数化后约 3950 万个（589,824×67），几乎减半，纹理细节也直接来自真实像素。LLFF 更进一步，把两张图换成 5 个视角的 PSV，每个 MPI 体素输出 5 个和为 1 的颜色选择权重；这样一来，参考视角看不到、但其他视角看得到的内容也能取到。Quark 把这一思路推到了头：LDM 每层每个像素存 M=8 维 blend weights，softmax 推迟到上采样之后再做；颜色按该层深度从全分辨率输入图重投影取得。它的消融（以半分辨率训练 250K 步的 Quark+ 为基线，在 DL3DV 上以 1080p 评测）显示，把 IBR 输出换成直接回归 RGB，PSNR 从 30.41 降到 29.18，LPIPS 从 0.154 升到 0.179，是所有消融中退化最大的一项。与锚点的联系：Ha et al. 的 U-Net 同样只输出 K 个逐像素权重 w_k（外加一个背景权重 w_BG 和一张背景图 I_BG），颜色全部来自前向 splat 得到的真实像素。它的 I_BG 与 Stereo Magnification 的 Î_b 作用相同，都用来给前景挡住、在新视角里露出来的区域提供颜色。"
+    },
+    {
+     "name_zh": "采样定理：需要多少层？Quark 为何“升分辨率、降层数”",
+     "explain_zh": "直觉：固定平面的 MPI 本质上是在视差上做离散采样。新视角相对参考视角移动时，同一平面上的点整体平移；而位于两个平面之间的真实表面会被劈成两份，产生重影或层状伪影。LLFF 给出的界是：相邻输入视角之间，最近场景点的最大像素视差 d_max = f·Δu / z_min 不能超过 min(D, W/2)。其中 f 是以像素为单位的焦距，Δu 是相机间距，z_min 是最近深度，D 是平面数，W 是图像宽度。数值例子（参数为假设值）：f=1000 px、z_min=1 m、Δu=10 cm 时 d_max=100 px。D=32 的 MPI 不够用，要么增加到约 100 层，要么把相机间距缩小到 3.2 cm。DeepView 在 Spaces 的 4 视角实验中（相机间距约 10 cm，近平面 0.7 m）训练时用 64 个平面、推理时用 80 个平面，与这个量级吻合。下面用同样的思路对 Quark 做数量级估算（注意：LLFF 的界针对相邻输入视角；Quark 的 LDM 对齐到目标视角，相关的是目标视角与各输入视角之间的视差，量级相同）。Quark 的输入相机间距最大约 30 cm，同样假设下，1080p 分辨率的视差可达 300 px。它的对策是按分辨率分配层数。在 36×64 的粗网格上（约为 1080p 的 1/30），300 px 视差只相当于约 10 个粗像素，24 层足以让每个视差带窄于半个粗像素，基本满足采样条件。到 288×512（1/3.75）时，视差约 80 px，只剩 6 层，每层的视差带约 13 px。此时层已经不是平面，而是带逐像素深度的 LDM 层，可以在视差带内移动去贴住表面，因此不再受平面采样界的约束。这就是 Quark “升分辨率、降层数”在数量级上的依据。消融显示，去掉 layer collapse（即不减层）后 PSNR 只升高 0.16 dB，运行时间却增加 115%。"
+    },
+    {
+     "name_zh": "Learned gradient descent：把“渲染回输入、比较、修正”交给网络",
+     "explain_zh": "直觉：如果手里是真实的 MPI，把它渲染到每个输入视角，应当能精确复现输入图像，所以渲染结果与输入的残差指出了哪里有错。经典做法是定义一个损失，再对 MPI 做梯度下降，往往需要成百上千步。DeepView 用 learned gradient descent（LGD）：每一步仍然计算梯度所需的原料，但由 CNN 决定怎样更新，因此 3 步就够。它推导出，无论用什么损失，关于 MPI 的梯度都只依赖四样东西：输入图像的 PSV、当前渲染图的 PSV、每层的累积 over（该层身后所有层合成的颜色），以及净透射率（该层身前所有层的 Π(1−α)）。净透射率就是可见性信号：某个位置在某视角的透射率接近 0，说明它被前景挡住了，网络据此学会在这个视角忽略它。DeepView 在 Spaces 上的消融（512×300、20 个平面的缩小设置）数据如下：迭代 1、2、3、4 次时 SSIM 依次为 0.8968、0.9417、0.9445、0.9461；完全不提供梯度分量时降到 0.9075；改喂真正的 L2 梯度时只有 0.9389，不如直接喂原始分量（0.9446）。与锚点的联系：Quark 的 5 次 Update & Fuse 直接继承自 DeepView 的 LGD。每一次都把当前 LDM 双线性 splat 到各输入视角并做 over 合成，得到渲染图 Ĩ；Update Block 再从 Ĩ、输入特征和射线编码中提取“渲染与观测不符”的残差线索，按当前深度反投影回层空间。消融中把 Ĩ 置零，PSNR 从 30.41 降到 29.71；而去掉前两次迭代只损失约 0.08 dB，速度却快了 17%，说明在多尺度结构下迭代次数仍有压缩空间。Ha et al. 则完全不迭代：几何来自外部立体深度与 TSDF 融合，网络只做一次前向融合。"
+    },
+    {
+     "name_zh": "从平面到可变形层：MSI、layered mesh、MLI 与 LDM 的深度参数化",
+     "explain_zh": "直觉：大多数像素在大多数层里都是透明的；如果把层“弯”到物体表面上，用很少的层就能达到同样的深度精度。这方面有三种做法。第一种是 Immersive Light Field Video：先求稠密的多球壳 MSI，再离线把大量球壳层压成少量 RGBA+depth 层（layered mesh），方便视频编码。第二种是 SIMPLI：在网络内部完成平面到层的转换，以 L 个锚点沿 P=40 个平面的方向做注意力池化，把平面分成 L 组；再沿平面方向用自注意力预测每个平面的逐像素不透明度，在每组相邻平面内 over 合成出该层的深度，最终只剩 4 或 8 层。第三种是 Quark：直接预测 LDM，并规定共 L 层中的第 ℓ 层只能在自己的视差带内移动。锚点取 δ=(ℓ−0.5)/L，深度为 d_ℓ = 1 / [(δ + (0.5/L)·tanh(V·W_d))·(1/z_near − 1/z_far) + 1/z_far]，其中 V 是该层该像素的特征，W_d 是线性投影。原文把近、远平面记为 η 和 f，这里的 f 指远平面，不是焦距。数值例子：取 z_near=1 m、z_far=100 m、L=6，最近一层（ℓ=6）的视差带为 [0.835, 1.0] m⁻¹，对应深度 1.0–1.2 m；最远一层（ℓ=1）的视差带为 [0.01, 0.175] m⁻¹，对应深度 5.7–100 m。tanh 保证层不会越出各自的视差带，也避免多层挤到同一深度。Layer collapse 用残差 MLP 合并相邻两层：直通支路取两层的均值，残差支路取两层的拼接，层数由 24 减到 12 再减到 6。代价是近/远平面要按 SfM 点逐场景设定；如果设错，落在 [z_near, z_far] 之外的表面只能被挤到最近或最远的层上，视差出错，锚点深读认为这种情况下方法会直接失效。"
+    },
+    {
+     "name_zh": "低分辨率几何、全分辨率像素：post-activation 上采样",
+     "explain_zh": "直觉：几何量（深度、alpha、混合权重）在空间上大多是平滑的，只在遮挡边界处突变；纹理则需要全分辨率。所以可以在低分辨率上求几何，再用原图着色。MatryODShka 在 640×320 上推理 32 层的 alpha 与混合权重，用 GPU 联合双边上采样对齐到 4K×2K 的原图，MSI 推理 30 Hz。Quark 在 288×512 上求出 6 层 LDM，先把未激活的 depth、density、blend logits 双线性上采样 3.75 倍，再施加 sigmoid、tanh、softmax。这种“先插值后激活”的做法借鉴自 ReLU Fields。举个例子：两个相邻低分辨率像素（上采样后相距约 3.75 个输出像素）的 density logit 分别为 −6 和 +6。如果先激活再插值，就是在 0.0025 与 0.9975 之间线性插值，α 落在 0.1–0.9 之间的过渡区约占这段距离的 80%（约 3 个输出像素），形成一条半透明的软边；如果先插值 logit 再过 sigmoid，只有 logit 落在 ±2.2 之间的约 37%（约 1.4 个输出像素）处于 0.1–0.9，边界明显更锐利。这种做法的代价在 Quark 的表 1 里一目了然：1024×768 与 2048×1536 的运行时间几乎相同（32.2 ms 对 33.0 ms），但 Shiny 上的 LPIPS 从 0.108 升到了 0.174。这说明 2K 输出中的高频细节来自输入像素，几何分辨率并没有提高。"
+    },
+    {
+     "name_zh": "跨视角聚合：从 PSV 拼接、max-pool 到 One-to-many attention",
+     "explain_zh": "直觉：网络需要比较同一个 3D 位置在各输入视角中的样子（各视角一致，就可能是表面），并且结果最好不随输入视角的数量和顺序而变。Stereo Magnification 只处理两张图，直接在通道维上拼接 PSV；LLFF 拼接 5 个 PSV，输入视角的数量和顺序都被固定死了；DeepView 对每个视角用共享的 CNN，再跨视角做 max-pool，与顺序无关，但论文承认其实现仍只能针对固定的输入数训练。Quark 用 One-to-many attention：以层空间特征 V 作为唯一的 query，对 M 个视角反投影得到的 Δ 做 cross-attention。因为 query 只有一个，可以把 W^K 折叠进 W^Q、把 W^V 折叠进 W^O，完全省掉对 M 个 Δ 的 K/V 投影。在 h=4 头时，输入数从 4 增加到 64，标准注意力的开销涨 13.0 倍，这种写法只涨 1.9 倍。消融中去掉 cross-attention（keys 置零，退化为取均值），PSNR 从 30.41 降到 29.73。与锚点的联系：Ha et al. 的 4 层 U-Net 按通道拼接 K 个视角的 RGB（3K）、splat 深度（K）、累积 alpha（K）、4 组相机特征（4K），再加 1 张 TSDF 深度，共 9K+1 个通道。它与 LLFF 一样依赖视角顺序，K 也是固定的。改用 Quark 式的注意力是一个明显的改进方向（见 anchor_compare 的互补性分析）。"
+    },
+    {
+     "name_zh": "对齐到谁：参考视角 MPI、多 MPI 融合与目标视角 LDM",
+     "explain_zh": "直觉：分层表示总要对齐到某个相机的视锥。对齐到参考视角时（Stereo Magnification、DeepView），推理一次就能渲染多个新视角，但新视角离参考视角越远，层状结构越明显。LLFF 为每个输入视角各建一个 MPI，渲染时取最近 5 个 MPI（不规则采样时）或最近 4 个 MPI（规则网格时，双线性插值）的渲染结果，用距离权重乘以累积 alpha 来融合；某个 MPI 看不到的区域累积 alpha 很小，会自动让位给其他 MPI。Quark 则把层对齐到目标视角，每个目标视角重建一次。这样几何与混合权重可以专门为这个视角“过拟合”，从而近似复现反射和折射，也不再有离参考视角太远的问题；代价是双目头显要推理两次，观看者越多，计算量线性增长。与锚点的联系：Ha et al. 走的是 LLFF 的路子，只是把“每个输入视角一个 MPI”换成了“每个输入视角一层像素高斯”。K 个视角各自前向 splat 到目标相机，得到 𝓘_k 和 α_k，再按 I_FG = Σ_k 𝓘_k α_k w_k / Σ_k α_k w_k 融合。这与 LLFF 的式 (8) 形式完全一致，区别只是 w_k 由网络逐像素预测。Ha 的消融中换成按相机距离加权（Buehler / LLFF 式的手工权重）后，PSNR 从 31.17 降到 26.08，STED 从 68.76 升到 235.3。"
+    }
+   ],
+   "equations": [
+    {
+     "tex": "C_{\\ell}(\\mathbf{x})=\\sum_{m=1}^{M}\\beta_{\\ell,m}(\\mathbf{x})\\,I_m\\big(\\pi_m(\\mathbf{X}_{\\ell}(\\mathbf{x}))\\big),\\quad \\sum_{m=1}^{M}\\beta_{\\ell,m}(\\mathbf{x})=1,\\qquad \\hat{I}(\\mathbf{x})=\\sum_{\\ell=1}^{L}C_{\\ell}(\\mathbf{x})\\,\\alpha_{\\ell}(\\mathbf{x})\\prod_{j=\\ell+1}^{L}\\big(1-\\alpha_{j}(\\mathbf{x})\\big)",
+     "explain_zh": "分层 IBR 的统一写法。x 是目标（或参考）视角的像素；ℓ=1…L 是层编号，1 最远，L 最近；X_ℓ(x) 是像素 x 的射线与第 ℓ 层的交点，在 MPI 中是固定深度平面上的点，在 Quark 的 LDM 中是该层逐像素深度 d_ℓ 对应的点；π_m 把 3D 点投影到第 m 个输入视角（共 M 个）；I_m(·) 是在投影位置双线性插值得到的输入颜色；β_{ℓ,m} 是混合权重，和为 1；C_ℓ 是第 ℓ 层的颜色；α_ℓ 是该层的不透明度（Quark 中为 density σ）。后一个式子是从后到前的 over 合成。几个特例：Stereo Magnification 中 M=2，两个“输入”分别是参考图 I_1 和预测的背景图 Î_b，它们都已在参考视角中，π_m 为恒等映射，β=(w_d, 1−w_d)；LLFF 中 M=5（每个体素对 5 个视角的 PSV 颜色加权）；Quark 中 M=8，β 由最后一个 One-to-many attention 产生，并且在上采样之后才做 softmax。例：某层某像素的 β=(0.7, 0.3)，两个视角取到的颜色为 (200,100,50) 和 (180,110,60)，则 C=(194,103,53)。若该层 α=0.8，它前面只有一层且 α=0.25，那么它对最终像素的贡献是 0.8×0.75=0.6 倍的 C。"
+    },
+    {
+     "tex": "\\mathcal{M}_{n+1}=\\mathcal{M}_{n}+N_{\\omega}^{(n)}\\big(\\nabla_{n,1},\\dots,\\nabla_{n,K},\\mathcal{M}_{n}\\big),\\quad \\nabla_{n,k}=\\mathcal{W}_{k}^{-1}\\big([\\,I_{k}^{\\uparrow},\\ \\tilde{I}_{k}^{\\uparrow},\\ A_{k},\\ T_{k}\\,]\\big),\\qquad \\frac{\\partial\\mathcal{O}}{\\partial c_{d}}=\\prod_{i=d+1}^{D}(1-\\alpha_{i})",
+     "explain_zh": "DeepView 的 learned gradient descent（记号略作简化）。M_n 是第 n 次迭代的 MPI（D 个 RGBA 平面）；N_ω^{(n)} 是第 n 步的更新 CNN，每一步的权重不同，输出对 MPI 的增量；K 是输入视角数；W_k 把 MPI 各平面 warp 到第 k 个输入视角，W_k^{-1} 是反向 warp，回到 MPI 的平面扫描坐标；I_k^↑ 是把输入图沿深度方向复制成的 3D 张量，所以 W_k^{-1}(I_k^↑) 就是熟悉的 PSV；Ĩ_k 是当前 MPI 渲染到视角 k 的图像；A_k 是累积 over，即第 d 层身后所有层合成出的颜色；T_k 是净透射率；方括号表示按通道拼接。最后一个式子是 over 算子 O 对第 d 层颜色的导数。注意 DeepView 用的是预乘 alpha 的颜色（c_d 已经乘过 α_d，O=Σ_d c_d Π_{i>d}(1−α_i)），所以导数里没有 α_d，恰好等于该层前方所有层透射率的乘积，这正是 T_k 的来源。例：3 层从远到近 α=(1, 0.5, 0.8)，第 2 层的净透射率为 1−0.8=0.2，即第 2 层的（预乘）颜色改变 Δc 时，该视角的渲染只改变 0.2·Δc。网络看到这个 0.2，就知道这个视角对第 2 层的约束很弱，应更多依靠其他视角。DeepView 共迭代 3 次；初始化步等价于从全透明 MPI 出发的一次更新，只输入 PSV。"
+    },
+    {
+     "tex": "C_{t}=\\frac{\\sum_{k}w_{t,k}\\,\\alpha_{t,k}\\,C_{t,k}}{\\sum_{k}w_{t,k}\\,\\alpha_{t,k}},\\qquad w_{t,k}\\propto\\exp\\!\\big(-\\gamma\\,\\ell(\\mathbf{p}_t,\\mathbf{p}_k)\\big),\\qquad \\gamma=\\frac{f}{D\\,z_{\\min}}",
+     "explain_zh": "LLFF 的多 MPI 融合（论文式 (8)）。t 表示目标相机；k 遍历参与融合的近邻 MPI，不规则采样时取最近 5 个；C_{t,k} 和 α_{t,k} 是第 k 个 MPI 渲染到目标相机得到的颜色和累积 alpha；w_{t,k} 是随相机距离衰减的标量权重；ℓ(p_t, p_k) 是两个相机位置之间的 L2 距离；γ=f/(D·z_min) 把这个距离换算成以平面数为单位的像素视差，其中 f 是像素焦距，D 是平面数，z_min 是最近深度。乘以 α_{t,k} 的作用是：某个 MPI 在该像素处是空洞（α 小）时，自动把权重让给其他 MPI。例：两个 MPI 在同一像素分别给出红色 (255,0,0)、α=1，和蓝色 (0,0,255)、α=0.1（空洞），距离权重为 w=(0.3, 0.7)。按上式，分子为 (76.5, 0, 17.9)，分母为 0.37，结果约为 (207, 0, 48)，以可见的红色为主。如果不乘 α，直接按 w 平均，结果是 (76.5, 0, 178.5)，空洞里的错误颜色反而占了上风。Ha et al. 的 I_FG = Σ_k 𝓘_k α_k w_k / Σ_k α_k w_k 与此式形式相同，只是 w_k 由 U-Net 逐像素预测；它的 Distance-based Blending 消融相当于使用这种手工距离权重，PSNR 为 26.08，完整模型为 31.17。"
+    }
+   ],
+   "evolution": [
+    {
+     "year": 1998,
+     "milestone_zh": "Shade et al. 提出分层深度图像 LDI：每个像素沿视线存储多个（颜色，深度）样本，是所有分层表示的前身"
+    },
+    {
+     "year": 2016,
+     "milestone_zh": "DeepStereo（Flynn et al., CVPR 2016）首次用深度网络从 PSV 直接合成新视角：使用 96 个深度平面，选择塔输出沿深度的 softmax 概率，颜色塔输出每个平面的颜色；在多核工作站上渲染一张 512×512 的图约需 12 分钟"
+    },
+    {
+     "year": 2017,
+     "milestone_zh": "Soft3D（Penner & Zhang, SIGGRAPH Asia 2017）用软可见性体积做视图合成，后来成为 DeepView 的主要对比基线"
+    },
+    {
+     "year": 2018,
+     "milestone_zh": "Stereo Magnification 提出 MPI（32 层，1–100 m 内按视差等间隔分布），以及 RealEstate10K 的 YouTube 数据挖掘流程"
+    },
+    {
+     "year": 2019,
+     "milestone_zh": "LLFF（局部 MPI、采样界、按累积 alpha 融合）、DeepView（learned gradient descent 与 Spaces 数据集）和 Pushing the Boundaries（视差采样频率与可外推范围的关系）相继发表"
+    },
+    {
+     "year": 2020,
+     "milestone_zh": "MatryODShka（32 层 MSI，推理 30 Hz）、Immersive Light Field Video（46 台相机，MSI 转为 layered mesh 后以视频流播放）和 Single-view MPI 发表"
+    },
+    {
+     "year": 2021,
+     "milestone_zh": "NeX 用神经基函数为 MPI 加入视角相关外观，并发布 Shiny 数据集，该数据集后来被 Quark 用于训练与评测"
+    },
+    {
+     "year": 2022,
+     "milestone_zh": "StereoLayers（CVPR 2022）用少量随场景自适应的非平面层代替等间隔平面，并发布 SWORD 数据集；SIMPLI（arXiv 2022-10，WACV 2023）通过 planes-to-layers 转换和前馈误差校正得到 4 或 8 层的多层图像"
+    },
+    {
+     "year": 2024,
+     "milestone_zh": "Quark 结合目标视角 LDM、多尺度 render-and-refine 和 One-to-many attention，在 A100 上实现 1080p/30 fps"
+    },
+    {
+     "year": 2025,
+     "milestone_zh": "Quark 团队转向持久的 3DGS 表示：LVT（SIGGRAPH Asia 2025）和 Fuse-and-Refine（NeurIPS 2025，原名 SplatVoxel）"
+    },
+    {
+     "year": 2026,
+     "milestone_zh": "Online Neural Space Time Memory 用 TTT 记忆做在线动态 NVS；MPI 在移动端轻量 NVS 方向仍有新工作（可微 MPI，arXiv 2606.02068，属于逐场景优化而非前馈）"
+    }
+   ],
+   "papers": [
+    {
+     "title": "Stereo Magnification: Learning View Synthesis using Multiplane Images",
+     "authors": "Tinghui Zhou, Richard Tucker, John Flynn, Graham Fyffe, Noah Snavely",
+     "year": 2018,
+     "venue": "ACM TOG 37(4) / SIGGRAPH 2018",
+     "url": "https://arxiv.org/abs/1805.09817",
+     "citations": 436,
+     "role_zh": "提出 MPI（32 个在视差上等间隔的 RGBA 平面），以“参考图 + 预测背景图 + 每层混合权重”的方式参数化颜色；用 ORB-SLAM2 从 YouTube 视频挖出训练数据，即后来的 RealEstate10K",
+     "priority": "must"
+    },
+    {
+     "title": "DeepView: View Synthesis with Learned Gradient Descent",
+     "authors": "John Flynn, Michael Broxton, Paul Debevec, Matthew DuVall, Graham Fyffe, Ryan Overbeck, Noah Snavely, Richard Tucker",
+     "year": 2019,
+     "venue": "CVPR 2019",
+     "url": "https://arxiv.org/abs/1906.07316",
+     "citations": 493,
+     "role_zh": "用 learned gradient descent 求解 MPI，推导出以净透射率和累积 over 为核心的梯度分量，跨视角用 max-pool 聚合；发布 Spaces 数据集。它是 Quark 中 render-and-refine 的直接来源",
+     "priority": "must"
+    },
+    {
+     "title": "Local Light Field Fusion: Practical View Synthesis with Prescriptive Sampling Guidelines",
+     "authors": "Ben Mildenhall et al.",
+     "year": 2019,
+     "venue": "ACM TOG 38(4) / SIGGRAPH 2019",
+     "url": "https://arxiv.org/abs/1905.00889",
+     "citations": 1331,
+     "role_zh": "把每个输入视角扩展成局部 MPI，用 5 路颜色选择权重着色；推出相邻视角视差不超过 min(D, W/2) 的采样界；提出按累积 alpha 调制权重来融合多个 MPI（式 (8)，形式与 Ha 的 I_FG 相同）；其前向场景数据即 RFF",
+     "priority": "must"
+    },
+    {
+     "title": "Quark: Real-time, High-resolution, and General Neural View Synthesis",
+     "authors": "John Flynn, Michael Broxton, Lukas Murmann et al.",
+     "year": 2024,
+     "venue": "ACM TOG 43(6) / SIGGRAPH Asia 2024",
+     "url": "https://arxiv.org/abs/2411.16680",
+     "citations": 21,
+     "role_zh": "锚点论文 A。结合目标视角 LDM、UNet 式多尺度 render-and-refine、layer collapse、One-to-many attention 和 IBR 着色，在单张 A100 上以 8 路输入达到 1080p/30 fps",
+     "priority": "must"
+    },
+    {
+     "title": "Immersive Light Field Video with a Layered Mesh Representation",
+     "authors": "Michael Broxton et al.",
+     "year": 2020,
+     "venue": "ACM TOG 39(4) / SIGGRAPH 2020",
+     "url": "https://augmentedperception.github.io/deepviewvideo/",
+     "citations": 336,
+     "role_zh": "用 46 台同步相机、以 DeepView 式方法求解多球壳 MSI，再压缩为少量 RGBA+depth 层（layered mesh），经纹理图集和视频编码实现可在浏览器和移动 VR/AR 上播放的 6DoF 光场视频；是 LDM 的直接前身",
+     "priority": "should"
+    },
+    {
+     "title": "Self-improving Multiplane-to-layer Images for Novel View Synthesis",
+     "authors": "Pavel Solovev, Taras Khakhulin, Denis Korzhenkov et al.",
+     "year": 2023,
+     "venue": "WACV 2023",
+     "url": "https://arxiv.org/abs/2210.01602",
+     "citations": 12,
+     "role_zh": "SIMPLI：在网络内部用注意力池化把 40 个平面合并为 4 或 8 个层，并反复投影回源视角做前馈误差校正；是 Quark 最接近的基线（Quark 在同一 A100 上测得每帧 4.4 s）",
+     "priority": "should"
+    },
+    {
+     "title": "MatryODShka: Real-time 6DoF Video View Synthesis using Multi-Sphere Images",
+     "authors": "Benjamin Attal, Selena Ling, Aaron Gokaslan, Christian Richardt, James Tompkin",
+     "year": 2020,
+     "venue": "ECCV 2020",
+     "url": "https://arxiv.org/abs/2008.06534",
+     "citations": 116,
+     "role_zh": "把 ODS 立体全景转成 32 层 MSI，在 640×320 下推理、用 4K×2K 原图着色并联合双边上采样 alpha，MSI 推理 30 Hz、VR 中实时渲染；是“低分辨率几何 + 全分辨率像素”思路的早期实时实现",
+     "priority": "should"
+    },
+    {
+     "title": "Pushing the Boundaries of View Extrapolation with Multiplane Images",
+     "authors": "Pratul P. Srinivasan, Richard Tucker, Jonathan T. Barron, Ravi Ramamoorthi, Ren Ng, Noah Snavely",
+     "year": 2019,
+     "venue": "CVPR 2019 (Oral)",
+     "url": "https://arxiv.org/abs/1905.00413",
+     "citations": 356,
+     "role_zh": "证明 MPI 可渲染的视角范围随视差采样频率线性增长；借助 3D CNN 和随机分辨率训练，理论上把可外推的横向视点移动提高到先前工作的 4 倍，并约束被遮挡内容只能取自同一深度或更深处的可见内容",
+     "priority": "should"
+    },
+    {
+     "title": "Stereo Magnification with Multi-Layer Images",
+     "authors": "Taras Khakhulin, Denis Korzhenkov, Pavel Solovev et al.",
+     "year": 2022,
+     "venue": "CVPR 2022",
+     "url": "https://arxiv.org/abs/2201.05023",
+     "citations": 19,
+     "role_zh": "StereoLayers：从立体图对分两阶段先推断少量随场景自适应的非平面层的几何，再推断颜色和透明度；发布 SWORD 数据集，该数据集被 SIMPLI 和 Quark 用于训练",
+     "priority": "optional"
+    },
+    {
+     "title": "Single-View View Synthesis with Multiplane Images",
+     "authors": "Richard Tucker, Noah Snavely",
+     "year": 2020,
+     "venue": "CVPR 2020",
+     "url": "https://arxiv.org/abs/2004.11364",
+     "citations": 413,
+     "role_zh": "从单张图预测 MPI，提出尺度不变的视图合成监督，使模型可以在尺度未知的在线视频上训练；并展示了背景层怎样学会补全前景边缘后面的内容",
+     "priority": "optional"
+    },
+    {
+     "title": "NeX: Real-time View Synthesis with Neural Basis Expansion",
+     "authors": "Suttisak Wizadwongsa et al.",
+     "year": 2021,
+     "venue": "CVPR 2021 (Oral)",
+     "url": "https://arxiv.org/abs/2103.05606",
+     "citations": 359,
+     "role_zh": "把 MPI 每个像素的颜色表示为神经基函数的线性组合，以建模视角相关效果（需逐场景优化）；发布 Shiny 数据集。Quark 把显式视角相关建模列为未来工作",
+     "priority": "optional"
+    }
+   ],
+   "prereqs": [
+    "i-layered",
+    "l-iterative",
+    "i-psv",
+    "r-alpha",
+    "g-depth",
+    "i-blending",
+    "l-attention"
+   ],
+   "relation_to_anchors_zh": "Quark 是本专题的终点，它的几乎每个部件都能在前作中找到出处（Sec. 3 及附录表 8/9）。(1) 表示：从 Stereo Magnification 的 MPI，经 Immersive LF Video 的 layered mesh 和 SIMPLI 的多层图像，演变为 Quark 的目标视角 LDM。Quark 的初始 LDM 为 24 层×36×64，输出为 6 层×288×512；Quark+ 从 32 层减到 8 层，输出 432×768。每层深度都被限制在自己的等视差带内。(2) 颜色：LLFF 的 5 路颜色选择权重发展为 Quark 每层每像素 M=8 维的 blend weights，颜色从全分辨率输入图重投影取得；改成直接输出 RGB 时 PSNR 下降 1.23 dB。(3) 求解：DeepView 的 learned gradient descent（3 次迭代，约 50 s）发展为 Quark 嵌入 UNet 式多尺度结构的 5 次 Update & Fuse；去掉 render-and-refine 时 PSNR 下降 0.70 dB。(4) 聚合：DeepView 的 max-pool 换成了 One-to-many attention，去掉后 PSNR 下降 0.68 dB。(5) 分辨率：MatryODShka 的“低分辨率 alpha + 高分辨率 RGB”对应 Quark 的 3.75× post-activation 上采样，1080p 的 IBR 渲染约 1.3 ms。(6) 数据：Quark 的训练集 Spaces（DeepView 发布）、RFF（LLFF 发布）、Shiny（NeX 发布）、SWORD（StereoLayers 发布）全部来自本专题的论文，主要基线 SIMPLI 也属于本专题。Quark 的局限同样继承自这条线：层表示对齐到单一视角，所以每个目标视角（包括左右眼）都要重新跑一遍网络；近/远平面需要由 SfM 点给定；没有任何时间机制。Ha et al. 与本专题形式相近，取舍却相反。它不用分层表示，每个输入视角只贡献一层完全不透明的像素高斯；几何来自外部 RAFT-Stereo 深度和目标视角的 image-based TSDF，而不是由网络迭代求出。但它的融合公式 I_FG = Σ_k 𝓘_k α_k w_k / Σ_k α_k w_k 与 LLFF 的多 MPI 融合式 (8) 同构；背景图 I_BG 与 Stereo Magnification 的背景图 Î_b 一样，都是为去遮挡区域准备的。它的距离加权消融（26.08 dB）使用的正是 LLFF 式的手工权重，被学习到的权重（31.17 dB）大幅超过。",
+   "debates_zh": [
+    "目标视角对齐还是持久表示：Quark 为每个目标视角重建 LDM，可以针对该视角“过拟合”几何来近似反射，但双目和多观看者的成本随视点数线性增长。Quark 团队后续的 LVT、Fuse-and-Refine 改用一次重建、多次渲染的 3DGS，说明团队自己也认为在视频与临场场景下后者更划算。",
+    "平面还是可变形层：MPI 对细结构、半透明和反射更宽容（反射可以放在“虚平面”上），也更容易训练；可变形层（MLI、LDM）更省层数，但依赖深度范围的设定。Quark 去掉 layer collapse 后 PSNR 反而高 0.16 dB，说明减层本质上是用少量质量换速度。",
+    "IBR 混合还是直接回归颜色：本专题的工作普遍选择混合真实像素（Stereo Magnification 的“背景图 + 混合权重”、LLFF 的颜色选择权重）；IBRNet 报告直接回归颜色在 RFF 上略差（24.73 对 25.13 dB），Quark 消融中差 1.23 dB。但 LVSM 等无几何模型在 256–512 分辨率上直接回归 RGB 取得了更高的 PSNR。在 1080p 以上、需要真实纹理的场景中哪种更好，目前没有定论。",
+    "learned gradient descent 究竟是“优化”还是更深的网络：DeepView 发现喂原始梯度分量（SSIM 0.9446）比喂真正的 L2 梯度（0.9389）更好，而且每一步的更新网络权重都不同；Quark 进一步把迭代嵌入 UNet，去掉两次迭代几乎不掉点。迭代结构贡献的是可解释的优化过程，还是只相当于加深了网络，仍有争议。",
+    "评测可比性：本专题论文多用 SSIM/LPIPS 和自建数据集（Spaces、SWORD），分辨率与预处理各不相同。Quark 与 SIMPLI、ENeRF 的比较用的是重训后的基线；Quark 附录也承认，DeepView 在 Spaces 上的数值因预处理不同而无法直接对比。"
+   ],
+   "open_questions_zh": [
+    "时间一致的分层表示：Quark 每帧都从常数特征重新初始化 LDM，输入相机集合切换时画面还会跳变。能否把上一帧的 LDM 按新视点重投影后作为初始化（替代学习式初始化），并借此减少迭代次数？",
+    "一次推理同时服务双眼：左右眼的视锥高度重叠，能否共享粗尺度的层与注意力计算，只在最后的高分辨率阶段分开，避免双目成本翻倍？",
+    "视角外推与去遮挡：分层表示只能在输入覆盖的范围内工作，Quark 在 Deep Blending 上远低于 3DGS（23.61 对 30.04）。能否在层内容中引入生成式先验，同时保留 IBR 的真实纹理？",
+    "视角相关外观：blend weights 是输入颜色的凸组合，无法产生比任何输入都更亮的高光。NeX 式的基函数能否由前馈网络预测，并且实时运行？",
+    "对标定误差与曝光差异的鲁棒性：位姿有误差时，层几何与混合权重产生的是硬边，而不是模糊。怎样把在线标定监控和可微的位姿修正嵌入迭代求解？",
+    "与 3DGS 互相转换：LDM 的层能否直接转成有向的高斯面元，得到一种既能迭代求解、又能持久渲染的混合表示？"
+   ],
+   "resources": [
+    {
+     "title": "Computer Vision: Algorithms and Applications, 2nd ed. (Szeliski)",
+     "url": "https://szeliski.org/Book/",
+     "type": "book",
+     "note_zh": "第 14 章 Image-based rendering 是 IBR 的教科书式综述，14.1 讲视图插值，14.2 讲 Layered depth images，14.3 讲光场与 Lumigraph。先读这三节再读 MPI 系列论文会轻松很多。官网登记后可免费下载 PDF，限个人使用。"
+    },
+    {
+     "title": "DeepView project page",
+     "url": "https://augmentedperception.github.io/deepview/",
+     "type": "paper",
+     "note_zh": "DeepView 的项目主页，提供结果对比、消融与迭代过程的可视化，以及交互式 MPI 查看器，可以直观看到各深度平面上的 RGBA 内容，有助于理解 learned gradient descent 输出的是什么。"
+    },
+    {
+     "title": "augmentedperception/spaces_dataset (data)",
+     "url": "https://github.com/augmentedperception/spaces_dataset",
+     "type": "code",
+     "note_zh": "DeepView 发布的 Spaces 多视角数据集（16 相机、100 个场景）及读取代码。它是 Quark 的训练数据之一，也是 Ha et al. 训练用的小基线数据，适合用来复现分层视图合成的训练与评测。"
+    },
+    {
+     "title": "google/stereo-magnification (code)",
+     "url": "https://github.com/google/stereo-magnification",
+     "type": "code",
+     "note_zh": "Stereo Magnification 的官方 TensorFlow 实现，包含 PSV 构造、MPI 的单应 warp 和 over 合成，适合动手复现分层渲染的基本流程。"
+    },
+    {
+     "title": "Fyusion/LLFF (code)",
+     "url": "https://github.com/Fyusion/LLFF",
+     "type": "code",
+     "note_zh": "LLFF 的官方代码，包含 COLMAP 位姿处理、局部 MPI 预测和多 MPI 融合渲染。其前向场景数据（RFF）及位姿格式（poses_bounds）后来被 NeRF 和 Quark 等大量工作沿用。"
+    }
+   ]
+  },
+  {
+   "id": "a-generalizable-ibr",
+   "title_zh": "可泛化 NeRF 与学习式 IBR",
+   "title_en": "Generalizable NeRF & learned IBR",
+   "overview_zh": "逐场景的 NeRF 需要几十上百张图和数小时的优化；传统 IBR（如 ULR，见 i-blending）速度快，但依赖稠密的视角或准确的代理几何。可泛化新视角合成想同时拿到两者的好处：先在大量场景上训练一个网络，测试时遇到新场景不再做任何优化，直接从少量近邻源视角中查取像素或特征，合成目标视角。本专题覆盖 2016–2022 年的两个分支。第一个是学习式 IBR：先用某种几何代理（平面扫描体、MVS 网格、深度点云）把源图重投影到目标视角，再用 CNN 或 Transformer 融合，代表作有 DeepStereo、Deep Blending、FVS/SVS、FWD。第二个是可泛化 NeRF：沿目标射线采样 3D 点，把每个点投影到各源视角取特征，跨视角聚合后预测 density 与颜色，最后做体渲染，代表作有 pixelNeRF、MVSNeRF、IBRNet、NeuRay、ENeRF。GPNR 则用沿极线采集的图像 patch 和 Transformer 直接预测射线颜色，是连接本专题与无几何 Transformer（a-geometry-free）的桥梁。\n\n学习式 IBR 分支的演进主线是代理几何越来越好，融合网络越来越强。DeepStereo（CVPR 2016）用 96 个深度平面构成 PSV：选择塔输出沿深度的 softmax 概率，颜色塔输出每个平面的颜色，两者相乘再求和得到像素；在多核工作站上渲染一张 512×512 的图约需 12 分钟。Deep Blending（SIGGRAPH Asia 2018）用 CNN 学习多张重投影源图（mosaic）的逐像素混合权重，专门消除传统 IBR 的接缝与重影。FVS（ECCV 2020）先用 COLMAP 做 SfM 与 MVS 得到粗网格，由此渲染出目标视角的代理深度，再把近邻源视角的编码特征按代理深度重投影过来，用一个可处理可变数量输入的循环编码解码网络融合；论文称它首次在 Tanks and Temples 上成功做出自由视点合成。SVS（CVPR 2021）把融合移到代理表面的每个 3D 点上，对该点在各源视角中的方向特征做视角相关的聚合；由于聚合结果随目标视角平滑变化，论文强调其结果在空间和时间上都更稳定。FWD（CVPR 2022）把每个输入视角变成一个带特征的点云（深度来自 MVS 或深度传感器），各自渲染到目标视角后，再用 Transformer 融合并细化，达到实时。\n\n可泛化 NeRF 分支在 2020–2022 年集中出现。pixelNeRF（CVPR 2021）以 ResNet34 特征金字塔为条件：对 3D 点 x 取它投影位置处的特征 W(π(x))，与位置编码和视角方向一起送入 MLP，只有一张输入图时也能工作；多视角时先在各视角的坐标系中分别处理，再做平均池化。MVSNeRF（ICCV 2021）只用 3 个近邻视角，先建立平面扫描代价体，经 3D CNN 得到神经编码体，再解码出辐射场。IBRNet（CVPR 2021）训练时先取 n·N 个近邻（n∈[1,3]），再从中随机选 N∈[8,12] 个源视角；对每个采样点，用类 PointNet 的 MLP 做跨视角的均值/方差聚合和可见性加权，再用 ray transformer 让同一射线上的样本相互注意，从而预测 density。它的颜色不是回归出来的，而是对源像素颜色做 softmax 混合，权重由特征和相对视角方向 Δd 决定。NeuRay（CVPR 2022）用累积分布函数（logistic 混合）参数化每个源视角对 3D 点的可见性，把被遮挡视角的特征排除在外。GPNR（ECCV 2022）沿极线从每个参考视角截取 patch，经过三个 Transformer（视觉特征、极线聚合、参考视角聚合）直接输出射线颜色；它的位置编码以目标射线为基准做规范化，在某些设定下只用 IBRNet 训练集的约 11%（37 个 LLFF 场景加 131 个 IBRNet 自采场景）就超过了前作。ENeRF（SIGGRAPH Asia 2022）则主攻速度：用级联代价体（64 与 8 个深度平面）预测深度概率，只在“均值 ± 1 倍标准差”的区间内对每条射线采 2 个点。它在 512×512 下于 RTX 3090 上达到 25.21 FPS（静态场景用 3 个、动态场景用 2 个源视角），论文称比此前的可泛化辐射场方法快至少 60 倍。\n\n这一代方法的共同瓶颈是速度和分辨率。体渲染式的方法对每条射线要做数十到上百次跨视角特征查询（IBRNet 为 64+64 个样本）：在 Quark 的测试中，GPNR 渲染一帧需要 25 s；在 GPS-Gaussian 的测试中，IBRNet 只有约 0.25 FPS。ENeRF 把采样数压到每条射线 2 个点才达到交互速率，但在 1024×768 下仍需 205 ms（Quark 表 1，A100），而且单层带厚度的深度在深度复杂的场景中会失败。另一个共同问题是时间一致性：视频被逐帧当作独立场景处理，源视角集合又随目标视角切换，输出因此闪烁和跳变。\n\n截至 2026-09，本专题的方法大多已经从前沿变成了基线。Quark 以 ENeRF、GPNR（以及分层方法 SIMPLI）为主要对手（Quark 比 ENeRF 快 6 倍以上，比 GPNR 快 700 倍以上）；Ha et al. 以 IBRNet、ENeRF、FWD 为基线，此外还有前馈 3DGS 方法 GPS-Gaussian，并在 ENeRF 团队发布的户外数据集 ENeRF-Outdoor 上做了测试。2023 年以后，前沿分成两条路：一条是输出显式高斯的前馈 3DGS（a-ff-3dgs），一条是几乎不带几何先验的大 Transformer（a-geometry-free）。本专题确立的内核却原样留在了两篇锚点论文的输出端：为目标射线从近邻源视角取真实像素，学习混合权重，并用可见性或代价体做引导。Quark 用 M=8 维 blend weights 做 IBR；Ha et al. 用 U-Net 预测的 K 个逐像素权重融合前向 splat 得到的真实像素。",
+   "key_ideas": [
+    {
+     "name_zh": "两种取像素的方式：射线采样与代理几何重投影",
+     "explain_zh": "直觉：要给目标像素找颜色，先得回答“这条射线打到了哪里”。可泛化 NeRF 不直接回答，而是沿射线采 N_s 个点，把每个点都投影到源视角取特征，交给网络判断，代价与采样数成正比。学习式 IBR 先用代理几何给出答案（每个像素一个或几个深度），再按这个深度去源视角取像素，代价小，但会受代理几何误差的影响。数值例子：1024×768 的目标图有 786,432 条射线。如果每条射线取 128 个样本（IBRNet 的粗 64 加细 64）、用 10 个源视角，就需要约 10 亿次特征查询与跨视角聚合。ENeRF 每条射线 2 个样本、3 个源视角，只需约 470 万次，因此快了两三个数量级（代价体本身另有开销）。Quark 的 LDM 介于两者之间：最终 6 层×288×512，每层对 8 个视角取样，约 700 万次查询；但每层深度由网络迭代求出，因此同时具备“采样”和“代理几何”的好处。Ha et al. 走的是纯代理几何路线：每个源像素按外部立体深度前向 splat 一次，再在目标视角做一次 TSDF 射线步进（6 ms）。"
+    },
+    {
+     "name_zh": "跨视角聚合：均值/方差为什么能找到表面",
+     "explain_zh": "直觉：如果 3D 点 x 真的落在表面上，而且在各源视角都可见，那么它在各视角取到的特征应该一致；如果 x 在空中，各视角看到的是不同的物体，特征就不一致。所以跨视角的方差是光度一致性信号，均值则是该点外观的估计。例：3 个源视角在 x 处取到的特征（简化为 1 维）为 0.80、0.82、0.79，方差约 0.00016，说明 x 很可能在表面上；如果是 0.8、0.2、0.5，方差为 0.06，x 多半在空中或被遮挡。麻烦在于遮挡：真实表面在某个视角被挡住时，这个视角贡献的是遮挡物的特征，方差被拉大。IBRNet 先用类 PointNet 的 MLP 算出均值、方差作为全局特征，再为每个视角输出一个池化权重，按权重重新计算加权均值与方差，相当于一种软可见性。NeuRay 更进一步，显式预测每个视角对该点的可见性；DeepView 和 Quark 则利用渲染回输入视角得到的透射率与残差来推理可见性。与锚点的联系：Quark 把均值/方差统计列为被拒绝的聚合方式，换成了 One-to-many attention（退化为均值时 PSNR 下降 0.68 dB）。Ha et al. 不做跨视角的特征聚合，可见性信息来自每个视角前向 splat 得到的累积 alpha α_k 和 splat 深度 𝒟_k，由 U-Net 自行判断。"
+    },
+    {
+     "name_zh": "混合权重而非回归颜色，以及相对视角方向",
+     "explain_zh": "直觉：网络直接输出 RGB 时往往偏糊，因为它得记住所有纹理。如果改为输出“取哪个源视角的真实像素”，高频纹理就能原样保留，网络只需学一个低频的权重场。IBRNet 对每个源视角 i，用小网络从特征 f'_i 和相对方向 Δd_i = d − d_i 算出权重 w_i，再做 softmax 混合；它的消融显示，在 RFF 上改为直接回归颜色后 PSNR 从 25.13 降到 24.73。相对方向是视角相关外观的关键线索：目标射线与源射线方向越接近，源像素越可能与目标颜色相同。这正是 ULR“角度偏差”准则的学习版（见 i-blending）。与锚点的联系：Quark 的射线方向编码 γ 取输入射线与目标 LDM 视锥近/远平面两个交点的差向量，经 tanh 后做 8 个 octave 的正弦编码；输入射线与目标射线重合时编码为 0。它本质上是投影空间里的 Δd，消融中的收益只有 0.09 dB。Ha et al. 给 U-Net 的 4 组相机特征（输入射线与 TSDF 法线的点积、输入射线与目标方向的点积、相机间距离、输入与目标视线方向的点积）是同一思想的手工版本。两篇锚点都延续了混合真实像素的选择：Quark 改为直接输出 RGB 时 PSNR 下降 1.23 dB。"
+    },
+    {
+     "name_zh": "几何引导采样：ENeRF 的深度区间与单层表示的上限",
+     "explain_zh": "直觉：沿射线的大部分样本都落在空气里，是浪费；如果先粗略估出表面深度，只在表面附近采样，就能大幅提速。ENeRF 先在目标视角建一个 64 平面的粗代价体，得到每个像素的深度概率分布，取其均值 L̂ 与标准差 Ŝ；再只在 [L̂−Ŝ, L̂+Ŝ] 内建一个 8 平面的细代价体；最后每条射线只采 2 个点做体渲染。512×512 一帧的各阶段耗时为：特征提取 4.3 ms，代价体 3D CNN 16.1 ms，辐射场与体渲染 19.2 ms（RTX 3090）。它隐含的假设是每个像素只有一个主要表面，即深度分布是单峰的。在前景边缘、细结构或半透明处，真实分布是双峰的，均值落在两个表面之间，±1σ 的区间可能两边都覆盖不到，于是出现拉丝或空洞。与锚点的联系：Quark 在相关工作中把 ENeRF 的“单层带厚度深度”列为被拒绝的表示，理由正是它在深度复杂的场景中会失败；Quark 的 LDM 保留了多层，每层都可以贴住一个表面。ENeRF 是两篇锚点共同的最强基线：N3DV 上 Quark 31.57 对 ENeRF 29.86；DyNeRF 上 Ha 31.17 对 ENeRF 29.51；但在 ENeRF-Outdoor 上 ENeRF 反超 Ha（25.79 对 24.01）。注意：N3DV 就是 DyNeRF 数据集（Neural 3D Video），但两篇论文的分辨率、测试视角和帧采样都不同，两组数字不能横向比较。"
+    },
+    {
+     "name_zh": "代理几何 + 逐视角渲染 + 学习融合：从 FVS、SVS、FWD 到 Ha et al.",
+     "explain_zh": "直觉：与其让网络在 3D 空间里推理，不如先按代理几何把每个源视角搬到目标视角，再在目标图像空间里用 2D 网络完成融合。FVS 用 MVS 网格渲染出目标视角的代理深度，按它把各源视角的编码特征 warp 过来，再用循环网络逐个吸收，因此可以处理任意数量的输入。SVS 把聚合放在代理表面的 3D 点上，并指出由于聚合结果随目标视角平滑变化，合成结果在空间和时间上更稳定。FWD 把每个源视角转成带特征的点云，先各自渲染到目标视角（而不是先合并所有点云再渲染），再用 Transformer 融合、用细化网络补洞；它还可以选择接入传感器深度，并达到实时。这条线的更早源头是 SynSin 的可微特征点云渲染器。与锚点的联系：Ha et al. 的第一阶段与 FWD 几乎同构。每个源视角的像素按立体深度变成像素级高斯，各自 splat 到目标相机，再由 U-Net 在几何引导下融合。作者明确拒绝把所有视角一次性渲染，理由是飞点与 Z-fighting（No Blending 消融：PSNR 24.64，STED 483.3）。Ha 的 TSDF 引导深度对应 FVS 的目标视角代理深度，区别在于它每帧在线地由 K 个视角的立体深度融合得到（6 ms），并回灌上一帧的深度以求时间稳定。FWD 在 Ha 的 DyNeRF 实验中重训后只有 16.97 dB，这说明“逐视角渲染再融合”的框架本身还不够，深度质量以及融合网络得到的几何引导才是关键。"
+    },
+    {
+     "name_zh": "输入视角的选择与训练采样",
+     "explain_zh": "直觉：可泛化方法只看目标附近的少数源视角。选哪几个、训练时怎样采样，直接决定了泛化能力和视角切换时的稳定性。IBRNet 训练时先取 n·N 个近邻（n∈[1,3]），再从中随机抽 N∈[8,12] 个，以模拟不同的视角密度。Quark 训练时从最近的 16 个视角中随机抽 8 个，推理时取最近的 8 个。Ha et al. 取最近的 K 个（DyNeRF 与 ENeRF-Outdoor 上 K=4，D3DMV 上 K=2），并报告 K≥4 时质量饱和，运行时间随 K 线性增长。问题在于，目标相机连续移动时，“最近的 K 个”是离散切换的。例：4 台相机排成一排，间距 10 cm，K=2。观看者从第 1 台走到第 3 台，经过第 2 台的位置时，最近的 2 台从 {1,2} 变成 {2,3}；此刻第 1 台与第 3 台到观看者的距离恰好相等。如果混合权重在这一刻没有连续过渡，画面就会突变。Quark 在局限中承认这种切换会引起闪烁；Ha et al. 也承认 K 集合变化时 TSDF 深度仍会有小幅变化。"
+    },
+    {
+     "name_zh": "泛化协议：训练数据、预训练权重与公平比较",
+     "explain_zh": "直觉：“可泛化”的含义取决于训练数据与测试数据差得有多远。pixelNeRF 在 ShapeNet 与 DTU 上训练和测试；MVSNeRF 与 ENeRF 在 DTU 上训练，再跨数据集测试；IBRNet 用多个数据集的混合训练；GPNR 声称在某些设定下只用 IBRNet 训练数据的约 11% 就能超过前作。两篇锚点论文在这方面都有值得注意的细节。Quark 的基线（ENeRF、GPNR、SIMPLI）是在 RFF+IBRNet 数据上重训的，而 Quark 自己用 Spaces+RFF+Shiny+SWORD 训练。Ha et al. 中的 IBRNet 与 ENeRF 用的是作者发布的预训练权重，只有 FWD 与 GPS-Gaussian 按本文数据重训；而本文的训练集还包含与测试场景同一厨房拍摄的 DyNeRF 场景。读这类比较表时要问三件事：训练数据是否相同，测试场景是否见过，分辨率与视角选择是否一致。在 DyNeRF 上，IBRNet（22.49 dB）与 ENeRF（29.51 dB）相差 7 dB，其中多少来自方法本身、多少来自训练数据的差异，论文没有给出答案。"
+    }
+   ],
+   "equations": [
+    {
+     "tex": "(\\sigma,\\mathbf{c})=f\\big(\\gamma(\\mathbf{x}),\\mathbf{d};\\,\\mathbf{W}(\\pi(\\mathbf{x}))\\big),\\qquad \\mathbf{V}=\\frac{1}{N}\\sum_{i=1}^{N}f_{1}\\big(\\gamma(\\mathbf{x}^{(i)}),\\mathbf{d}^{(i)};\\,\\mathbf{W}^{(i)}(\\pi_{i}(\\mathbf{x}))\\big),\\quad(\\sigma,\\mathbf{c})=f_{2}(\\mathbf{V})",
+     "explain_zh": "pixelNeRF 的条件辐射场。x 是沿目标射线采样的 3D 点，d 是观察方向；γ 是 NeRF 的位置编码；π(x) 把 x 投影到输入图像平面；W 是 CNN（ResNet34）的特征图，W(π(x)) 表示在投影位置双线性插值得到的特征向量；f 是 MLP，输出 density σ 与颜色 c。多视角时，x^{(i)} 和 d^{(i)} 是变换到第 i 个视角相机坐标系（view space）后的坐标与方向；f_1 逐视角提取中间特征，对 N 个视角取平均池化得到 V，再由 f_2 输出 (σ, c)，之后照常做体渲染。例：x 投影到第 1 张特征图的 (10.3, 20.7) 处，就取周围 4 个格点特征的双线性组合。这个式子体现了“可泛化”的本质：场景信息不再存放在 MLP 的权重里，而是推理时从特征图里查出来的。"
+    },
+    {
+     "tex": "\\mathbf{c}(\\mathbf{x},\\mathbf{d})=\\sum_{i=1}^{N}\\frac{\\exp(w_{i})}{\\sum_{j=1}^{N}\\exp(w_{j})}\\,\\mathbf{C}_{i},\\quad w_{i}=g\\big(\\mathbf{f}'_{i},\\,\\mathbf{d}-\\mathbf{d}_{i}\\big),\\qquad \\hat{\\mathbf{C}}(\\mathbf{r})=\\sum_{s=1}^{S}T_{s}\\big(1-e^{-\\sigma_{s}\\delta_{s}}\\big)\\mathbf{c}_{s},\\quad T_{s}=\\exp\\!\\Big(-\\sum_{s'<s}\\sigma_{s'}\\delta_{s'}\\Big)",
+     "explain_zh": "IBRNet 的颜色混合与体渲染。N 是源视角数；C_i 是 3D 点 x 投影到第 i 个源视角后取到的像素颜色；f'_i 是跨视角聚合后第 i 个视角的特征，已包含多视角信息；d 是目标射线方向，d_i 是从源相机中心指向 x 的方向，d − d_i 是两者的相对方向；g 是小 MLP，输出标量得分 w_i；softmax 把得分变成和为 1 的权重。第二个式子是离散体渲染：r 是目标射线，S 是样本数，σ_s、c_s 是第 s 个样本的 density 与颜色（density 由 ray transformer 预测），δ_s 是相邻样本的间距，T_s 是透射率。例：3 个源视角的得分为 w=(2.0, 1.0, 0.0)，softmax 后约为 (0.665, 0.245, 0.090)。若它们的颜色分别为 (200,50,50)、(190,60,50)、(100,100,100)，混合结果约为 (188.5, 57.0, 54.5)，主要取自方向与目标射线最接近的第 1 个视角。"
+    },
+    {
+     "tex": "\\hat{L}(u,v)=\\sum_{i=1}^{D}P_{i}(u,v)\\,L_{i},\\qquad \\hat{S}(u,v)=\\sqrt{\\sum_{i=1}^{D}P_{i}(u,v)\\big(L_{i}-\\hat{L}(u,v)\\big)^{2}},\\qquad \\hat{U}(u,v)=\\big[\\hat{L}-\\lambda\\hat{S},\\ \\hat{L}+\\lambda\\hat{S}\\big]",
+     "explain_zh": "ENeRF 由粗代价体得到深度区间。(u,v) 是目标视角的像素；D 是该级代价体的深度平面数（粗级 64，细级 8）；L_i 是第 i 个平面的深度；P_i(u,v) 是 3D CNN 处理代价体后沿深度维做 softmax 得到的概率；L̂ 是期望深度，Ŝ 是标准差，用作置信度；Û 是下一级只在其中均匀放置平面、采样的深度区间；λ 是超参数，论文取 1。例：某像素的概率集中在 2.0 m 附近，Ŝ=0.05 m，那么细级只在 [1.95, 2.05] m 内放 8 个平面，间距约 1.4 cm，最后每条射线在细区间内采 2 个点做体渲染。如果该像素正好在前景（1 m）与背景（3 m）的交界处，概率各占一半，则 L̂=2 m、Ŝ=1 m，区间 [1, 3] m 很宽，细级 8 个平面的间距约为 29 cm，2 个样本很难同时命中两个表面。这就是单层深度引导在深度复杂区域出错的原因。"
+    }
+   ],
+   "evolution": [
+    {
+     "year": 1996,
+     "milestone_zh": "Light Field Rendering 与 The Lumigraph 提出：视角采样足够稠密时，新视角合成只需在光场中插值射线"
+    },
+    {
+     "year": 2001,
+     "milestone_zh": "Unstructured Lumigraph Rendering 提出按角度偏差、分辨率、连续性等准则确定混合权重，是后来各种学习式混合权重的手工原型"
+    },
+    {
+     "year": 2016,
+     "milestone_zh": "DeepStereo 实现首个端到端学习的新视角合成（PSV 加选择塔与颜色塔）"
+    },
+    {
+     "year": 2018,
+     "milestone_zh": "Deep Blending 用 CNN 学习 IBR 的逐像素混合权重"
+    },
+    {
+     "year": 2020,
+     "milestone_zh": "SynSin（CVPR 2020）提出可微特征点云渲染；FVS（ECCV 2020）结合 MVS 代理深度与循环融合网络，首次在 Tanks and Temples 上成功做出自由视点合成；pixelNeRF 于 2020-12 发布在 arXiv"
+    },
+    {
+     "year": 2021,
+     "milestone_zh": "pixelNeRF、IBRNet、SVS（CVPR 2021）与 MVSNeRF（ICCV 2021）发表，分别代表可泛化辐射场和表面上的视角相关聚合"
+    },
+    {
+     "year": 2022,
+     "milestone_zh": "NeuRay、FWD（CVPR 2022）、GPNR（ECCV 2022）与 ENeRF（SIGGRAPH Asia 2022，512² 下 25 FPS）发表"
+    },
+    {
+     "year": 2023,
+     "milestone_zh": "前馈 3DGS 与大重建模型兴起（pixelSplat、GPS-Gaussian、LRM，见 a-ff-3dgs），本专题的方法逐渐变成基线；ENeRF 团队于 2023-01 发布 ENeRF-Outdoor 数据集"
+    },
+    {
+     "year": 2024,
+     "milestone_zh": "Quark 以 ENeRF、GPNR 为主要基线，在 RFF、Shiny、N3DV 上的质量与速度均超过它们"
+    },
+    {
+     "year": 2025,
+     "milestone_zh": "Ha et al.（CVPR 2025）以 IBRNet、ENeRF、FWD、GPS-Gaussian 为基线，并引入时间一致性与视角一致性指标"
+    }
+   ],
+   "papers": [
+    {
+     "title": "IBRNet: Learning Multi-View Image-Based Rendering",
+     "authors": "Qianqian Wang, Zhicheng Wang, Kyle Genova et al.",
+     "year": 2021,
+     "venue": "CVPR 2021",
+     "url": "https://arxiv.org/abs/2102.13090",
+     "citations": 1014,
+     "role_zh": "可泛化 IBR 的代表作：跨视角均值/方差聚合加可见性权重，ray transformer 预测 density，颜色由源像素做 softmax 混合得到；是 Ha 的基线，Quark 的基线也在它的数据上重训",
+     "priority": "must"
+    },
+    {
+     "title": "pixelNeRF: Neural Radiance Fields from One or Few Images",
+     "authors": "Alex Yu, Vickie Ye, Matthew Tancik, Angjoo Kanazawa",
+     "year": 2021,
+     "venue": "CVPR 2021",
+     "url": "https://arxiv.org/abs/2012.02190",
+     "citations": 2319,
+     "role_zh": "首次把 NeRF 条件化在图像特征上，在 view space 中工作，1 张或少量输入即可前馈合成新视角；确立了“查询特征而非存储场景”的可泛化范式",
+     "priority": "must"
+    },
+    {
+     "title": "Efficient Neural Radiance Fields for Interactive Free-viewpoint Video",
+     "authors": "Haotong Lin, Sida Peng, Zhen Xu et al.",
+     "year": 2022,
+     "venue": "SIGGRAPH Asia 2022",
+     "url": "https://arxiv.org/abs/2112.01517",
+     "citations": 196,
+     "role_zh": "ENeRF：由级联代价体得到深度区间，每条射线只采 2 个样本，在 512² 下达到 25 FPS；是两篇锚点共同的最强基线，其团队随代码发布的 ENeRF-Outdoor 是 Ha 的测试集之一",
+     "priority": "must"
+    },
+    {
+     "title": "Generalizable Patch-Based Neural Rendering",
+     "authors": "Mohammed Suhail, Carlos Esteves, Leonid Sigal, Ameesh Makadia",
+     "year": 2022,
+     "venue": "ECCV 2022",
+     "url": "https://arxiv.org/abs/2207.10662",
+     "citations": 151,
+     "role_zh": "GPNR：沿极线截取 patch，经三阶段 Transformer 直接预测射线颜色，使用以目标射线为基准的规范化位置编码；是 Quark 的基线（每帧 25 s）",
+     "priority": "must"
+    },
+    {
+     "title": "Free View Synthesis",
+     "authors": "Gernot Riegler, Vladlen Koltun",
+     "year": 2020,
+     "venue": "ECCV 2020",
+     "url": "https://arxiv.org/abs/2008.05511",
+     "citations": 389,
+     "role_zh": "用 MVS 代理几何渲染目标视角深度，再重投影近邻特征，由可处理可变数量输入的循环网络融合；是“目标视角代理深度引导融合”的原型，Ha 的 TSDF 引导与之对应",
+     "priority": "should"
+    },
+    {
+     "title": "Stable View Synthesis",
+     "authors": "Gernot Riegler, Vladlen Koltun",
+     "year": 2021,
+     "venue": "CVPR 2021",
+     "url": "https://arxiv.org/abs/2011.07233",
+     "citations": 235,
+     "role_zh": "在代理表面的 3D 点上做视角相关的特征聚合，因聚合结果随目标视角平滑变化，得到空间与时间上更稳定的自由视点合成",
+     "priority": "should"
+    },
+    {
+     "title": "FWD: Real-time Novel View Synthesis with Forward Warping and Depth",
+     "authors": "Ang Cao, Chris Rockwell, Justin Johnson",
+     "year": 2022,
+     "venue": "CVPR 2022",
+     "url": "https://arxiv.org/abs/2206.08355",
+     "citations": 60,
+     "role_zh": "把每个视角转成带特征的点云，分别前向渲染后再用 Transformer 融合，可接入传感器深度并实时运行；结构上是 Ha 的直接前身，也是 Ha 重训的基线",
+     "priority": "should"
+    },
+    {
+     "title": "MVSNeRF: Fast Generalizable Radiance Field Reconstruction from Multi-View Stereo",
+     "authors": "Anpei Chen, Zexiang Xu, Fuqiang Zhao et al.",
+     "year": 2021,
+     "venue": "ICCV 2021",
+     "url": "https://arxiv.org/abs/2103.15595",
+     "citations": 1103,
+     "role_zh": "把 MVS 的平面扫描代价体引入可泛化 NeRF，用 3 个视角经 3D CNN 得到神经编码体，可快速微调",
+     "priority": "should"
+    },
+    {
+     "title": "Neural Rays for Occlusion-aware Image-based Rendering",
+     "authors": "Yuan Liu, Sida Peng, Lingjie Liu et al.",
+     "year": 2022,
+     "venue": "CVPR 2022",
+     "url": "https://arxiv.org/abs/2107.13421",
+     "citations": 269,
+     "role_zh": "NeuRay：用累积分布函数（logistic 混合）参数化各源视角对 3D 点的可见性，把被遮挡视角的特征排除在外，是显式可见性推理的代表",
+     "priority": "should"
+    },
+    {
+     "title": "DeepStereo: Learning to Predict New Views from the World's Imagery",
+     "authors": "John Flynn, Ivan Neulander, James Philbin, Noah Snavely",
+     "year": 2016,
+     "venue": "CVPR 2016",
+     "url": "https://arxiv.org/abs/1506.06825",
+     "citations": 709,
+     "role_zh": "首个端到端学习的新视角合成：96 平面的 PSV 加选择塔与颜色塔，用 Street View 数据训练；Quark 第一作者这一系列工作的起点",
+     "priority": "should"
+    },
+    {
+     "title": "Deep Blending for Free-Viewpoint Image-Based Rendering",
+     "authors": "Peter Hedman, Julien Philip, True Price, Jan-Michael Frahm, George Drettakis, Gabriel Brostow",
+     "year": 2018,
+     "venue": "ACM TOG 37(6) / SIGGRAPH Asia 2018",
+     "url": "https://repo-sam.inria.fr/fungraph/deep-blending/",
+     "citations": 923,
+     "role_zh": "用 CNN 学习多张重投影源图的逐像素混合权重，消除接缝与重影；是 Ha 的 U-Net 融合权重的思想源头，其 Playroom 等场景后来成为 3DGS 的评测集",
+     "priority": "optional"
+    },
+    {
+     "title": "SynSin: End-to-End View Synthesis From a Single Image",
+     "authors": "Olivia Wiles, Georgia Gkioxari, Richard Szeliski, Justin Johnson",
+     "year": 2020,
+     "venue": "CVPR 2020",
+     "url": "https://arxiv.org/abs/1912.08804",
+     "citations": 555,
+     "role_zh": "提出可微的特征点云渲染器：把图像的深度与特征抬升成 3D 点云，前向 splat 到目标视角后由细化网络补洞。FWD 明确以它为灵感，是“前向 warp + 学习补全”这条线的起点，对应 Ha 的前向 splat 加背景图补洞",
+     "priority": "optional"
+    }
+   ],
+   "prereqs": [
+    "n-generalizable",
+    "i-blending",
+    "n-nerf",
+    "r-volume",
+    "d-mvs",
+    "i-psv",
+    "i-warping",
+    "l-attention"
+   ],
+   "relation_to_anchors_zh": "两篇锚点都属于本专题所说的“可泛化、推理时不优化”的 NVS，并且都以本专题的方法为主要对手。Quark（表 1）把 ENeRF、GPNR、SIMPLI 在 RFF+IBRNet 数据上重训后比较：RFF 1024×768 上，Quark 26.03 dB，GPNR 25.42，ENeRF 23.71；N3DV 上，Quark 31.57，ENeRF 29.86，GPNR 29.80；速度上，ENeRF 205 ms，GPNR 25 s，Quark 32.2 ms。Quark 从本专题继承了三样东西。一是 IBR 输出，即对输入像素的 blend weights，而不是回归 RGB。二是以目标射线为参照的射线方向编码，对应 IBRNet 的 Δd 和 GPNR 的规范化射线编码。三是训练时随机抽取近邻视角（从最近 16 个中抽 8 个），对应 IBRNet 的 n·N 候选池。它也明确拒绝了 IBRNet、MVSNeRF 式的均值/方差聚合，以及 ENeRF 的单层带厚度深度。Ha et al.（表 1、表 2）以 IBRNet、ENeRF（作者预训练权重）以及 FWD、GPS-Gaussian（重训）为基线：DyNeRF 上，Ha 31.17 dB，ENeRF 29.51，IBRNet 22.49，FWD 16.97；STED 上，Ha 68.76，ENeRF 76.14，IBRNet 737.7；但在 ENeRF-Outdoor 上，ENeRF 的 PSNR（25.79）高于 Ha（24.01）。注意 Quark 的 N3DV 与 Ha 的 DyNeRF 是同一套数据，但评测协议不同，两篇论文的 ENeRF 数字不能互相对照。Ha 的结构是本专题学习式 IBR 分支的直接后代：逐视角前向渲染再融合来自 FWD（更早可追溯到 SynSin）；用目标视角代理深度引导融合来自 FVS，只是代理深度换成了在线的 image-based TSDF；学习逐像素混合权重来自 Deep Blending 和 IBRNet；相机方向点积特征则是 ULR 角度准则的手工特征版。本专题暴露出的两个共同缺陷，也正是两篇锚点的出发点：Quark 针对速度与分辨率，Ha 针对逐帧独立处理带来的闪烁与视角跳变。",
+   "debates_zh": [
+    "体渲染还是深度引导：IBRNet 式的密集采样对多峰分布、半透明更鲁棒，但慢；ENeRF 式只在单一深度附近采样，快，但在深度复杂的区域会失败。Quark 的多层 LDM 与 Ha 的“TSDF 深度 + 逐视角 splat”代表了两种折中。",
+    "需要多少显式几何：MVSNeRF、ENeRF 用代价体，FVS、SVS 用离线 MVS 网格，GPNR 只用极线约束。几何越显式，结果越稳定（Ha 的 TSDF 主要改善的是 STED）；几何越隐式，越能处理反射和透明，但越难保证一致性。",
+    "基线的公平性：用作者预训练权重（Ha 对 IBRNet、ENeRF 的做法），还是在同一数据上重训（Quark 对 ENeRF、GPNR 的做法），会明显改变结论。Ha 的训练集与 DyNeRF 测试场景来自同一厨房，进一步混淆了比较。",
+    "逐场景微调是否违背“可泛化”：IBRNet、MVSNeRF、NeuRay 都报告了微调后的更高分数，但临场场景没有留给微调的时间。",
+    "深度监督有没有用：ENeRF 的消融发现，加入真值深度监督并不提升渲染质量；而 GPS-Gaussian 使用真值深度监督，Ha 则直接依赖外部立体深度。深度在这类方法里只是中间变量，还是必须准确的几何，看法不一。"
+   ],
+   "open_questions_zh": [
+    "时间一致性：本专题的方法都把视频当作独立的帧处理，源视角集合切换时还会跳变。怎样在不牺牲泛化能力的前提下，引入跨帧记忆或平滑的软视角选择？",
+    "高分辨率：射线级或 patch 级的方法（IBRNet、GPNR）很难做到 1080p 实时，Quark 靠“低分辨率几何 + IBR 上采样”才做到。能否把 GPNR 式的局部 patch 推理稀疏化，只在边界处精细计算？",
+    "非朗伯表面：混合权重是凸组合，产生不了任何源视角里都没有的高光。怎样在保留真实像素的同时，建模视角相关的残差？",
+    "遮挡与外推：目标视角看到的区域若在所有 K 个源视角中都被遮挡，就只能靠网络去补（如 Ha 的 I_BG）。怎样引入长期记忆或生成先验？",
+    "与深度传感器、视频立体结合：FWD 已能接入传感器深度，Ha 依赖 RAFT-Stereo。时间一致的视频立体方法能否取代启发式滤波，并被计入实时预算？"
+   ],
+   "resources": [
+    {
+     "title": "MIT 6.S980: Machine Learning for Inverse Graphics (Fall 2023)",
+     "url": "https://scenerepresentations.org/courses/2023/fall/inverse-graphics/",
+     "type": "course",
+     "note_zh": "Sitzmann 开设的课程。其中 Prior-Based Reconstruction 系列（共三讲）系统讲解 pixelNeRF 式的“从图像推断场景”，光场相关讲次涉及光场渲染、极线推理，衔接了传统 IBR。"
+    },
+    {
+     "title": "Advances in Neural Rendering (Eurographics 2022 STAR)",
+     "url": "https://arxiv.org/abs/2111.05849",
+     "type": "paper",
+     "note_zh": "Tewari 等人的神经渲染综述，梳理了神经场的表示、渲染与跨场景泛化（条件化）等主题，适合在读完 IBRNet、pixelNeRF 后建立全局图景。"
+    },
+    {
+     "title": "googleinterns/IBRNet (code)",
+     "url": "https://github.com/googleinterns/IBRNet",
+     "type": "code",
+     "note_zh": "IBRNet 的官方 PyTorch 实现，包含源视角采样、跨视角聚合、ray transformer 与混合权重，是理解可泛化 IBR 数据流最直接的代码。"
+    },
+    {
+     "title": "ENeRF project page",
+     "url": "https://zju3dv.github.io/enerf/",
+     "type": "paper",
+     "note_zh": "ENeRF 的项目主页，含代码链接与动态场景的自由视点视频演示；Ha 的户外测试集 ENeRF-Outdoor 由该团队随代码仓库发布。"
+    }
+   ]
+  },
+  {
+   "id": "a-ff-3dgs",
+   "title_zh": "前馈 3DGS 与大重建模型",
+   "title_en": "Feed-forward 3DGS & large reconstruction models",
+   "overview_zh": "3DGS（见 n-3dgs）渲染极快，但每个场景都要从 SfM 点出发优化几分钟到几十分钟，没法用在每帧都在变的临场通话中。前馈 3DGS（feed-forward 3DGS）用一次网络前向代替优化：输入少量带位姿的图像，网络直接输出一组高斯的均值、协方差、不透明度和颜色，再用标准光栅器渲染任意视角。它沿用了可泛化 NeRF（a-generalizable-ibr）的思路，但去掉了最慢的环节：不再对每条射线做上百次网络查询，而是一次输出显式图元，之后每个新视角只需几毫秒的光栅化。2023 年底以来，这个方向分成两条主线。一条是像素对齐（pixel-aligned）方法，为每个输入像素预测一个或几个高斯，高斯中心放在该像素射线上的预测深度处。另一条是大重建模型（LRM），用数亿参数的 Transformer 和海量数据，把多视角图像 token 直接映射为 3D 表示。\n\n像素对齐路线的核心问题是深度从哪里来。pixelSplat（CVPR 2024）处理两张图：它用极线 Transformer 解决 SfM 位姿的尺度不确定，为每个像素预测深度桶上的离散概率，从中采样深度，并令高斯的不透明度等于所采深度桶的概率，借助这一重参数化技巧把梯度传回概率。MVSplat（ECCV 2024）改用平面扫描代价体：把其他视角的特征按 D 个逆深度候选 warp 过来计算点积相关，经 2D U-Net 精化后用 softmax 加权得到深度。按 MVSplat 表 1，它的参数量约为 pixelSplat 的 1/10（12.0M 对 125.4M），推理时间 0.044 s 对 0.104 s，RealEstate10K 上 PSNR 为 26.39 dB 对 25.89 dB（pixelSplat 原文报告 26.09 dB）。DepthSplat（CVPR 2025）在代价体之外引入预训练单目深度模型 Depth Anything V2 的特征，12 张 512×960 的输入 0.6 s 即可完成重建；它还证明高斯渲染损失可以反过来充当深度模型的无监督预训练目标。面向人像的 GPS-Gaussian（CVPR 2024）对最近的两个视角做立体校正，用 RAFT-Stereo 式的迭代匹配估计深度，再在图像平面上回归旋转、尺度和不透明度图，颜色直接取自源图；它在 RTX 3090 上以 2K 分辨率达到 25 FPS。Splatter Image（CVPR 2024）则把单张图映射成“每像素一个高斯”的图像，重建速度 38 FPS。\n\n大重建模型路线始于 LRM（ICLR 2024）：一个 5 亿参数的 Transformer 从单张图预测三平面 NeRF，在约 100 万个物体（Objaverse 渲染图加 MVImgNet 实拍）上训练，5 秒出结果。GS-LRM（ECCV 2024）把输出换成像素对齐高斯：每张图与它的 Plücker 射线图拼成 9 通道后切成 8×8 的 patch，送入 24 层、宽 1024 的 Transformer 做全局自注意力；每个像素解码出 12 个通道（RGB 3、尺度 3、四元数 4、不透明度 1、沿射线距离 1），高斯中心为 ray_o + t·ray_d。它在单张 A100 上重建只需约 0.23 s，RealEstate10K 上达到 28.10 dB（其表中 pixelSplat 为 25.89），训练用了 64 张 A100、约 3 天（256 分辨率 2 天加 512 分辨率微调 1 天）。Long-LRM 把输入扩大到 32 张 960×540 的图（约 25 万个 token），混合使用 Mamba2 块与 Transformer 块，并加入 token 合并与高斯剪枝，1 秒完成宽覆盖场景的重建；在 DL3DV 与 Tanks and Temples 上质量接近优化方法，速度快 800 倍。\n\n2025 年的主题是去掉位姿、扩大规模、处理动态。NoPoSplat（ICLR 2025）以第一个视角的相机坐标系作为规范空间，只用光度损失训练，从无位姿图像预测高斯。VGGT（CVPR 2025）等几何基础模型出现后，AnySplat 在一次前向中同时输出高斯和每张图的内外参。为了摆脱全局注意力的平方复杂度，iLRM 把场景表示与输入像素解耦并迭代精化；Quark 团队的 LVT（SIGGRAPH Asia 2025）只在每个视角的局部邻域内做注意力，用相对几何变换编码代替位置编码，一次前向即可重建任意大的场景。Fuse-and-Refine（NeurIPS 2025）把像素高斯聚合进由粗到细的体素层级，用稀疏体素 Transformer 融合与精化，支持带历史信息的动态在线重建，在单张 H100 上达到 15 fps。\n\n截至 2026-09，前馈 3DGS 已是可泛化 NVS 的主流输出形式，前沿集中在四个方向：(1) 以 VGGT、Depth Anything 3 等几何基础模型为骨干；(2) 让高斯脱离像素网格，例如 TokenGS（2026）用可学习的高斯 token 直接回归 3D 均值，高斯数量因此不再取决于分辨率和视角数；(3) 长上下文与流式处理，例如 tttLRM（CVPR 2026）用 test-time training 层以线性复杂度把大量观测压缩进快权重，能够自回归地逐步重建；(4) 面向临场的系统化，例如 Tele360（2026-09）从稀疏、无位姿的 2K 相机流实时重建动态人体高斯，用视频编码器把高斯图推流到远端，在单张消费级 GPU 上端到端超过 25 FPS。就远程临场而言，它与 Quark 的根本区别在于“一次重建、多次渲染”：GPS-Gaussian 处理源视角约需 27 ms，此后每多渲染一个视角只要约 0.8 ms；而 Quark 每渲染一个目标视角（包括每只眼）都要完整跑一遍网络。",
+   "key_ideas": [
+    {
+     "name_zh": "像素对齐高斯：一个像素，一个高斯",
+     "explain_zh": "直觉：每个输入像素本来就是某条射线打到表面的一次观测。只要知道这条射线在哪里碰到表面，就可以在那里放一个高斯：颜色取像素值，大小约等于一个像素在该深度处覆盖的范围。这样，3D 重建就化简成了 2D 的逐像素回归：网络输出深度（或沿射线的距离），以及尺度、旋转、不透明度和颜色。结构上它就是一个图像到图像的网络，可以直接用 U-Net 或 ViT 实现。数量级：GS-LRM 在场景级设定下用 2 张 256×256 的输入，产生 131,072 个高斯；Ha et al. 在 DyNeRF 1352×1014、K=4 时，每帧约 548 万个高斯。它的根本限制是只显式表示输入视锥内被看到的表面（GS-LRM 论文自己也这么说：不可见区域无法重建），被所有输入挡住的内容没有高斯。不同视角的高斯描述的是同一表面，冗余很大，还会互相穿插。与锚点的联系：Ha et al. 的第一阶段就是一个没有网络的像素对齐 3DGS。深度来自 RAFT-Stereo；尺度按解析式设定，使高斯在源图中的投影恰好覆盖 1 个像素（世界尺寸与 z/f 成正比）；旋转取单位阵，完全不透明，各向同性；颜色取像素值。作者称网络在稠密像素网格上预测出的尺度、不透明度和旋转会收敛到近似常数，所以干脆用解析值；锚点深读指出，这一说法没有消融表支撑。"
+    },
+    {
+     "name_zh": "深度从哪里来：概率采样、代价体、单目先验与立体匹配",
+     "explain_zh": "直觉：像素对齐方法的质量几乎完全取决于深度，各方法的差别主要就在这里。(1) pixelSplat 处理两张图，用极线 Transformer 让每个像素看到另一张图上对应极线的特征及其深度编码，从而确定绝对尺度，然后输出深度桶上的概率并采样。(2) MVSplat 使用显式的平面扫描代价体，相关值最高的深度候选就是表面。它把多视角立体（见 d-mvs、a-learned-mvs）的归纳偏置直接写进了网络结构，所以参数少、泛化好。(3) DepthSplat 注意到代价体在弱纹理和遮挡区域会失效，而单目深度模型（Depth Anything V2 的特征）正好能补上。(4) GPS-Gaussian 针对固定的环形人像阵列，先做立体校正，再做 RAFT-Stereo 式的迭代匹配（T=3 次迭代），训练使用真值深度监督。(5) GS-LRM、LVSM 这一类不建代价体，由 Transformer 直接回归沿射线的距离，靠模型和数据的规模学会匹配。数值例子：MVSplat 有 12.0M 参数、推理 0.044 s；pixelSplat 有 125.4M 参数、推理 0.104 s；前者在 RealEstate10K 上的 PSNR 反而更高（26.39 对 25.89，MVSplat 表 1）。与锚点的联系：Ha et al. 的深度来源与 GPS-Gaussian 同类，都是外部立体匹配，但 Ha 没有把立体深度的计算时间算进运行时间。Quark 的深度则更像一个迭代的代价体：初始化时把输入特征反投影到固定的视差平面上（PSV 的思想），之后每次 Update & Fuse 再用渲染残差修正。"
+    },
+    {
+     "name_zh": "可微性与局部极小：为什么 pixelSplat 要“采样”深度",
+     "explain_zh": "直觉：如果网络直接回归一个深度值，梯度只能告诉高斯“往前或往后挪一点”。当初始深度离真实表面很远时（比如估在 2 m，真实在 4 m），中间位置的损失可能更差，高斯就会卡在局部极小。pixelSplat 改为预测深度桶上的概率 p_φ，按概率采样一个桶，并令这个高斯的不透明度等于该桶的概率。如果采到的桶让渲染变好，损失对不透明度的梯度就会提高这个桶的概率。这相当于在所有候选深度之间投票，而不是沿着连续深度一步一步挪。数值例子：3 个桶位于 1、2、4 m，概率为 (0.1, 0.7, 0.2)；采到 2 m 时，高斯的 α=0.7。若真实表面在 4 m，那么采到 4 m 的那些迭代渲染误差更小，梯度会把 φ_3 推高；多次迭代后，概率质量转移到 4 m，中间不需要经过 3 m。论文的消融（RealEstate10K）显示，改为直接回归深度后 PSNR 从 26.09 降到 24.62，约低 1.5 dB，并出现斑点状伪影。MVSplat 和 DepthSplat 用代价体加 softmax 期望深度，得到了更直接的几何线索，基本绕开了这个问题。"
+    },
+    {
+     "name_zh": "一次渲染所有高斯，还是逐视角渲染再融合",
+     "explain_zh": "直觉：像素对齐方法得到 K 组高斯后，最省事的做法是把它们合并成一个场景，一次光栅化完成（pixelSplat、MVSplat、GPS-Gaussian、GS-LRM 都这么做）。但这 K 组高斯描述的是同一个表面：由于深度误差，它们在深度上只相差几毫米，颜色又因曝光和视角不同而略有差异。3DGS 按每个高斯中心的深度排序，排序结果会在相邻像素之间、相邻帧之间来回翻转，于是出现 Z-fighting 和闪烁；深度估错的高斯还会变成飞点。因此 Ha et al.（Fig. 4）选择把每个视角单独渲染到目标相机，再由融合网络在几何引导下取舍。数值：Ha 的 No Blending 消融（仿照 GPS-Gaussian 一次渲染全部高斯）PSNR 为 24.64、STED 为 483.3；重训的 GPS-Gaussian 基线 PSNR 为 25.46、STED 为 693.0，每帧 143.4 ms；完整模型为 31.17、68.76。另一个方向是先在 3D 里融合、再渲染：Fuse-and-Refine 把各视角的像素高斯聚合进体素层级，用 Transformer 去重和精化，得到一个无冗余的持久表示，这也是它能做时间融合的前提。"
+    },
+    {
+     "name_zh": "大重建模型：token、Plücker 射线与注意力复杂度",
+     "explain_zh": "直觉：LRM 类方法把每张输入图切成 p×p 的 patch，每个 patch 连同其中各像素的相机射线（Plücker 坐标，见 l-encoding、a-geometry-free）一起线性投影成一个 token。所有视角的 token 拼在一起做全局自注意力，让网络自己学会跨视角匹配；输出端再把 token 解码回每个像素的高斯参数。代价是注意力的计算量随 token 数平方增长。数值：GS-LRM 在场景级设定下用 2 张 256×256 的图，p=8，共 2×32×32=2048 个 token，每层注意力矩阵约 420 万个元素。Long-LRM 用 32 张 960×540 的图，约 25 万个 token，全注意力矩阵约有 6×10¹⁰ 个元素，因此改用线性复杂度的 Mamba2 块并合并 token。之后的扩展工作都在削减这个平方项：LVT 只关注空间上相邻的视角，iLRM 把全局交互拆成两阶段注意力，tttLRM 用 TTT 层实现线性复杂度。与锚点的联系：Quark 在类似问题上用了另一种省计算的办法。它不在所有视角的 token 之间做自注意力，而是让目标视角的层特征作为唯一的 query，对 M 个视角做 cross-attention（One-to-many attention），融合代价对视角数接近 O(1)。LVT 是 Quark 团队的后续工作，保留了“近邻视角最有用”的判断，但输出改成了持久的 3DGS。"
+    },
+    {
+     "name_zh": "一次重建、多次渲染：对双目与多观看者的意义",
+     "explain_zh": "直觉：临场显示要的不是一张图，而是左右眼各一张，每秒刷新 72–90 次，有时还有多个观看者，或者光场显示器上的数十个视点。持久的 3D 表示只需重建一次，之后每个视点都只是一次光栅化；目标视角相关的表示（Quark 的 LDM、Ha 的逐目标视角融合）则每个视点都要重跑一遍。数值（各自论文报告，硬件不同，只能比较量级：GPS-Gaussian 为 RTX 3090、1024×1024；Quark 为 A100；Ha 未说明测试 GPU，且不含立体深度）：GPS-Gaussian 处理源视角约 27 ms，每渲染一个新视角约 0.8 ms，双目合计约 28.6 ms。Quark 每个视点约 32 ms（1080p），按单视点时间简单相加，双目约 64 ms，已经低于 30 fps。Ha 每个视点约 39 ms（前向 splat 10 ms、TSDF 6 ms、融合网络 23 ms，TensorRT），双目约 78 ms。反过来，持久表示需要传输，或者在接收端重建。Tele360 把逐帧的高斯图用视频编码器推流到远端再渲染；GS-SCNet（2026）把多视角编码与前馈 3DGS 联合设计，报告比 MV-HEVC + GPS-Gaussian 节省约 75% 的 BD-rate。是在服务端按头部位姿渲染出 2D 视频，还是把 3D 表示传到本地渲染，是临场系统设计的第一个分岔点（见 a-telepresence-sys、a-compression）。"
+    },
+    {
+     "name_zh": "去掉标定：无位姿前馈重建与几何基础模型",
+     "explain_zh": "直觉：两篇锚点都假设相机已精确标定且固定不动。但实际部署中相机会被碰歪，也会因发热漂移，而标定误差会让 IBR 出现硬边（Quark）或模糊（Ha）。无位姿方法把相机参数也交给网络预测。NoPoSplat 以第一个视角为规范坐标系，直接在这个坐标系中预测所有视角的高斯，并把内参编码为 token 来确定尺度。AnySplat 在一次前向中同时输出高斯和每张图的内外参。这类方法常以 VGGT、Depth Anything 3 等几何基础模型（见 a-geo-fm）作为骨干或教师。面向临场的 Tele360 在此基础上加入了轻量的可微 Levenberg–Marquardt 相机精化层，并通过师生蒸馏从大型视觉几何基础模型迁移多视角几何先验，在稀疏、无位姿的 2K 相机流上实现了实时重建。与锚点的联系：Quark 依赖精确标定，以及由 SfM 点给出的近/远平面；Ha 依赖同步与标定，在 ENeRF-Outdoor 上就因为同步和颜色标定问题，只能在 480×270 分辨率下计算指标。无位姿的前馈 3DGS 正在去掉这个前提。"
+    }
+   ],
+   "equations": [
+    {
+     "tex": "\\boldsymbol{\\mu}_{k}(\\mathbf{u})=\\mathbf{o}_{k}+t_{k}(\\mathbf{u})\\,\\mathbf{r}_{k}(\\mathbf{u}),\\quad \\mathbf{r}_{k}(\\mathbf{u})=\\mathbf{R}_{k}^{\\top}\\mathbf{K}_{k}^{-1}\\big(\\mathbf{u}^{\\top},1\\big)^{\\top},\\qquad \\boldsymbol{\\Sigma}_{k}(\\mathbf{u})=\\mathbf{R}_{q}\\mathbf{S}\\mathbf{S}^{\\top}\\mathbf{R}_{q}^{\\top},\\qquad \\text{Ha: }\\ \\mathbf{S}\\propto\\tfrac{t_{k}(\\mathbf{u})}{f_{k}}\\mathbf{I},\\ \\mathbf{R}_{q}=\\mathbf{I},\\ \\alpha=1",
+     "explain_zh": "像素对齐高斯的参数化。k 是输入视角编号，u 是该视角中的像素坐标；o_k 是相机中心（世界坐标）；R_k、K_k 分别是世界到相机的旋转和内参；r_k(u) 是像素 u 的射线方向，不归一化时它在相机坐标系中的 z 分量为 1，所以 t_k(u) 就是 z 深度（GS-LRM 用归一化的方向，t 是沿射线的距离，写成 ray_o + t·ray_d）；μ 是高斯中心；Σ 是协方差，R_q 由网络预测的四元数得到，S 是对角尺度矩阵；α 是不透明度。最后一式是 Ha et al. 的解析特例：尺度按“在源图中的投影恰好覆盖 1 个像素”设定，与深度除以像素焦距成正比（原文没有给出比例常数）。例：f_k=1000 px、深度 t=2 m 时，一个像素在该深度覆盖约 2 mm，高斯尺度就在这个量级；DyNeRF 1352×1014、K=4 时，共有 4×1,370,928≈548 万个高斯。GPS-Gaussian 用网络预测 R_q、S、α（分别经过归一化、Softplus、Sigmoid），pixelSplat、MVSplat、GS-LRM 也预测全部参数。"
+    },
+    {
+     "tex": "z\\sim p_{\\phi}(z)=\\operatorname{softmax}(\\boldsymbol{\\phi})_{z},\\qquad \\boldsymbol{\\mu}=\\mathbf{o}+\\big(b_{z}+\\delta_{z}\\big)\\,\\mathbf{d}_{\\mathbf{u}},\\qquad \\alpha=\\phi_{z}",
+     "explain_zh": "pixelSplat 的概率深度采样（论文算法 1）。φ 是网络为像素 u 在 Z 个深度桶上输出的概率向量（softmax 之后和为 1）；z 是按该分布采样得到的桶编号；b_z 是第 z 个桶的深度，δ_z 是网络额外预测的桶内偏移；o 是参考相机中心，d_u 是像素 u 的射线方向；μ 是高斯中心；α 是这个高斯的不透明度，直接设为所采桶的概率 φ_z。关键在最后一式：采样本身不可微，但 α=φ_z 可微，渲染损失通过 α 把梯度传回概率 φ，这就相当于重参数化。例：3 个桶的深度为 1、2、4 m，φ=(0.1, 0.7, 0.2)；采到 z=2 时，高斯位于 2 m 处，α=0.7。若 4 m 才是真实表面，那么采到 z=3 的那些迭代渲染误差更小，其梯度会增大 φ_3，概率质量可以直接跳到 4 m，而不必沿连续深度经过 3 m。论文中每个像素也可以采样多个高斯。"
+    },
+    {
+     "tex": "C^{i}_{d_m}(\\mathbf{u})=\\frac{\\mathbf{F}^{i}(\\mathbf{u})\\cdot\\mathbf{F}^{j\\to i}_{d_m}(\\mathbf{u})}{\\sqrt{C}},\\quad m=1,\\dots,D,\\qquad \\hat{d}(\\mathbf{u})=\\sum_{m=1}^{D}\\operatorname{softmax}_{m}\\big(\\hat{C}^{i}(\\mathbf{u})\\big)\\,d_{m}",
+     "explain_zh": "MVSplat 的代价体与深度回归。i 是参考视角，j 是另一个视角；F^i(u) 是视角 i 在像素 u 处的 C 维特征（1/4 分辨率，经跨视角 Transformer 增强）；d_m 是在近、远平面之间按逆深度均匀选取的 D 个候选深度；F^{j→i}_{d_m} 是假设深度为 d_m 时，把视角 j 的特征 warp 到视角 i 的结果。两者点积再除以 √C，就是相关值 C^i_{d_m}；视角多于两个时，对各视角的相关值逐像素取平均，因此可以接受任意数量的输入。Ĉ^i 是经 2D U-Net 精化、再上采样到全分辨率的代价；对它沿深度维做 softmax 再求期望，就得到深度 d̂(u)（之后还有一个轻量 U-Net 做残差深度细化）。例：3 个候选深度 1、2、4 m 的精化代价为 (2.1, 5.3, 1.0)，softmax 后约为 (0.039, 0.948, 0.013)，期望深度约 1.99 m。与锚点的联系：Quark 在初始化时把输入特征反投影到固定的视差平面上，在 Update & Fuse 中又按当前深度反投影得到 Δ，这两步与此处的代价体同源（见 i-psv）。"
+    }
+   ],
+   "evolution": [
+    {
+     "year": 2023,
+     "milestone_zh": "LRM（arXiv 2023-11，ICLR 2024）用 5 亿参数的 Transformer 从单图预测三平面 NeRF，开启“大重建模型”路线"
+    },
+    {
+     "year": 2023,
+     "milestone_zh": "12 月，pixelSplat、Splatter Image、GPS-Gaussian 几乎同时提出像素对齐的前馈 3DGS"
+    },
+    {
+     "year": 2024,
+     "milestone_zh": "MVSplat（ECCV 2024）引入代价体；LGM 与 GS-LRM（ECCV 2024）把大重建模型的输出换成高斯"
+    },
+    {
+     "year": 2024,
+     "milestone_zh": "10 月，DepthSplat（单目先验加代价体）、Long-LRM（32 个视角、约 25 万 token）、NoPoSplat（无位姿）相继发布"
+    },
+    {
+     "year": 2025,
+     "milestone_zh": "几何基础模型 VGGT（CVPR 2025）发表，AnySplat、iLRM 相继发布；Ha et al.（CVPR 2025）用解析设定的像素高斯做前向 warping，并论证不应一次渲染全部视角的高斯"
+    },
+    {
+     "year": 2025,
+     "milestone_zh": "Quark 团队的 LVT（SIGGRAPH Asia 2025）采用局部视角注意力；Fuse-and-Refine（NeurIPS 2025）用体素层级融合，支持动态在线重建；Depth Anything 3 于 2025-11 发布"
+    },
+    {
+     "year": 2026,
+     "milestone_zh": "tttLRM（CVPR 2026）实现线性复杂度的长上下文与自回归重建；TokenGS 让高斯脱离像素网格；Tele360 与 GS-SCNet 面向实时临场与语义编码传输"
+    }
+   ],
+   "papers": [
+    {
+     "title": "pixelSplat: 3D Gaussian Splats from Image Pairs for Scalable Generalizable 3D Reconstruction",
+     "authors": "David Charatan, Sizhe Lester Li, Andrea Tagliasacchi, Vincent Sitzmann",
+     "year": 2024,
+     "venue": "CVPR 2024",
+     "url": "https://arxiv.org/abs/2312.12337",
+     "citations": 813,
+     "role_zh": "首个场景级像素对齐前馈 3DGS：用极线 Transformer 解决尺度不确定，用概率深度采样加上“不透明度等于概率”的重参数化来绕开局部极小（消融中比直接回归深度高约 1.5 dB）",
+     "priority": "must"
+    },
+    {
+     "title": "MVSplat: Efficient 3D Gaussian Splatting from Sparse Multi-View Images",
+     "authors": "Yuedong Chen, Haofei Xu, Chuanxia Zheng et al.",
+     "year": 2024,
+     "venue": "ECCV 2024",
+     "url": "https://arxiv.org/abs/2403.14627",
+     "citations": 628,
+     "role_zh": "把平面扫描代价体引入前馈 3DGS，参数约为 pixelSplat 的 1/10，速度快 2 倍以上，跨数据集泛化更好；Ha 在 ENeRF-Outdoor 上与它做了定性比较",
+     "priority": "must"
+    },
+    {
+     "title": "GPS-Gaussian: Generalizable Pixel-wise 3D Gaussian Splatting for Real-time Human Novel View Synthesis",
+     "authors": "Shunyuan Zheng, Boyao Zhou, Ruizhi Shao et al.",
+     "year": 2024,
+     "venue": "CVPR 2024 (Highlight)",
+     "url": "https://arxiv.org/abs/2312.02155",
+     "citations": 221,
+     "role_zh": "面向人像的实时前馈 3DGS：用立体校正加迭代匹配得到深度，在图像平面上回归高斯参数图，2K 分辨率 25 FPS；是 Ha 重点批判和重训比较的基线",
+     "priority": "must"
+    },
+    {
+     "title": "GS-LRM: Large Reconstruction Model for 3D Gaussian Splatting",
+     "authors": "Kai Zhang, Sai Bi, Hao Tan et al.",
+     "year": 2024,
+     "venue": "ECCV 2024",
+     "url": "https://arxiv.org/abs/2404.19702",
+     "citations": 375,
+     "role_zh": "用图像与 Plücker 射线 patch token 加 24 层 Transformer 输出每像素 12 通道的高斯参数，约 0.23 s 完成重建，RealEstate10K 上 28.10 dB；Ha 在附录中批评的“一次性渲染全部视角”即以它为例",
+     "priority": "must"
+    },
+    {
+     "title": "LRM: Large Reconstruction Model for Single Image to 3D",
+     "authors": "Yicong Hong, Kai Zhang, Jiuxiang Gu et al.",
+     "year": 2024,
+     "venue": "ICLR 2024",
+     "url": "https://arxiv.org/abs/2311.04400",
+     "citations": 989,
+     "role_zh": "首个大重建模型：5 亿参数的 Transformer 在约 100 万个物体上训练，从单图预测三平面 NeRF，证明规模化可以换来泛化能力",
+     "priority": "should"
+    },
+    {
+     "title": "DepthSplat: Connecting Gaussian Splatting and Depth",
+     "authors": "Haofei Xu, Songyou Peng, Fangjinhua Wang et al.",
+     "year": 2025,
+     "venue": "CVPR 2025",
+     "url": "https://arxiv.org/abs/2410.13862",
+     "citations": 314,
+     "role_zh": "在多视角代价体中融合 Depth Anything V2 的单目特征，12 张 512×960 输入 0.6 s 完成重建；并证明高斯渲染损失可以作为深度模型的无监督预训练目标",
+     "priority": "should"
+    },
+    {
+     "title": "Long-LRM: Long-sequence Large Reconstruction Model for Wide-coverage Gaussian Splats",
+     "authors": "Chen Ziwen, Hao Tan, Kai Zhang et al.",
+     "year": 2025,
+     "venue": "ICCV 2025",
+     "url": "https://arxiv.org/abs/2410.12781",
+     "citations": 116,
+     "role_zh": "输入 32 张 960×540 的图（约 25 万个 token），混合 Mamba2 与 Transformer，加入 token 合并与高斯剪枝，1 秒完成宽覆盖场景重建，比优化方法快 800 倍",
+     "priority": "should"
+    },
+    {
+     "title": "Splatter Image: Ultra-Fast Single-View 3D Reconstruction",
+     "authors": "Stanislaw Szymanowicz, Christian Rupprecht, Andrea Vedaldi",
+     "year": 2024,
+     "venue": "CVPR 2024",
+     "url": "https://arxiv.org/abs/2312.13150",
+     "citations": 454,
+     "role_zh": "用 2D 网络把单张图映射为“每像素一个高斯”，重建 38 FPS、渲染 588 FPS，是像素对齐思想最简洁的示范",
+     "priority": "should"
+    },
+    {
+     "title": "No Pose, No Problem: Surprisingly Simple 3D Gaussian Splats from Sparse Unposed Images",
+     "authors": "Botao Ye, Sifei Liu, Haofei Xu et al.",
+     "year": 2025,
+     "venue": "ICLR 2025",
+     "url": "https://arxiv.org/abs/2410.24207",
+     "citations": 271,
+     "role_zh": "NoPoSplat：在第一个视角的规范坐标系中直接预测所有高斯，用内参 token 解决尺度问题，只用光度损失训练，从无位姿输入完成重建",
+     "priority": "optional"
+    },
+    {
+     "title": "AnySplat: Feed-forward 3D Gaussian Splatting from Unconstrained Views",
+     "authors": "Lihan Jiang, Yucheng Mao, Linning Xu et al.",
+     "year": 2025,
+     "venue": "ACM TOG 2025",
+     "url": "https://arxiv.org/abs/2505.23716",
+     "citations": 267,
+     "role_zh": "从未标定的图像集合一次前向同时预测 3DGS 和每张图的内外参，稀疏视角与稠密视角都适用；去掉了 Quark 依赖精确标定的前提（它引用了 Quark）",
+     "priority": "optional"
+    },
+    {
+     "title": "LVT: Large-Scale Scene Reconstruction via Local View Transformers",
+     "authors": "Tooba Imtiaz, Lucy Chai, Kathryn Heal et al.",
+     "year": 2025,
+     "venue": "SIGGRAPH Asia 2025",
+     "url": "https://arxiv.org/abs/2509.25001",
+     "citations": 7,
+     "role_zh": "Quark 团队的后续工作：只在近邻视角内做注意力，用相对几何变换做位置编码，输出带视角相关颜色与不透明度的 3DGS，一次前向重建任意大的场景",
+     "priority": "optional"
+    },
+    {
+     "title": "Learning Efficient Fuse-and-Refine for Feed-Forward 3D Gaussian Splatting",
+     "authors": "Yiming Wang, Lucy Chai, Xuan Luo et al.",
+     "year": 2025,
+     "venue": "NeurIPS 2025",
+     "url": "https://arxiv.org/abs/2503.14698",
+     "citations": 5,
+     "role_zh": "原名 SplatVoxel，作者包括多位 Quark 作者：把像素高斯聚合进由粗到细的体素层级，用稀疏体素 Transformer 融合精化，支持带历史的动态在线重建（H100 上 15 fps），直接针对 Quark 缺乏时间融合的问题",
+     "priority": "optional"
+    }
+   ],
+   "prereqs": [
+    "n-3dgs",
+    "n-generalizable",
+    "r-raster",
+    "d-mvs",
+    "d-stereo",
+    "i-psv",
+    "l-attention",
+    "l-encoding"
+   ],
+   "relation_to_anchors_zh": "Ha et al. 与本专题的关系最直接，是一种批判性的继承。(1) Ha 的第一阶段（Sec. 3.1 / A.3）本质上是一个不含网络的像素对齐 3DGS：深度来自 RAFT-Stereo；尺度按解析式设定，使高斯在源图中的投影恰好覆盖 1 个像素；各向同性，opacity=1，颜色取像素值；用原版 3DGS 光栅器渲染。在 DyNeRF 1352×1014、K=4 时约有 548 万个高斯，耗时 10 ms。(2) 它明确拒绝了 GPS-Gaussian 和 GS-LRM 的两个做法。一是用网络预测高斯参数，理由是在稠密像素网格上预测值会收敛到近似常数，而且让尺度可变去填洞会降低 PSNR（两点都没有消融表支撑）。二是把所有视角的高斯一次性渲染，理由是飞点与 Z-fighting（Fig. 4）。对应的数字是：重训的 GPS-Gaussian 基线在 DyNeRF 上 PSNR 25.46、STED 693.0，每帧 143.4 ms；No Blending 消融为 24.64、STED 483.3；完整模型为 31.17、68.76。(3) MVSplat 只在 ENeRF-Outdoor 上做了定性比较，没有数字。Quark 与本专题则是平行发展、互不比较的关系：Quark 没有引用 pixelSplat、MVSplat、GPS-Gaussian（三者都早于它的投稿），也没有与 GS-LRM、LVSM 比较；iLRM 还批评 Quark 的表示局限于目标视角，缺少持久的 3D 表示。但 Quark 团队的后续工作恰恰转入了本专题。LVT（SIGGRAPH Asia 2025）用局部视角注意力输出带视角相关颜色与不透明度的 3DGS；Fuse-and-Refine（NeurIPS 2025）把像素高斯融进体素层级并加入历史记忆，它的附表把 Quark 列为不支持动态和时间融合的方法。对临场系统设计来说，本专题提供了两篇锚点所缺的两样东西。一是一次重建、多次渲染：GPS-Gaussian 每个新视角约 0.8 ms（RTX 3090），而 Quark 每个视角约 32 ms（A100）、Ha 每个视角约 39 ms（GPU 未说明）。二是可以传输的 3D 表示（Tele360、GS-SCNet）。代价是像素对齐高斯只覆盖输入中可见的表面，而且逐帧预测同样会闪烁。",
+   "debates_zh": [
+    "网络预测高斯参数还是解析设定：GPS-Gaussian、pixelSplat、GS-LRM 预测全部参数；Ha et al. 认为预测值趋于常数，解析设定就够了，但没有给出消融。对头发、半透明物体和掠射角表面来说，可变的尺度和各向异性可能是必要的。",
+    "像素对齐还是与像素解耦：像素对齐实现简单，也与图像网络天然兼容，但高斯数量随分辨率和视角数线性增长，冗余严重。iLRM、TokenGS、Fuse-and-Refine 主张把表示与输入像素解耦，代价是训练更难、结构更复杂。",
+    "显式代价体还是纯 Transformer：MVSplat 用 12M 参数就达到了当时的 SOTA，说明几何归纳偏置能省数据；GS-LRM、LVSM 靠规模超过了它，但训练需要 64 张 A100 这一级别的算力。在数据有限的临场人像场景中哪种更划算，还不清楚。",
+    "先融合再渲染，还是逐视角渲染再融合：一次光栅化所有高斯最省事，却会带来 Z-fighting 和闪烁（Ha 的 No Blending 消融）；逐视角融合更稳定，但放弃了持久表示。",
+    "需不需要标定：NoPoSplat、AnySplat、Tele360 证明无位姿方法也能达到甚至超过有位姿的方法。但固定阵列的临场系统本来就可以离线精确标定，在线估计位姿带来的计算量和不稳定性是否值得，看法不一。"
+   ],
+   "open_questions_zh": [
+    "时间一致性与状态：逐帧前馈得到的高斯在帧与帧之间没有对应关系，排序翻转和深度抖动会造成闪烁。怎样在前馈框架中维护一个可更新的持久高斯表示（Fuse-and-Refine、StreamSplat 的方向），并保证长时间运行不漂移？",
+    "被遮挡内容：像素对齐高斯只覆盖输入中可见的表面，观看者移出阵列覆盖范围时就会出现空洞。能否借助长期记忆或生成先验，在前馈过程中预测不可见区域的高斯？",
+    "分辨率与数量：GS-LRM 自述最高只能处理约 512×904，Long-LRM 需要 token 合并与高斯剪枝。在 1080p 以上、每帧上百万高斯的情况下，怎样在实时预算内完成生成和传输？",
+    "人像细节：头发、眼镜反光、快速手势带来的运动模糊，都很难用“每像素一个不透明高斯”来表达。需要什么样的高斯参数化和训练数据？",
+    "评测：本专题的论文几乎只报告逐帧的 PSNR/SSIM/LPIPS。需要把 STED、TCC、flicker 等时间指标以及双目一致性纳入基准（见 v-metrics）。"
+   ],
+   "resources": [
+    {
+     "title": "pixelSplat project page",
+     "url": "https://dcharatan.github.io/pixelsplat",
+     "type": "paper",
+     "note_zh": "项目主页含代码链接与交互式结果。代码基于 PyTorch 和 3DGS 光栅器，其 RealEstate10K、ACID 数据处理流程后来被 MVSplat、DepthSplat 等大量沿用，适合作为动手的起点。"
+    },
+    {
+     "title": "donydchen/mvsplat (code)",
+     "url": "https://github.com/donydchen/mvsplat",
+     "type": "code",
+     "note_zh": "MVSplat 的官方实现，代价体构造与深度回归部分代码清晰，可以与本专题的公式 C^i_{d_m} 一一对照阅读，也能直接体会代价体与 Quark 反投影的共同点。"
+    },
+    {
+     "title": "aipixel/GPS-Gaussian (code)",
+     "url": "https://github.com/aipixel/GPS-Gaussian",
+     "type": "code",
+     "note_zh": "GPS-Gaussian 的官方实现，包含立体校正、迭代深度估计和高斯参数图回归，是理解 Ha et al. 所批评的一次性渲染基线的最佳材料，也是做人像临场实验的现成起点。"
+    },
+    {
+     "title": "nerfstudio-project/gsplat (code)",
+     "url": "https://github.com/nerfstudio-project/gsplat",
+     "type": "code",
+     "note_zh": "开源的 3DGS 光栅化库（PyTorch 前端加 CUDA 后端），可以直接用来实现像素对齐高斯的逐视角渲染，例如复现 Ha 的前向 splat，或比较“一次渲染”与“逐视角融合”的差别。"
+    }
+   ]
+  },
+  {
+   "id": "a-geometry-free",
+   "title_zh": "无几何 Transformer 渲染器",
+   "title_en": "Geometry-free transformer renderers",
+   "overview_zh": "前三个专题的方法都显式地建模几何，用的是平面扫描、深度、体渲染或高斯光栅化。本专题追问一个更激进的问题：如果只告诉网络每个像素对应哪条相机射线，其余的匹配、遮挡、可见性和渲染全部交给 Transformer 从数据中学，还能合成新视角吗？无几何（geometry-free）渲染器的输入是图像 patch 与射线编码组成的 token，输出是用目标射线查询得到的像素颜色，中间没有深度图、没有体积，也没有 splatting。它的吸引力在于不受手工渲染模型的限制：反射、透明、细结构这类很难用显式几何表达的效果可以直接从数据中学出来，性能也随数据和算力扩展。代价有四点：注意力的计算量随 token 数平方增长；依赖大量训练数据和算力；在不确定区域输出模糊或带噪声、闪烁；缺乏可验证的多视角一致性。\n\n2018–2021 年的早期探索确立了“场景表示 + 射线查询”的框架。GQN（Science 2018）把每个输入（图像，视角）分别编码后逐元素相加，得到场景表示 r，再由一个条件生成网络在查询视角生成图像，但只能在简单的合成场景上工作。Light Field Networks（NeurIPS 2021）把场景表示为用 Plücker 坐标参数化的 360° 4D 光场，每条射线只需一次网络求值，而体渲染要上百次。Geometry-Free View Synthesis（Rombach et al., ICCV 2021）在 VQGAN 的离散 token 上训练自回归 Transformer，从单张图生成大角度的新视角；它系统比较了多种注入 3D 先验的方式，结论是不需要显式的几何先验。SRT（CVPR 2022）是真正的里程碑：共享 CNN 把所有输入图变成 patch 特征，编码器 Transformer 在所有视角的所有 patch 之间做自注意力，得到“集合潜场景表示”；解码器以目标射线为 query，对这个集合做 cross-attention，输出像素颜色。它在 NMR、MultiShapeNet 等合成数据上优于 pixelNeRF 和 LFN，也在 Street View 实拍数据上做了演示；编码一个场景约 10 ms，渲染 121 fps。它的无位姿变体 UpSRT 和后来的 RUST（CVPR 2023）又进一步去掉了对相机位姿的依赖。\n\n介于显式几何与无几何之间的是弱几何 Transformer。Light Field Neural Rendering 和 GPNR 仍然用极线几何决定去哪里取 patch，但颜色完全由 Transformer 决定；GNT 用 view transformer 和 ray transformer 取代了手写的体渲染公式。它们的质量超过同期的可泛化 NeRF，但逐射线的计算让速度停留在秒级：在 Quark 的测试中，GPNR 每帧需要 25 s。\n\nLVSM（ICLR 2025）标志着无几何路线在真实场景上反超了显式几何方法。它把每张输入图与其逐像素的 Plücker 射线图拼接后切成 8×8 的 patch，线性投影成 768 维的 token；目标视角只提供 Plücker 射线 token 作为查询；输出 token 经线性层和 sigmoid 直接还原成 8×8×3 的像素块。它有两个版本：编码器-解码器版先把输入压缩成 3072 个潜 token（编码器、解码器各 12 层）；解码器-only 版（24 层）让输入 token 和目标 token 一起做全自注意力。在 RealEstate10K（256×256，2 张输入）上，解码器-only 版 PSNR 为 29.67，比 GS-LRM（28.10）高约 1.6 dB，比 MVSplat（26.39）高 3 dB 以上；最终模型训练用了 64 张 A100、3–7 天。RayZer（ICCV 2025）更进一步，连相机位姿都不需要：网络先为每张图预测相机，再用预测出的射线做自监督训练，即用一部分图重建场景、渲染另一部分图。它唯一的 3D 先验是射线结构，效果与使用 COLMAP 位姿训练和测试的 LVSM、GS-LRM 相当。\n\n截至 2026-09，无几何 Transformer 在低分辨率、稀疏视角的基准上保持领先，研究重心转向效率与扩展规律。Efficient-LVSM（ICLR 2026）对输入视角只做视角内的自注意力，对目标视角先做自注意力再做交叉注意力，在 RealEstate10K 上达到 29.86 dB，推理快 4.4 倍，并支持基于 KV cache 的增量推理。SVSM（2026-02）研究计算最优的扩展规律，发现先前“编码器-解码器不如解码器-only”的结论源于次优的结构选择和算力不对等的比较；在同等算力下编码器-解码器同样可以是计算最优的，而且一次编码后可以并行渲染多个目标视角。有 Quark 作者参与的 token disentanglement 工作（ICCV 2025）用扩散模型生成的合成数据扩充训练集。长上下文方面，LaCT 用大块 test-time training 把 NVS 的上下文扩展到 100 万个 token；tttLRM 把在 NVS 上预训练的 TTT 模型解码成 3DGS；Online Neural Space Time Memory 把 TTT 记忆用在多视角流式动态 NVS 上。不过，这些方法的分辨率大多仍在 256–512，训练成本高昂，离临场需要的 1080p、双目、30 fps 以上还有明显差距。",
+   "key_ideas": [
+    {
+     "name_zh": "相机即射线：Plücker 坐标与相对射线编码",
+     "explain_zh": "直觉：无几何模型对 3D 世界的全部了解，就是每个像素对应哪条射线。把相机表示成逐像素的射线，而不是一个 4×4 矩阵，好处是信息与像素一一对齐，能和图像 patch 拼成同一个 token。Plücker 坐标用 6 个数 (d, o×d) 表示一条射线：d 是单位方向，m=o×d 称为矩（moment）。沿射线任取一点作为 o，得到的 m 都相同，所以它表示的是“这条直线”，而不是线上的某个点。例：o=(1,0,0)、d=(0,0,1) 时，m=(0,−1,0)；把 o 换成同一射线上的 (1,0,5)，m 不变。两条直线共面（相交或平行）当且仅当 d₁·m₂ + d₂·m₁ = 0，网络可以从中学出类似极线约束的关系。另一类做法是相对编码。GPNR 把所有射线规范化到以目标射线为参照的坐标系中，使模型不依赖参考坐标系。Quark 的射线方向编码 γ 取输入射线与目标 LDM 视锥近/远平面两个交点的 2D 差向量，输入射线与目标射线重合时为 0。LVT 则用查询视角与近邻视角之间的相对几何变换做位置编码。这些做法的区别在于给网络多少几何信息（见 l-encoding）。"
+    },
+    {
+     "name_zh": "集合潜表示与射线查询：SRT 的编码-解码结构",
+     "explain_zh": "直觉：SRT 把“场景”看成一个 token 集合，而不是一个 3D 网格。编码器在所有视角的所有 patch 之间做自注意力，每个 token 都能看到其他视角的内容，从而隐式完成匹配和 3D 推理。解码器把目标射线编码成 query，对这个集合做 cross-attention，取出与这条射线相关的 token，再由一个小 MLP 输出颜色。数值：SRT 约有 7400 万参数（CNN 2300 万、编码器 4700 万、解码器 400 万），编码一个场景约 0.010 s，渲染 121 fps。消融中去掉编码器 Transformer、让解码器直接注意 CNN 特征时，MultiShapeNet 上的 PSNR 从 23.41 降到 21.64，说明跨视角的全局推理主要发生在编码器里。与锚点的联系：Quark 的 One-to-many attention 在结构上就是 SRT 解码器那种单 query 的 cross-attention：以目标视角 LDM 某层某像素的特征为唯一 query，对 M 个输入视角反投影得到的 Δ 做注意力。区别在于 Quark 的 key/value 已经按当前深度做了几何对齐，而 SRT 的 key/value 是没有几何对齐的全局 token。Quark 用几何换来了 1080p 实时；SRT 用通用性换来了对任意效果的表达能力，但主要在低分辨率的合成场景和 Street View 数据上验证过。"
+    },
+    {
+     "name_zh": "解码器-only 与编码器-解码器：token 数、复杂度与扩展规律",
+     "explain_zh": "直觉：解码器-only 结构（LVSM）让输入 token 和目标 token 一起做全自注意力，每个目标像素都能直接看到所有输入 patch，质量最好；但每渲染一个新视角都要重跑整个网络，计算量随 token 数平方增长。编码器-解码器结构先把输入压缩成固定数量的潜 token，之后的渲染成本与输入视角数无关，可以一次编码、多次渲染；但压缩会丢信息，LVSM 报告其编码器-解码器版在输入超过 8 张时性能下降。数值：LVSM 在 256×256、p=8 时每张图有 1024 个 token，2 张输入加 1 个目标共 3072 个 token，每层每个头的注意力矩阵约 940 万个元素。如果换成 Quark 的设定（8 张 1080p 输入、1 个 1080p 目标），每张图 32,400 个 token，共 291,600 个，注意力矩阵约 8.5×10¹⁰ 个元素，约为前者的 9000 倍，根本无法实时。后续工作都在解决这个问题：Efficient-LVSM 对输入视角只做视角内自注意力、目标视角用交叉注意力，推理快 4.4 倍；SVSM 重新论证了编码器-解码器可以是计算最优的，并能并行渲染多个目标视角；LaCT 和 tttLRM 用 TTT 快权重实现线性复杂度。"
+    },
+    {
+     "name_zh": "直接回归像素：不确定区域的失败方式，以及 IBR 为何在高分辨率上占优",
+     "explain_zh": "直觉：LVSM 用 MSE 加感知损失直接回归目标像素。在输入看不到、答案不唯一的区域（比如物体背面），确定性模型只能给出一个折中答案：使 MSE 最小的解是所有可能答案的平均，传统 3D 确定性方法因此常常模糊；LVSM 论文则报告自己在这些区域常出现带固定图案的噪声和闪烁。Rombach et al. 用自回归 Transformer 建模概率分布，可以采样出清晰的补全，但速度慢，结果也带随机性。另一方面，直接回归要求网络把全部高频纹理都“画”出来，而 IBR 只需决定从哪个输入像素拷贝。IBRNet 报告直接回归颜色不如混合（RFF 上 24.73 对 25.13 dB）；Quark 把 IBR 输出换成直接输出 RGB 后，PSNR 从 30.41 降到 29.18，LPIPS 从 0.154 升到 0.179，是所有消融中退化最大的一项。这两类证据并不矛盾：在 256–512 分辨率、大数据、大模型的条件下，回归的灵活性（可以修正几何误差和曝光差异）占了上风；在 1080p 实时、网络只能在低分辨率上运算的条件下，拷贝真实像素是得到锐利纹理最便宜的办法。与锚点的联系：Ha et al. 的立场最保守，网络只输出权重（外加一张补洞用的背景图 I_BG）。作者明确要求融合在几何引导下进行，而不是让网络自由生成像素，以此换取视角和时间上的一致性。"
+    },
+    {
+     "name_zh": "自监督与无位姿：RUST、UpSRT 与 RayZer",
+     "explain_zh": "直觉：训练如果需要真值相机位姿，就得先跑 COLMAP，这既限制了训练数据的规模，也让模型在 COLMAP 失败的场景（弱纹理、动态场景）上吃亏。RUST 训练一个会“偷看”目标图像的位姿编码器，学出一种潜在的相机表示交给解码器使用。RayZer 则让网络显式地为每张输入图预测相机：位姿由可学习的 camera token 经 Transformer 更新后用 MLP 预测，焦距由一个两层 MLP 预测（假设所有视角共享内参、主点在图像中心），再转成 Plücker 射线图。训练时只用其中一部分图像重建潜场景，再用预测出的相机去渲染另一部分图像，以像素损失做自监督。它的结果与用 COLMAP 位姿训练和测试的 GS-LRM、LVSM 相当，在 COLMAP 位姿有噪声的场景上甚至更好。与锚点的联系：两篇锚点都依赖精确标定，Quark 还依赖 SfM 点给出的近/远平面；Ha 在 ENeRF-Outdoor 上的结果就受到了同步与颜色标定误差的拖累。自监督位姿为相机可能被碰歪的真实临场部署提供了替代方案，但对于固定阵列，离线标定的精度仍然更高。"
+    },
+    {
+     "name_zh": "长上下文与记忆：从全注意力到 test-time training",
+     "explain_zh": "直觉：全注意力把所有输入 token 都放在工作记忆里，代价随 token 数平方增长；循环网络把历史压缩成一个固定大小的状态，代价是线性的，但容量有限。Test-time training（TTT）把网络的一部分权重（快权重）当作状态：推理时用输入 token 做几步梯度更新来“记住”场景，再用更新后的权重回答查询。LaCT 用 2K 到 100 万个 token 的大块做更新，大幅提高了 GPU 利用率和状态容量，并在 100 万 token 的上下文上做了 NVS。tttLRM 把多张图压缩进 TTT 快权重，形成隐式 3D 表示，再解码成 3DGS，支持流式地逐步精化。Online Neural Space Time Memory 面向多视角流式视频：记忆每隔一段时间更新一次、每帧都会使用，并用跨视角注意力处理记忆与当前帧之间的形变，在动态人体场景上实现了实时。与锚点的联系：这是对两篇锚点“无状态”缺陷的直接回应。Quark 逐帧独立重建；Ha 的时间机制只有输入深度端的差分掩码滤波和上一帧深度回灌，静态区域每帧最多保留 40% 的历史。TTT 记忆提供了一种可学习的长时状态，能记住“之前可见、现在被遮挡”的内容。"
+    },
+    {
+     "name_zh": "隐式几何的涌现与一致性风险",
+     "explain_zh": "直觉：没有显式几何，并不等于没有几何。GNT 的注意力图可以读出深度和遮挡关系；RayZer 在没有任何位姿标注的情况下学出了几何上有意义、可以插值的 SE(3) 相机；LVSM 能处理反射和细结构。但这类模型对每个目标视角独立生成像素，没有任何机制保证相邻视角、相邻帧的输出对应同一个 3D 场景。在输入覆盖充分的区域，数据会迫使输出大致一致；在不确定的区域，不同视角可能给出不同的“猜测”，相机一动就表现为闪烁和形变。对临场而言，这恰好是 Ha et al. 用 TCC、STED、SDT、SDV 等指标专门衡量的东西，而 LVSM 这类论文只报告逐帧的 PSNR/SSIM/LPIPS。要判断一个无几何模型能不能用于临场，至少要在视频序列和连续的相机轨迹上测量时间一致性和视角一致性，还要检查左右眼之间的几何是否一致，否则会引起立体视觉不适（见 v-perception）。"
+    }
+   ],
+   "equations": [
+    {
+     "tex": "\\mathbf{r}=(\\mathbf{d},\\ \\mathbf{m}),\\quad \\mathbf{m}=\\mathbf{o}\\times\\mathbf{d},\\quad \\|\\mathbf{d}\\|=1;\\qquad (\\mathbf{o}+s\\,\\mathbf{d})\\times\\mathbf{d}=\\mathbf{o}\\times\\mathbf{d};\\qquad \\mathbf{d}_{1}\\cdot\\mathbf{m}_{2}+\\mathbf{d}_{2}\\cdot\\mathbf{m}_{1}=0\\ \\Longleftrightarrow\\ \\text{coplanar}",
+     "explain_zh": "Plücker 射线坐标。o 是射线上任意一点，通常取相机中心；d 是单位方向；m=o×d 是射线的矩。第二个式子说明，把 o 沿射线移动任意距离 s，矩都不变，所以 (d, m) 唯一地描述一条直线，与选哪个点无关。第三个式子是两条直线共面（相交或平行）的充要条件，也就是多视角对应关系的代数形式。对每个像素 (u, v)，把 R^T K^{-1}[u, v, 1]^T 归一化得到 d，o 取相机中心，于是一张 H×W 的图像对应一张 H×W×6 的射线图；它与 RGB 拼接后切成 patch，就是 GS-LRM、LVSM 的输入（RayZer 用的是自己预测的相机算出的射线图）。例：o=(1,0,0)、d=(0,0,1)，m=o×d=(0·1−0·0, 0·0−1·1, 1·0−0·0)=(0,−1,0)；取同一射线上的 o'=(1,0,5)，m 仍为 (0,−1,0)。"
+    },
+    {
+     "tex": "\\mathbf{x}_{ij}=\\mathrm{Linear}_{\\mathrm{in}}\\big([\\mathbf{I}_{ij},\\mathbf{P}_{ij}]\\big)\\in\\mathbb{R}^{d},\\quad \\mathbf{q}_{j}=\\mathrm{Linear}_{\\mathrm{tgt}}\\big(\\mathbf{P}^{t}_{j}\\big)\\in\\mathbb{R}^{d},\\quad \\{\\mathbf{y}_{j}\\}=\\mathrm{Transformer}\\big(\\{\\mathbf{x}_{ij}\\},\\{\\mathbf{q}_{j}\\}\\big),\\quad \\hat{\\mathbf{I}}^{t}_{j}=\\sigma\\big(\\mathrm{Linear}_{\\mathrm{out}}(\\mathbf{y}_{j})\\big)\\in\\mathbb{R}^{3p^{2}}",
+     "explain_zh": "LVSM 的 token 化与输出（解码器-only 版）。i 是输入图编号，j 是 patch 编号；I_ij 是第 i 张图第 j 个 p×p patch 的像素（p=8，共 3p² 维），P_ij 是同一 patch 内各像素的 Plücker 射线（6p² 维），方括号表示拼接；Linear_in 把拼接后的向量投影成 d=768 维的 token x_ij；P^t_j 是目标视角第 j 个 patch 的射线，经 Linear_tgt 得到查询 token q_j，目标 token 不含任何像素信息；Transformer 在所有 x 与 q 上做全自注意力（24 层）；y_j 是目标 token 的输出；σ 是 sigmoid；Linear_out 把 y_j 映射成 3p²=192 个数，即这个 patch 的 RGB，所有 patch 拼回去就是目标图 Î^t。训练损失为 MSE(Î^t, I^t) + λ·Perceptual(Î^t, I^t)，场景数据取 λ=0.5，物体数据取 λ=1.0。例：256×256 的图每张有 (256/8)²=1024 个 patch，2 张输入加 1 个目标共 3072 个 token。整个模型中唯一与 3D 有关的量就是 P。"
+    },
+    {
+     "tex": "\\mathrm{softmax}\\!\\Big(\\frac{(\\mathbf{q}\\mathbf{W}_{Q})(\\mathbf{Z}\\mathbf{W}_{K})^{\\top}}{\\sqrt{d_k}}\\Big)\\mathbf{Z}\\mathbf{W}_{V}\\mathbf{W}_{O}=\\mathrm{softmax}\\!\\Big(\\frac{(\\mathbf{q}\\mathbf{W}_{Q}\\mathbf{W}_{K}^{\\top})\\,\\mathbf{Z}^{\\top}}{\\sqrt{d_k}}\\Big)\\mathbf{Z}\\,(\\mathbf{W}_{V}\\mathbf{W}_{O})",
+     "explain_zh": "单 query cross-attention，以及 Quark 的投影折叠。q（1×d 的行向量）是唯一的查询，在 SRT 解码器中是目标射线的编码，在 Quark 中是 LDM 某层某像素的特征 V；Z（M×d）是被查询的 token 集合，在 SRT 中是集合潜场景表示，在 Quark 中是 M 个输入视角反投影得到的 Δ；W_Q、W_K、W_V（d×d_k）与 W_O（d_k×d）是一个注意力头的投影矩阵，d_k 是头维度。这个等式利用了矩阵乘法的结合律：左边要先把 M 个 token 都乘以 W_K 和 W_V（代价约 2·M·d·d_k）；右边只需把 1 个 query 乘以 W_Q W_K^T，W_V W_O 可以预先合并，Z 本身不做任何投影。当 query 只有 1 个而 key 有 M 个时，右边的计算量随 M 增长得慢得多；但头数越多，每个头都要单独折叠，节省也越少。Quark 报告（d_k=32、8 个输入），单头时计算量约为标准 cross-attention 的 1/8.1，8 头时两者相同；4 头时输入从 4 增到 64，标准注意力的开销涨 13.0 倍，折叠后只涨 1.9 倍。例：M=8、d=d_k=32 时，左边光是对 Z 的投影就需要约 2×8×32×32≈1.6 万次乘加，右边对 q 的投影与输出投影合计只需约 2×32×32≈2 千次，W_V W_O 可以离线合并。"
+    }
+   ],
+   "evolution": [
+    {
+     "year": 2018,
+     "milestone_zh": "GQN（Science）：表示网络把各视角的编码相加，生成网络按查询视角输出图像，是“场景表示 + 视角查询”框架的起点"
+    },
+    {
+     "year": 2021,
+     "milestone_zh": "Light Field Networks（NeurIPS 2021）用 Plücker 坐标参数化 360° 光场，每条射线只需一次求值；Rombach et al.（ICCV 2021）证明自回归 Transformer 不需要 3D 先验也能从单图做大角度的新视角合成"
+    },
+    {
+     "year": 2021,
+     "milestone_zh": "SRT（arXiv 2021-11，CVPR 2022）提出集合潜场景表示与射线查询解码器，编码约 10 ms，渲染 121 fps"
+    },
+    {
+     "year": 2022,
+     "milestone_zh": "LFNR（CVPR 2022）与 GPNR（ECCV 2022）用极线 patch 加 Transformer；OSRT（NeurIPS 2022）引入物体分解；GNT（arXiv 2022，ICLR 2023）用 Transformer 取代体渲染公式"
+    },
+    {
+     "year": 2023,
+     "milestone_zh": "RUST（CVPR 2023）只用 RGB 训练，通过“偷看”目标图学习潜在位姿"
+    },
+    {
+     "year": 2024,
+     "milestone_zh": "LVSM（arXiv 2024-10，ICLR 2025）几乎不含 3D 归纳偏置，在 RealEstate10K 上达到 29.67 dB，超过 GS-LRM 约 1.6 dB；同年 Quark 采用几何感知设计实现 1080p 实时"
+    },
+    {
+     "year": 2025,
+     "milestone_zh": "RayZer（ICCV 2025）自监督地预测相机；LaCT 把 NVS 的上下文扩展到 100 万 token；token disentanglement 加合成数据的工作发表于 ICCV 2025"
+    },
+    {
+     "year": 2026,
+     "milestone_zh": "Efficient-LVSM（ICLR 2026）、SVSM 扩展规律研究、tttLRM（CVPR 2026）和 Online Neural Space Time Memory（在线动态 NVS）相继发布"
+    }
+   ],
+   "papers": [
+    {
+     "title": "Scene Representation Transformer: Geometry-Free Novel View Synthesis Through Set-Latent Scene Representations",
+     "authors": "Mehdi S. M. Sajjadi, Henning Meyer, Etienne Pot et al.",
+     "year": 2022,
+     "venue": "CVPR 2022",
+     "url": "https://arxiv.org/abs/2111.13152",
+     "citations": 268,
+     "role_zh": "SRT 用编码器 Transformer 在所有视角的 patch 之间做自注意力，形成集合潜场景表示；解码器以射线为 query 做 cross-attention 输出颜色，确立了无几何渲染器的标准结构，还给出了无位姿变体 UpSRT",
+     "priority": "must"
+    },
+    {
+     "title": "LVSM: A Large View Synthesis Model with Minimal 3D Inductive Bias",
+     "authors": "Haian Jin, Hanwen Jiang, Hao Tan et al.",
+     "year": 2025,
+     "venue": "ICLR 2025",
+     "url": "https://arxiv.org/abs/2410.17242",
+     "citations": 188,
+     "role_zh": "只用 Plücker 射线 token 作为 3D 信息，比较编码器-解码器与解码器-only 两种结构，直接回归像素；RealEstate10K 上 29.67 dB，超过 GS-LRM 和 MVSplat，是 2025 年以后大模型 NVS 的起点",
+     "priority": "must"
+    },
+    {
+     "title": "Generalizable Patch-Based Neural Rendering",
+     "authors": "Mohammed Suhail, Carlos Esteves, Leonid Sigal, Ameesh Makadia",
+     "year": 2022,
+     "venue": "ECCV 2022",
+     "url": "https://arxiv.org/abs/2207.10662",
+     "citations": 151,
+     "role_zh": "GPNR 是弱几何 Transformer 的代表：极线 patch 加三阶段 Transformer，使用以目标射线为基准的规范化编码；是 Quark 的基线（RFF 上 25.42 dB，每帧 25 s）",
+     "priority": "should"
+    },
+    {
+     "title": "RayZer: A Self-supervised Large View Synthesis Model",
+     "authors": "Hanwen Jiang, Hao Tan, Peng Wang et al.",
+     "year": 2025,
+     "venue": "ICCV 2025",
+     "url": "https://arxiv.org/abs/2505.00702",
+     "citations": 75,
+     "role_zh": "不需要任何位姿标注：自行预测相机，并用射线结构做自监督的重建与渲染，效果与使用 COLMAP 位姿的 LVSM、GS-LRM 相当，显示 3D 感知可以从中涌现",
+     "priority": "should"
+    },
+    {
+     "title": "Neural scene representation and rendering",
+     "authors": "S. M. Ali Eslami, Danilo Jimenez Rezende, Frederic Besse et al.",
+     "year": 2018,
+     "venue": "Science 2018",
+     "url": "https://doi.org/10.1126/science.aar6170",
+     "citations": 678,
+     "role_zh": "GQN：把多视角观测聚合成场景表示，再按查询视角生成图像，是“场景表示 + 视角查询”这一无几何范式的起点，但只适用于简单的合成场景",
+     "priority": "should"
+    },
+    {
+     "title": "Light Field Networks: Neural Scene Representations with Single-Evaluation Rendering",
+     "authors": "Vincent Sitzmann, Semon Rezchikov, William T. Freeman, Joshua B. Tenenbaum, Frédo Durand",
+     "year": 2021,
+     "venue": "NeurIPS 2021",
+     "url": "https://arxiv.org/abs/2106.02634",
+     "citations": 420,
+     "role_zh": "用 Plücker 坐标参数化 360° 光场，每条射线只需一次网络求值，并用元学习获得先验；把 Plücker 射线编码引入了神经场景表示",
+     "priority": "should"
+    },
+    {
+     "title": "Geometry-Free View Synthesis: Transformers and no 3D Priors",
+     "authors": "Robin Rombach, Patrick Esser, Björn Ommer",
+     "year": 2021,
+     "venue": "ICCV 2021",
+     "url": "https://arxiv.org/abs/2104.07652",
+     "citations": 120,
+     "role_zh": "在 VQGAN token 上训练自回归 Transformer，从单图生成大角度新视角；系统比较了多种注入 3D 先验的方式，得出不需要几何先验的结论，并强调概率建模的必要性",
+     "priority": "should"
+    },
+    {
+     "title": "RUST: Latent Neural Scene Representations from Unposed Imagery",
+     "authors": "Mehdi S. M. Sajjadi, Aravindh Mahendran, Thomas Kipf et al.",
+     "year": 2023,
+     "venue": "CVPR 2023 (Highlight)",
+     "url": "https://arxiv.org/abs/2211.14306",
+     "citations": 52,
+     "role_zh": "用“偷看”目标图的位姿编码器学习潜在位姿，只用 RGB 训练，质量接近使用真值位姿的方法，是 RayZer 的前身",
+     "priority": "optional"
+    },
+    {
+     "title": "Is Attention All That NeRF Needs?",
+     "authors": "Mukund Varma T, Peihao Wang, Xuxi Chen, Tianlong Chen, Subhashini Venugopalan, Zhangyang Wang",
+     "year": 2023,
+     "venue": "ICLR 2023",
+     "url": "https://arxiv.org/abs/2207.13298",
+     "citations": 155,
+     "role_zh": "GNT：view transformer 沿近邻视角的极线聚合特征，ray transformer 沿射线用注意力代替手写的体渲染公式；论文分析显示注意力图可以读出深度与遮挡，是介于可泛化 NeRF 与无几何渲染器之间的弱几何代表",
+     "priority": "optional"
+    },
+    {
+     "title": "Test-Time Training Done Right",
+     "authors": "Tianyuan Zhang, Sai Bi, Yicong Hong et al.",
+     "year": 2025,
+     "venue": "arXiv 2025",
+     "url": "https://arxiv.org/abs/2505.23884",
+     "citations": 121,
+     "role_zh": "LaCT：用大块 test-time training（每块 2K 到 100 万 token）提高硬件利用率与状态容量，在 100 万 token 的上下文上做 NVS，是 tttLRM 等线性复杂度 NVS 模型的基础",
+     "priority": "optional"
+    },
+    {
+     "title": "Efficient-LVSM: Faster, Cheaper, and Better Large View Synthesis Model via Decoupled Co-Refinement Attention",
+     "authors": "Xiaosong Jia, Yihang Sun, Junqi You et al.",
+     "year": 2026,
+     "venue": "ICLR 2026",
+     "url": "https://arxiv.org/abs/2602.06478",
+     "citations": 4,
+     "role_zh": "双流结构：输入视角只做视角内自注意力，目标视角先自注意力再交叉注意力；RealEstate10K 上 29.86 dB，推理快 4.4 倍，并支持 KV cache 增量推理",
+     "priority": "optional"
+    },
+    {
+     "title": "Scaling View Synthesis Transformers",
+     "authors": "Evan Kim, Hyunwoo Ryu, Thomas W. Mitchel et al.",
+     "year": 2026,
+     "venue": "arXiv 2026",
+     "url": "https://arxiv.org/abs/2602.21341",
+     "citations": 5,
+     "role_zh": "系统研究 NVS Transformer 的扩展规律，提出 SVSM，论证编码器-解码器可以是计算最优的，并能在一次编码后并行渲染多个目标视角",
+     "priority": "optional"
+    },
+    {
+     "title": "Scaling Transformer-Based Novel View Synthesis Models with Token Disentanglement and Synthetic Data",
+     "authors": "Nithin Gopalakrishnan Nair, Srinivas Kaza, Xuan Luo et al.",
+     "year": 2025,
+     "venue": "ICCV 2025",
+     "url": "https://arxiv.org/abs/2509.06950",
+     "citations": 4,
+     "role_zh": "作者包括 Quark 的 Kaza、Luo、Lombardi：在 LVSM 类模型中分离源视角与目标视角的 token 特征，并用扩散模型生成的合成数据扩充训练，是 Quark 团队进入本专题的工作",
+     "priority": "optional"
+    }
+   ],
+   "prereqs": [
+    "l-attention",
+    "l-encoding",
+    "g-pinhole",
+    "i-lightfield",
+    "n-generalizable",
+    "l-loss"
+   ],
+   "relation_to_anchors_zh": "两篇锚点都不是无几何方法，但本专题恰好标出了它们在“几何显式程度”这条轴上的位置。Quark 处在中间：它保留了显式的 LDM 几何（深度、density）和 IBR 渲染，但跨视角融合用的是 Transformer 式的 One-to-many attention，结构上与 SRT 解码器的单 query cross-attention 相同，只是 key/value 事先按当前深度做了几何对齐；它的射线方向编码 γ 与 GPNR 的规范化射线编码同属相对射线编码。Quark 的主要基线之一 GPNR 正是弱几何 Transformer 的代表：在 RFF 1024×768 上为 25.42 dB（Quark 为 26.03），每帧 25 s（Quark 为 32.2 ms，快 700 倍以上）。Quark 没有与同期的 LVSM 比较；它的 RGB Output 消融（PSNR 下降 1.23 dB）说明，在 1080p 输出、网络只在低分辨率上求解的条件下，直接回归像素不如混合真实像素。Quark 团队的后续工作则部分转入本专题：Scaling Transformer-Based NVS（ICCV 2025，作者包括 Kaza、Luo、Lombardi）在 LVSM 类模型上研究 token 解耦与合成数据；Online Neural Space Time Memory（2026）用 TTT 记忆做在线动态 NVS。Ha et al. 处在几何最显式的一端：深度来自立体匹配，一致性来自 TSDF，网络只输出融合权重和补洞用的背景图；作者明确主张融合应在几何引导下进行，而不是让网络自由生成像素。本专题的方法还没有在 Ha 的评测体系下接受检验：LVSM 自述在未见区域有噪声和闪烁，而 Ha 恰恰用 STED、TCC、SDT、SDV 衡量这类问题。对 3D 临场来说，本专题给出的是上限和方向：更少的手工假设、无需位姿的训练、长时记忆；两篇锚点给出的则是眼下能落地的实时方案。",
+   "debates_zh": [
+    "3D 归纳偏置是助力还是束缚：LVSM 在 RealEstate10K 上以 29.67 dB 超过 GS-LRM（28.10）和 MVSplat（26.39），支持“少偏置加大规模”的主张。但 MVSplat 只用 12M 参数，GPS-Gaussian 在单张 3090 上训练约 15 小时就能工作，在数据和算力受限时，几何偏置仍有明显优势（LVSM 也报告了单卡训练的小模型，但同样需要 7 天）。",
+    "回归、混合还是生成：确定性回归在不确定区域会模糊或出现噪声；IBR 混合生成不了没被观测到的内容；生成式模型（自回归、扩散）结果清晰，但带随机性，也可能前后不一致。临场场景要求忠实还原真人，生成式补全能否被接受仍有争议。",
+    "解码器-only 还是编码器-解码器：LVSM 认为解码器-only 质量更好，编码器-解码器的压缩会丢信息；SVSM（2026）认为之前的负面结论来自次优的结构选择和算力不对等的比较，编码器-解码器可以是计算最优的，而且更适合一次编码、多次渲染。",
+    "评测是否公平：多数工作在 256×256 的 RealEstate10K 上比较，训练算力却相差悬殊（从 64 张 A100 级别到单卡）；SVSM 明确指出跨算力预算的比较会得出误导性的结论，读表时应同时看训练算力。",
+    "“无几何”是否名副其实：所有这些模型都依赖射线编码，RayZer 甚至把射线结构称为它唯一的 3D 先验；GPNR、LFNR、GNT 还用极线决定采样位置。几何用多少是一个连续谱，不是非此即彼的选择。"
+   ],
+   "open_questions_zh": [
+    "高分辨率与实时：token 数随分辨率平方增长，8 个视角的 1080p 输入约有 29 万个 token。能否借鉴 Quark 的做法，在低分辨率上用 Transformer 求混合权重，再用 IBR 拷贝全分辨率像素？",
+    "时间与视角一致性：怎样在无几何模型中引入一致性约束或状态（例如 TTT 记忆、KV cache），并在视频和连续相机轨迹上用 STED、TCC 等指标加以验证？",
+    "不确定性表达：确定性回归会把多种可能平均掉。能否让模型输出不确定性，供临场系统判断何时退回几何方法、何时提示用户？",
+    "训练数据：真实的多视角视频（尤其是人像）很稀缺，扩散模型生成的合成数据又带有伪影。什么样的数据配方能让无几何模型泛化到临场人像？",
+    "与显式表示互相转换：tttLRM 展示了可以从隐式快权重解码出 3DGS。能否把无几何模型当作教师，蒸馏出能实时渲染、也便于传输的显式表示？"
+   ],
+   "resources": [
+    {
+     "title": "Dive into Deep Learning: Attention Mechanisms and Transformers",
+     "url": "https://d2l.ai/chapter_attention-mechanisms-and-transformers/index.html",
+     "type": "book",
+     "note_zh": "d2l.ai 的注意力与 Transformer 一章，从 Q/K/V、缩放点积到多头注意力和 ViT 的 patch 化都有可运行代码。读 SRT、LVSM 之前先把这章跑一遍，就能看懂 token 化与 cross-attention 的维度变化。"
+    },
+    {
+     "title": "Haian-Jin/LVSM (code)",
+     "url": "https://github.com/Haian-Jin/LVSM",
+     "type": "code",
+     "note_zh": "LVSM 作者的代码仓库，包含 Plücker 射线图的计算、patch token 化，以及编码器-解码器和解码器-only 两种结构，可以与本专题的 LVSM 公式对照阅读；项目主页见 haian-jin.github.io/projects/LVSM。"
+    },
+    {
+     "title": "SRT project page",
+     "url": "https://srt-paper.github.io/",
+     "type": "paper",
+     "note_zh": "SRT 的项目主页，包含结构图、结果视频和 UpSRT 的无位姿演示，有助于直观理解“集合潜表示 + 射线查询”的工作方式。"
+    },
+    {
+     "title": "MIT 6.S980: Machine Learning for Inverse Graphics (Fall 2023)",
+     "url": "https://scenerepresentations.org/courses/2023/fall/inverse-graphics/",
+     "type": "course",
+     "note_zh": "Sitzmann（Light Field Networks 作者）开设的课程。其中光场表示与光场渲染相关讲次讲解 Plücker 参数化和单次求值的光场网络，Prior-Based Reconstruction 系列讲解从图像直接推断场景，是理解无几何路线思想来源的好材料。"
+    }
+   ]
+  }
+ ],
+ "change_log": [
+  "核验方法：46 篇论文全部经 Semantic Scholar 批量接口（按 arXiv ID / DOI）核对存在性、年份、venue 与引用数，草稿引用数均与 S2 一致；新增论文同样取自 S2。近期论文（2025–2026）逐一读取 arXiv 摘要页核对；关键数字通过 ar5iv / arXiv HTML 原文逐项核对；锚点相关陈述对照 anchor_quark.json 与 anchor_ha.json。",
+  "a-layered-nvs：Stereo Magnification 数据量由“7000 多个片段”改为“约 7000 个片段（约 75 万帧）”；LLFF 的输入改为“参考视角 + 4 个近邻共 5 个视角”，每个体素输出 1 个 alpha + 5 路权重（原文核实）。",
+  "a-layered-nvs：修正 StereoLayers 与 SIMPLI 被混写的问题。原稿称二者都“先预测 P=40 个平面、注意力池化合并为 4–8 层、前馈误差校正”，实际这是 SIMPLI 的做法；StereoLayers 是从立体对分两阶段先推几何、再推颜色/透明度。SIMPLI 的层深度机制也改为原文描述：沿平面轴自注意力预测逐平面不透明度，再在组内 over 合成出层深度。",
+  "a-layered-nvs：MatryODShka 补充 MSI 半径 1–100 m、渲染速度（笔记本 60 Hz 以上）；Immersive LF Video 的播放平台按项目页改为“网页浏览器与移动 VR/AR”。",
+  "a-layered-nvs：DeepView 平面数改为“4 视角 Spaces 实验训练 64 / 推理 80 个平面”（原稿只写推理 80）；注明 SSIM 消融是在 512×300、20 个平面的缩小设置下做的；“梯度分量全部置零（各层独立处理）”改为“完全不提供梯度分量”。",
+  "a-layered-nvs 公式 2：核实 DeepView 用预乘 alpha 颜色，所以 ∂O/∂c_d 不含 α_d。补充了这一说明，并据此改写例子（颜色变化 Δc 导致渲染变化 0.2·Δc）。",
+  "a-layered-nvs：采样定理一节补充说明 LLFF 的界针对相邻输入视角，用到 Quark（目标视角对齐）时只是数量级估算。post-activation 例子改为具体算出的过渡带宽度（约 3 像素对约 1.4 像素）。Ha 的 9K+1 通道列表补上漏掉的 TSDF 深度。“近/远平面设错就直接失败”改为更精确、有出处的表述。SIMPLI 的 4.4 s 注明是 Quark 在同一 A100 上测得；“最高水平”软化为“据我们检索仍是代表作”；2606.02068 注明是逐场景可微优化加单步扩散，不是前馈方法。",
+  "a-layered-nvs：新增资源 Spaces 数据集仓库（已核实 URL）；补全若干论文的作者列表；Pushing the Boundaries 的“约 4 倍”按摘要改为“理论上可外推的横向视点移动为先前工作的 4 倍”。",
+  "a-generalizable-ibr：修正事实错误。原稿称 ENeRF-Outdoor 是 Ha 的“唯一户外测试集”，但 D3DMV 同样是户外数据；另注明 ENeRF-Outdoor 是 ENeRF 团队于 2023-01 随代码发布，不在 ENeRF 论文中。",
+  "a-generalizable-ibr：ENeRF 的 25.21 FPS 改为“512×512、RTX 3090，静态场景 3 个、动态场景 2 个源视角”（原稿写死为 3 视角）；阶段耗时注明是 512×512 一帧。GPNR 的“11% 数据”补充具体设定（37 个 LLFF 场景 + 131 个 IBRNet 场景，且仅限部分设定）。FVS 的“对输入数量不变”改为“可处理可变数量输入”。DeepStereo 补充 512×512 与多核 CPU 工作站。",
+  "a-generalizable-ibr：补充 IBRNet 直接回归颜色的消融数字（RFF 24.73 对 25.13 dB）；新增提醒：N3DV 即 DyNeRF，两篇锚点的评测协议不同，ENeRF 数字不能横向对照；GPS-Gaussian “必须”用真值深度改为“使用”。",
+  "a-generalizable-ibr：新增 SynSin（CVPR 2020，S2 引用 555），它是 FWD 明确引用的前身，也是 Ha“前向 splat + 补洞”思路的起点。Deep Blending 的 URL 由 DOI（对非浏览器返回 403）换为已核实可访问的 Inria 项目页。",
+  "a-ff-3dgs：修正 pixelSplat 概率采样的收益。原稿写“约 1 dB”，原文 Table 2 为 26.09 → 24.62，约 1.5 dB（约 1 dB 的是去掉 depth encoding 那一项）。另注明 MVSplat/GS-LRM 表中 pixelSplat 为 25.89，而 pixelSplat 原文报告 26.09。",
+  "a-ff-3dgs：Ha 的高斯尺度公式由 S = t/f·I 改为 S ∝ t/f·I，因为原文 A.3 只说“投影覆盖 1 个像素”，没有给出比例常数。MVSplat 公式中的 C̃ 改为 Ĉ（精化并上采样后的代价），并补充随后的残差深度细化。GS-LRM 的训练时间核实为 2 天加 1 天，12 通道参数化核实无误；它的局限表述改为原文的“只显式建模视锥内表面，不可见区域无法重建”。",
+  "a-ff-3dgs：一次重建、多次渲染的速度比较补充硬件差异说明（GPS-Gaussian 为 RTX 3090、1024²；Quark 为 A100；Ha 未说明 GPU 且不含立体深度）。Tele360 的描述按 arXiv 摘要改为“轻量可微 LM 精化层 + 师生蒸馏几何先验”。TokenGS（arXiv 2604.15239）、Depth Anything 3（2511.10647）已核实存在。",
+  "a-geometry-free：SRT 的验证范围改为“NMR/MultiShapeNet 合成数据 + Street View 实拍”，不再说只在合成数据上验证；补充 7400 万参数的构成。LVSM 在不确定区域的失败方式按原文修正：传统 3D 确定性方法表现为模糊，LVSM 自述是带固定图案的噪声和闪烁。",
+  "a-geometry-free：RayZer 的“预测相机与真实相机高度一致”没有依据，改为原文可支持的“学出几何上有意义、可插值的 SE(3) 相机”，并补充焦距由两层 MLP 预测、共享内参的假设。“token disentanglement 被指出没有控制算力”找不到出处，已删除，改为 SVSM 摘要中关于跨算力比较的一般性结论。SVSM 可并行渲染多个目标视角已按原文核实。",
+  "a-geometry-free：新增 GNT（Is Attention All That NeRF Needs?, ICLR 2023，S2 引用 155）。它是正文与演进中反复提到的弱几何代表，但原来的论文列表里缺了它。公式 3 补充“头数越多节省越少，8 头时与标准注意力相同”。",
+  "已逐项核实、无需修改的内容：LLFF 采样界 min(D,W/2)、式 (8) 与 γ=f/(D·z_min)；DeepView 的 50 s/P100、16 相机/100 场景、10 cm/0.7 m；IBRNet 的 n·N 采样；ENeRF 的 64/8 平面、2 样本、λ=1、60 倍加速、深度监督无益；GPS-Gaussian 的 27 ms + 0.8 ms/视角、T=3、Softplus/Sigmoid、IBRNet 约 0.25 FPS、15 小时训练；MVSplat 的 12.0M/125.4M、0.044/0.104 s；LVSM 的 3072 潜 token、d=768、λ=0.5/1.0、编码器-解码器版超过 8 视角性能下降、64 A100 训练 3–7 天；SRT 的 23.41→21.64；Efficient-LVSM 的 29.86 dB 与 4.4 倍加速；LaCT 的 100 万 token NVS；以及所有 Quark 与 Ha 的数字（与锚点文件一致）。所有资源 URL 均经 curl 核实可访问（返回 200），唯一例外是 GQN 的 DOI：对脚本返回 403（出版方拦截非浏览器请求），但该 DOI 已在 S2 结果中出现，保留。"
+ ]
+}

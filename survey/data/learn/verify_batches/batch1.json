@@ -1,0 +1,486 @@
+[
+ {
+  "title": "Stereo Processing by Semiglobal Matching and Mutual Information",
+  "authors": "Heiko Hirschmüller (DLR, German Aerospace Center)",
+  "year": 2008,
+  "venue": "IEEE TPAMI 30(2), 328–341（会议版 CVPR 2005）",
+  "url": "https://doi.org/10.1109/TPAMI.2007.1166",
+  "citations": 4336,
+  "citations_source": "OpenAlex",
+  "theme": "t-ibr-geometry",
+  "influence_zh": "SGM 沿多条一维路径做动态规划，以此近似二维的全局能量最小化。它的精度接近全局方法，复杂度却只有 O(WHD)（W、H 为图像宽高，D 为视差搜索范围），而且计算高度规整，可以在 FPGA、GPU 和嵌入式芯片上实时运行。2008 年以来，它是工业界（车载、航测、机器人、深度相机）最常用的立体算法，也常被用作 MC-CNN 等深度学习立体方法的后处理。",
+  "contributions_zh": "(1) 匹配代价采用基于互信息（MI）的逐像素代价，能补偿两张图之间的辐射差异（曝光、相机响应）。(2) 能量：E(D) = Σ_p C(p, D_p) + Σ_{q∈N_p} P₁·[|D_p − D_q| = 1] + Σ_{q∈N_p} P₂·[|D_p − D_q| > 1]。D 是视差图，C 是匹配代价，N_p 是像素 p 的邻域，[·] 在条件成立时为 1、否则为 0。较小的 P₁ 允许斜面上的视差逐像素变化，较大的 P₂ 抑制视差跳变，并随图像梯度自适应减小，以便在物体边缘保留跳变；要求 P₂ ≥ P₁。(3) 路径聚合：沿方向 r 递推 \\(L_r(p,d) = C(p,d) + \\min\\big(L_r(p-r,d),\\ L_r(p-r,d\\pm1)+P_1,\\ \\min_i L_r(p-r,i)+P_2\\big) - \\min_k L_r(p-r,k)\\)，最后一项只是为了防止数值无限增大。把 8 个或 16 个方向的 L_r 相加得到 S(p, d)，每个像素取使 S 最小的 d。(4) 后处理：亚像素二次拟合、左右一致性检查剔除遮挡、大图分块处理。例：1 MP 图像、视差范围 256 时，代价体有 2.56 亿项，每项 16 bit 约 512 MB，所以大图需要分块。",
+  "anchor_link_zh": "Ha et al. 的逐视角深度用的是 RAFT-Stereo 而不是 SGM，但论文没有把深度估计的耗时计入实时预算：Table 4 只包含 forward-splatting 10 ms、TSDF 6 ms、融合网络 23 ms（TensorRT）。如果要在真实的远程临场系统里为每路相机在线计算深度，SGM 仍是最成熟、最容易做成硬件的方案。SGM 的 P₁/P₂ 是空间上的平滑先验；Ha et al. 的颜色差分掩码滤波（Sec. 3.2 Eq. 1–2，λ_t = 0.7、β = 0.6）可以看成在时间维上加的类似先验：静止区域沿用历史深度，运动区域接受新深度。MI 代价针对的辐射差异，也正是 Quark 在 Sec. 4.3 自述的弱点：输入曝光不一致时，blend weights 会产生边缘伪影和闪烁。",
+  "concept_ids": [
+   "d-stereo",
+   "f-optim",
+   "g-depth",
+   "v-temporal",
+   "a-learned-stereo"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-ibr-geometry"
+  ]
+ },
+ {
+  "title": "Accurate, Dense, and Robust Multiview Stereopsis",
+  "authors": "Yasutaka Furukawa, Jean Ponce (UIUC / École Normale Supérieure)",
+  "year": 2010,
+  "venue": "IEEE TPAMI 32(8), 1362–1376（会议版 CVPR 2007）",
+  "url": "https://doi.org/10.1109/TPAMI.2009.161",
+  "citations": 1773,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-ibr-geometry",
+  "influence_zh": "PMVS 以带法向的小面片（patch）为基本单元，通过“匹配—扩展—过滤”的循环，从稀疏特征点生长出稠密而准确的点云。发表时它在 Middlebury MVS 基准的多数数据集上名列前茅，并以开源软件的形式与 Bundler 组合（CMVS/PMVS），成为 2010 年代初三维重建的标准流水线。",
+  "contributions_zh": "(1) 表示：每个 patch 由中心 c(p)、法向 n(p) 和能看到它的图像集合 V(p) 组成，是一个有朝向的小矩形面片。(2) 光度一致性：把 patch 投影到各可见图像中，用 NCC 比较纹理，并通过优化 c(p) 和 n(p) 使一致性最大。(3) 三步流程：先匹配 Harris/DoG 特征得到初始的稀疏 patch；再向相邻的空白图像单元扩展出新 patch；最后用可见性约束过滤外点。扩展和过滤交替进行若干轮。(4) 可选地把 patch 转换为网格。",
+  "anchor_link_zh": "PMVS 的 patch 是有法向、有物理尺寸的面元；Ha et al. 的像素高斯（Sec. 3.1, A.3）则是完全不透明、各向同性的面元，尺度按“投影后恰好覆盖 1 个像素”解析设定，没有法向。锚点笔记指出的 Ha 的一个局限——忽略表面倾斜，掠射角下会出现拉伸或空隙——正是 PMVS 用法向 n(p) 显式建模的部分。PMVS 过滤阶段用可见性剔除外点，也对应 Ha et al. TSDF 中 s_k < −τ 时把权重置零的可见性处理（A.1）。",
+  "concept_ids": [
+   "d-mvs",
+   "r-reps",
+   "n-3dgs",
+   "r-raster"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-ibr-geometry"
+  ]
+ },
+ {
+  "title": "PatchMatch Stereo - Stereo Matching with Slanted Support Windows",
+  "authors": "Michael Bleyer, Christoph Rhemann, Carsten Rother (TU Wien / Microsoft Research Cambridge)",
+  "year": 2011,
+  "venue": "BMVC 2011, 14.1–14.11",
+  "url": "https://doi.org/10.5244/C.25.14",
+  "citations": 823,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-ibr-geometry",
+  "influence_zh": "这篇论文把 Barnes 等人 PatchMatch 的“随机搜索 + 邻域传播”思想引入立体匹配：每个像素估计一个任意朝向的 3D 平面，而不是一个整数视差，从而消除传统窗口匹配偏向前平行（fronto-parallel）表面的偏差，并得到亚像素精度。“随机初始化 + 传播 + 局部精化”随后成为 COLMAP MVS、Gipuma、ACMM 等多视角立体方法的核心搜索策略。",
+  "contributions_zh": "(1) 倾斜支持窗口：像素 p 的视差由它所属的平面给出，d_p = a_f·p_x + b_f·p_y + c_f，其中 (a_f, b_f, c_f) 由平面上的一点和平面法向决定。窗口内每个像素按这个平面算出各自的视差，而不是共用同一个视差。(2) 自适应支持权重 w(p, q) = exp(−‖I_p − I_q‖/γ)：颜色与中心像素相近的邻居权重大，以减轻边缘膨胀；γ 是用户设定的参数。(3) 搜索：先给每个像素随机分配一个平面，然后依次做空间传播（尝试邻居的平面）、视图传播（左右视图之间互传）、时间传播（视频中前后帧之间互传）和平面精化（在逐步缩小的范围内随机扰动），共迭代 3 轮。(4) 结果：在 Middlebury 上是最好的局部方法；以 0.5 像素阈值计，在约 110 个方法中排第 2；每对图像约需 1 分钟。",
+  "anchor_link_zh": "本文的时间传播把前一帧的平面作为当前帧的候选假设，这与 Ha et al. 的两种时间机制思路相同：颜色差分掩码下的递归深度滤波（Sec. 3.2 Eq. 2），以及把上一帧 TSDF 输出的深度 𝒟^{t−1} 作为额外输入回灌（A.2, Eq. 13–14）。区别在于，本文让历史假设与新观测按匹配代价竞争；Ha et al. 则按固定的掩码比例混合，没有“历史更好就保留”的判断。Quark 的深度参数化也有类似的局部搜索约束：每层深度只能在自己的等视差带内，由 tanh 输出做调整（Sec. 3.2.3 Eq. 4）。",
+  "concept_ids": [
+   "d-stereo",
+   "d-mvs",
+   "f-optim",
+   "v-temporal"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-ibr-geometry"
+  ]
+ },
+ {
+  "title": "Structure-from-Motion Revisited",
+  "authors": "Johannes L. Schönberger, Jan-Michael Frahm (UNC Chapel Hill / ETH Zürich)",
+  "year": 2016,
+  "venue": "CVPR 2016",
+  "url": "https://openaccess.thecvf.com/content_cvpr_2016/papers/Schonberger_Structure-From-Motion_Revisited_CVPR_2016_paper.pdf",
+  "citations": 8115,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-ibr-geometry",
+  "influence_zh": "这是 COLMAP 的 SfM 论文。它针对增量式 SfM 在鲁棒性、精度、完整度和可扩展性上的瓶颈逐一改进，并以开源软件 COLMAP 发布。今天几乎所有 NeRF、3DGS 和可泛化 NVS 数据集的相机位姿都由 COLMAP 计算，它已经成为三维视觉中事实上的“位姿真值”工具。",
+  "contributions_zh": "(1) 场景图增强：几何验证时同时估计基础矩阵 F、本质矩阵 E 和单应 H 三种模型，区分一般运动、纯旋转、全景等情形，减少错误的图像对。(2) 下一最佳视角选择：用多分辨率网格金字塔给候选图像打分，同时考虑可见的已重建点的数量，以及这些点在图像中分布是否均匀。(3) 鲁棒高效的三角化：基于 RANSAC 的多视角三角化，比穷举式快 10–40 倍。(4) 迭代执行 BA、重新三角化和外点过滤，显著提升完整度。(5) 冗余视角挖掘：把高度重叠的相机分组参数化，加速 BA。结果：Rome 数据集 74,394 张图，COLMAP 注册 20,918 张，VisualSFM 注册 14,797 张，Bundler 注册 13,455 张。",
+  "anchor_link_zh": "两篇锚点都直接引用本文。Quark 在 Sec. 3.4（训练）中写明：每个训练样本的近/远平面 [η, f] 根据重建出的 SfM 点深度分布自适应设定，引用的就是本文。这两个值决定了 LDM 各等视差层带的位置（δ = (ℓ−0.5)/L，Sec. 3.2.3），设错了，表面就可能落在所有层带之外。Ha et al. 在 Sec. 3 写明，固定阵列的相机位姿用 COLMAP 一次性计算（但附录 A.7 又说使用数据集提供的参数，两处没有统一）。COLMAP 的输出没有公制尺度，而 Ha 的 TSDF 截断 τ = 0.02 m 是公制量，复现时必须先核对这一点。",
+  "concept_ids": [
+   "g-sfm",
+   "f-optim",
+   "g-epipolar",
+   "g-depth"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-ibr-geometry"
+  ]
+ },
+ {
+  "title": "Pixelwise View Selection for Unstructured Multi-View Stereo",
+  "authors": "Johannes L. Schönberger, Enliang Zheng, Marc Pollefeys, Jan-Michael Frahm (ETH Zürich / UNC Chapel Hill / Microsoft)",
+  "year": 2016,
+  "venue": "ECCV 2016",
+  "url": "https://doi.org/10.1007/978-3-319-46487-9_31",
+  "citations": 2946,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-ibr-geometry",
+  "influence_zh": "这是 COLMAP 的稠密 MVS 部分。它在 PatchMatch 框架中逐像素联合估计深度和法向，为每个像素概率地选择可信的源视角，最后用多视角几何一致性过滤并融合深度图。它是 2016 年以后最常用的传统 MVS 基线，也常被用来为 IBR 系统和学习式 MVS 提供几何或伪真值。",
+  "contributions_zh": "(1) 在改进的 PatchMatch 采样方案中逐像素联合估计深度与法向，斜面更完整、更准确。(2) 逐像素视角选择：结合三角化角度、入射角和图像分辨率三种几何先验，加上一个沿传播方向的视角选择平滑项，推断每个像素应该使用哪些源视角。(3) 用双边加权的 NCC 作为光度一致性，改善遮挡边界。(4) 多视角几何一致性项：在精化深度/法向的同时做基于图像的融合，并可靠地过滤外点，得到可以直接网格化的点云。(5) CUDA 实现（Titan X）；Middlebury 完整版（约 300 张 640×480 图）约 40 秒/视角。",
+  "anchor_link_zh": "“每个像素该信任哪几个视角”正是两篇锚点的核心问题。本文用概率推断回答，锚点用网络回答：Quark 用 One-to-many attention 为每层每个像素生成对 M=8 个输入的 blend weights（Sec. 3.3）；Ha et al. 的 U-Net 为 K=4 张前向渲染图预测逐像素权重 w_k（Sec. 3.3）。本文的三种几何先验（三角化角、入射角、分辨率）与 Ha et al. A.4 中的相机特征（输入射线与 TSDF 法线的点积、相机间距离、视线夹角）几乎一一对应。本文“多视角几何一致性 + 融合”的做法，与 Ha et al. 用 image-based TSDF 融合 K 张深度图（A.1）在思想上一致。",
+  "concept_ids": [
+   "d-mvs",
+   "i-blending",
+   "d-tsdf",
+   "f-prob",
+   "a-learned-mvs"
+  ],
+  "difficulty": "专家",
+  "must_read": false,
+  "themes": [
+   "t-ibr-geometry"
+  ]
+ },
+ {
+  "title": "Soft 3D Reconstruction for View Synthesis",
+  "authors": "Eric Penner, Li Zhang (Google)",
+  "year": 2017,
+  "venue": "ACM TOG 36(6) / SIGGRAPH Asia 2017, Article 235",
+  "url": "https://doi.org/10.1145/3130800.3130855",
+  "citations": 422,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-ibr-geometry",
+  "influence_zh": "在深度学习 NVS 兴起前夕，这篇论文给出了一种“不硬选深度”的经典 IBR：把立体匹配中的深度不确定性一直保留到渲染阶段，用软可见性（soft visibility）合成新视角。它在物体边缘、树叶、反射和弱纹理处明显优于硬深度方法。Quark 的直接前身 DeepView（Flynn et al. 2019）把本文作为主要基线进行定量比较，并明确说自己“通过迭代改进可见性信息”这一点与 Soft3D 相似。",
+  "contributions_zh": "(1) 逐视角快速局部立体：在参考视角做平面扫描，SAD 代价用 O(1) 复杂度的引导滤波聚合，得到每个输入视角的深度图。(2) 投票与共识：每张深度图向邻近视角的体空间投票，再按投票者的置信度归一化，得到表面共识体（Eq. 9；一维采集最多 10 个邻居，二维采集最多 25 个）。(3) 软可见性：沿射线把共识值当作不透明度累积，得到每条纹理映射射线的可见概率，并用它做逐像素的视角选择。(4) 迭代：用软可见性再做一次考虑遮挡的立体匹配，改善物体边缘的深度。(5) 渲染：按软可见性加权混合各输入图的颜色。CPU 实现中重建耗时 10 s，渲染 64 帧耗时 80 s，比 Kalantari et al. 2016 的 GPU 方法快近一个数量级。在 Lytro 光场、宽基线采集和 5×5 相机阵列的光场视频上做了验证，结果在时间上连续。",
+  "anchor_link_zh": "Ha et al. 在 Sec. 2 把本文与 Hedman 2016、Deep Blending 并列为 IBR 代表作引用，而 Ha 的几何模块几乎就是本文的实时、目标视角版本。本文的流程是：逐视角立体深度 → 向邻近视角投票 → 按置信度归一化得到共识体。Ha 的流程是：逐视角 RAFT-Stereo 深度 → 沿目标射线投到 K 个视角求截断符号距离 → 按局部方差置信度 ω_k 加权求和得到 TSDF（A.1）。两者都用“按置信度归一化的多视角共识”对抗单视角深度噪声。不同的是，Ha 最后用射线步进取零交叉，得到单一的硬深度；本文则保留软分布。因此在高光等深度有歧义的区域，Ha 会出现一致性断裂（Sec. 4.6, Fig. 9）。Quark 每层的 density σ（sigmoid 输出），以及 render-and-refine 中“渲染回输入视角、得到可见性残差、再更新几何”的迭代（Sec. 3.2.2），可以看成本文软可见性和“用可见性重做立体”的学习版。",
+  "concept_ids": [
+   "d-mvs",
+   "i-psv",
+   "r-alpha",
+   "d-tsdf",
+   "i-blending",
+   "i-layered"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-ibr-geometry"
+  ]
+ },
+ {
+  "title": "A Volumetric Method for Building Complex Models from Range Images",
+  "authors": "Brian Curless, Marc Levoy (Stanford)",
+  "year": 1996,
+  "venue": "SIGGRAPH 1996",
+  "url": "https://graphics.stanford.edu/papers/volrange/",
+  "citations": 3897,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-fusion-capture",
+  "influence_zh": "它提出用“累积加权有符号距离函数”融合多次深度扫描，此后约 30 年的深度融合基本都沿用这个做法。每个体素只存两个数：到表面的有符号距离 D 和累计权重 W。来一幅新扫描就做一次加权平均，D 的零交叉就是表面，最后用 Marching Cubes 抽出网格。论文证明，在一定假设下这个零交叉在最小二乘意义下最优。KinectFusion、Fusion4D、Project Starline 和 Ha et al. 用到的 TSDF，都是它的实时版本或图像空间版本。",
+  "contributions_zh": "(1) 每幅深度图沿视线转成截断的有符号距离“斜坡” d_i(x) 和权重 w_i(x)，只在测量点附近保留，远处截断。(2) 增量更新 \\( D_{i+1}=\\frac{W_i D_i + w_{i+1} d_{i+1}}{W_i + w_{i+1}},\\ W_{i+1}=W_i+w_{i+1} \\)，结果与扫描顺序无关。这等价于逐点求加权最小二乘解。(3) 权重随视线与表面法线的夹角下降：掠射角下的测量误差大，所以降低权重。(4) 表面后方的权重逐渐衰减，防止把另一侧的薄结构“挖穿”。(5) 把空间标成 unseen、empty、near-surface 三种状态，在 empty 与 unseen 的交界处补面（space carving），得到水密模型。论文最多融合了 70 幅扫描，模型最多约 260 万个三角形。",
+  "anchor_link_zh": "Ha et al. 附录 A.1 的 image-based TSDF 公式 \\( s=\\sum_k \\omega_k\\,\\mathrm{clamp}(s_k,-\\tau,\\tau) \\) 就是本文的加权平均。这里省掉了除以 Σω，因为权重为正，只需要找符号变化的位置。其中“s_k < −τ 时令 ω_k = 0”就是本文“表面后方降权、防止过度挖空”的规则，Starline 原文也明确写了 Similarly to Curless and Levoy。如果不懂“有符号距离 + 截断 + 加权平均 + 零交叉即表面”这一套，读 Ha 的 2b 阶段时会不明白：为什么沿目标射线步进、找到 s 变号就得到一张“多视角一致”的深度？τ = 0.02 m 又在控制什么？答案是：τ 决定一个深度样本能影响多厚的一层空间，也就决定了不同视角的误差能被平均掉多少。Quark 不使用 TSDF。",
+  "concept_ids": [
+   "d-tsdf",
+   "f-prob",
+   "d-sensors",
+   "r-reps"
+  ],
+  "difficulty": "入门",
+  "must_read": true,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "Virtualized Reality: Constructing Virtual Worlds from Real Scenes",
+  "authors": "Takeo Kanade, Peter Rander, P. J. Narayanan (CMU)",
+  "year": 1997,
+  "venue": "IEEE MultiMedia 1997",
+  "url": "https://doi.org/10.1109/93.580394",
+  "citations": 741,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-fusion-capture",
+  "influence_zh": "它是最早用环绕相机阵列拍摄真实动态事件、让观众在观看时自由选择视点，并把这件事做成系统、给出名字（Virtualized Reality）的工作之一。它开创了自由视点视频和多相机穹顶采集。同一实验室后来的 Panoptic Studio 是它的直接继承者。",
+  "contributions_zh": "CMU 的 3D Dome 是一个直径约 5 m 的半球穹顶，节点上装了 51 台同步相机。对选定的若干方向，用 multi-baseline stereo（多基线立体，融合多幅图像以降低匹配歧义）计算与像素对齐的稠密深度，再三角化成网格、做纹理映射，由一台“soft camera”从任意视点渲染。论文讨论了两种表示：多个视角相关模型（每个参考视角一张带深度的纹理网格），以及融合后的单一视角无关模型。这正是后来 IBR 路线和全局几何路线的分野。",
+  "anchor_link_zh": "Ha et al. 与 Quark 的做法都是：每个输入视角带深度（或由网络推断几何），渲染时只取最近的几个视角做 warp 与混合（Ha 取 K=4，Quark 取 8 路）。这是本文“视角相关模型”路线的现代版本。Ha 假设的“固定、已标定、同步的相机阵列”（DyNeRF 为 18–22 台）与 51 台相机的穹顶是同一类设置。读这篇可以理解两篇锚点为什么都把“选哪几个输入视角”当作核心设计：视角越近，warp 误差和遮挡越少。",
+  "concept_ids": [
+   "g-rig",
+   "d-stereo",
+   "d-mvs",
+   "i-warping"
+  ],
+  "difficulty": "入门",
+  "must_read": false,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "The Office of the Future: A Unified Approach to Image-Based Modeling and Spatially Immersive Displays",
+  "authors": "Ramesh Raskar, Greg Welch, ..., Henry Fuchs (UNC Chapel Hill)",
+  "year": 1998,
+  "venue": "SIGGRAPH 1998",
+  "url": "https://doi.org/10.1145/280814.280861",
+  "citations": 1020,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-fusion-capture",
+  "influence_zh": "它提出的愿景是：用天花板上的相机和投影仪实时获取整个办公室（墙面、家具、人）的逐像素深度与反射率，再把这种动态的 image-based 模型传到远端显示。这样，“三维采集 + 网络传输 + 沉浸式显示”第一次被当作一个统一问题来定义。UNC 这条线后来延续到 Maimone & Fuchs 的 Kinect 临场系统，它也是 Starline 这类舱体式临场系统在思想上的起点。",
+  "contributions_zh": "(1) 统一的采集与显示框架：同一套投影仪和相机既用结构光测深度，又把图像投到不规则表面上做沉浸显示。(2) 不可感知的结构光：高频时分复用地投射二值条纹及其补码，人眼看到的是平均后的均匀光，而同步相机能分离出图案。(3) 在任意曲面、多投影仪重叠的情况下，对几何、亮度和分辨率做自动校正。(4) 给出把动态 image-based 模型传到远端显示的设想和早期结果（作者承认当时还没有完整系统）。",
+  "anchor_link_zh": "与两篇锚点没有直接的算法联系，属于问题定义层面的源头。Ha et al. 与 Quark 所针对的“固定相机阵列 + 实时新视角 + 远端显示”临场场景，可以追溯到这里。Starline 用 NIR 散斑图案以 180 Hz 做主动立体，也是在延续“用人眼察觉不到的主动光获取深度”这一思路。",
+  "concept_ids": [
+   "d-sensors",
+   "g-rig",
+   "v-perception"
+  ],
+  "difficulty": "入门",
+  "must_read": false,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "Image-Based Visual Hulls",
+  "authors": "Wojciech Matusik, Chris Buehler, Ramesh Raskar, Steven Gortler, Leonard McMillan (MIT / UNC / Harvard)",
+  "year": 2000,
+  "venue": "SIGGRAPH 2000",
+  "url": "https://doi.org/10.1145/344779.344951",
+  "citations": 1090,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-fusion-capture",
+  "influence_zh": "它证明了不必先建全局三维模型，也能直接在目标视角的图像空间里求几何并渲染。做法是：对每个目标像素的射线，在各参考图里沿它的极线与剪影求交，再把区间提升回三维射线上取交集。这样每个输出像素的计算量恒定，不受体素分辨率限制，也没有量化伪影。这种“以目标视角为驱动、几何视角相关”的思路，是后来实时自由视点系统的祖先，包括 Starline 的 image-based TSDF 和 Quark 在目标视锥里建的 LDM。",
+  "contributions_zh": "(1) 利用极线几何和增量计算，在图像空间求视觉外壳（visual hull，即各视角剪影反投影锥体的交集），每个渲染像素的成本恒定。(2) 没有体素化带来的分辨率限制和量化伪影。(3) 视角相关纹理：在每个像素处，按目标射线与参考射线的夹角给参考图从好到差排序，并做可见性检查，避免用被外壳自身遮挡的相机上色。(4) 4 台相机的实时演示：每台相机接一台 PC，做去畸变、背景减除和压缩，经 100 Mb/s 网络送到一台四核服务器求交与着色，输入分辨率 256×256。",
+  "anchor_link_zh": "Ha et al. 的 2b 阶段沿目标射线把采样点投影到 K 个视角求 s_k，不建体素网格；Quark 每帧为每个目标视角在其视锥里重建 LDM，用完即丢。两者都是“只在目标视角里求几何”，IBVH 是这种思路最早的实时形态。IBVH 按“目标射线与参考射线的夹角”给视图排序，这个量在 Ha 的融合网络里对应输入特征“输入与目标视线方向的点积”，在 Quark 里对应射线方向编码 γ（输入射线与目标射线重合时 γ=0）。",
+  "concept_ids": [
+   "g-epipolar",
+   "i-blending",
+   "r-reps",
+   "g-rig"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "Free-viewpoint video of human actors",
+  "authors": "Joel Carranza, Christian Theobalt, Marcus Magnor, Hans-Peter Seidel (MPI Informatik)",
+  "year": 2003,
+  "venue": "SIGGRAPH 2003 (ACM TOG 22(3))",
+  "url": "https://doi.org/10.1145/1201775.882309",
+  "citations": 759,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-fusion-capture",
+  "influence_zh": "它确立了人体自由视点视频的经典范式，即基于模型的 FVV：人体模板或骨架模型 + 多视角剪影拟合 + 多视角纹理。de Aguiar 2008 的表演捕捉、Collet 2015 等工作都把它作为对照。它也展示了用图形硬件加速视觉优化的思路。",
+  "contributions_zh": "用 8 台环绕相机同步拍摄演员，背景分割得到剪影。把按个人调整过的参数化人体模型从所有相机视角渲染成二值掩码，与真实剪影做 XOR，统计不重叠的像素数作为误差。这个误差在 GPU 上计算很快，再用分层非线性优化求每帧的关节姿态。渲染时用视角相关的多视角纹理；另外把参考图从略微偏移的相机位置再投影一次，以找出可见性可疑的区域，减少前方部件的纹理“漏”到后方部件上。",
+  "anchor_link_zh": "与锚点没有直接继承关系，主要作对照。模板和人体先验换来了稳定与紧凑，但受服装和拓扑限制，比如宽松衣物、手持物体。Ha et al. 与 Quark 都有意不用人体先验，以便处理一般的动态场景。它的视角相关多视角纹理混合，与 Ha 第 3 阶段逐像素预测的融合权重 w_k、Quark 第 6 步 IBR 渲染中的 blend weights 属于同一个“混合输入图像”的家族。",
+  "concept_ids": [
+   "g-rig",
+   "f-optim",
+   "i-blending",
+   "n-dynamic"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "Poisson Surface Reconstruction",
+  "authors": "Michael Kazhdan, Matthew Bolitho, Hugues Hoppe",
+  "year": 2006,
+  "venue": "Eurographics Symposium on Geometry Processing (SGP) 2006",
+  "url": "https://doi.org/10.2312/SGP/SGP06/061-070",
+  "citations": 3838,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-fusion-capture",
+  "influence_zh": "它把“从带法向的点云求曲面”表述为求一个指示函数 χ（物体内部为 1、外部为 0），要求 χ 的梯度逼近点的法向场 V，于是问题化为泊松方程 \\( \\Delta\\chi = \\nabla\\cdot V \\)。因为是全局求解，它对噪声和缺失很鲁棒，并能输出水密网格。它成了 MeshLab、Open3D 等工具里的标准方法，也被 Collet 2015 等离线 FVV 流水线直接用作网格化的核心（screened PSR 变体）。",
+  "contributions_zh": "(1) 把曲面重建写成“指示函数 + 泊松方程”的变分问题。(2) 在自适应八叉树上做多分辨率求解，只在表面附近细分，内存和时间随点数近似线性增长。(3) 以 χ 在各采样点处的平均值作为等值面，用 Marching Cubes 抽取。(4) 与局部方法（如 TSDF 融合）相比，全局平滑能补上大片缺失；代价是需要可靠的法向，而且可能过度平滑细节。",
+  "anchor_link_zh": "两篇锚点都不做显式网格化，但理解 PSR 才能看清“全局一致几何”要付出什么代价。Collet 2015 用加剪影约束的 PSR 得到高质量水密网格，单机每帧约 28 分钟。Ha et al. 只在目标视角沿射线做局部融合，TSDF 一步只要 6 ms；Quark 则让网络在内部隐式地学几何，达到 1080p/30 fps。这就是“全局几何”与“实时”之间的取舍。",
+  "concept_ids": [
+   "d-tsdf",
+   "r-reps",
+   "f-optim"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "KinectFusion: Real-time dense surface mapping and tracking",
+  "authors": "Richard A. Newcombe, Shahram Izadi, ..., Andrew Fitzgibbon (Microsoft Research / Imperial College)",
+  "year": 2011,
+  "venue": "ISMAR 2011",
+  "url": "https://doi.org/10.1109/ISMAR.2011.6092378",
+  "citations": 4716,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-fusion-capture",
+  "influence_zh": "它第一次只用一台廉价的 Kinect 和 GPU，就以 30 Hz 实时完成稠密 SLAM：用帧到模型的 ICP 做跟踪，用体素 TSDF 做融合，再用光线投射从 TSDF 预测表面。这把 Curless & Levoy 的离线融合变成了实时交互工具。此后 GPU TSDF 成为 RGB-D 重建的事实标准，并直接孕育了 DynamicFusion、Fusion4D 和 Holoportation。",
+  "contributions_zh": "(1) 投影式 TSDF：把体素 p 投影到深度图取深度 R(x)，得到 \\( F=\\Psi(\\lambda^{-1}\\lVert t-p\\rVert - R(x)) \\)，再截断到 μ。取深度用最近邻而不插值，避免在深度不连续处把前景和背景抹在一起。(2) 加权滑动平均：\\( F_k=\\frac{W_{k-1}F_{k-1}+W_R F_R}{W_{k-1}+W_R} \\)。把权重上限截断为 W_η 后，模型变成“移动平均”，能跟上场景中的动态物体。(3) 从 TSDF 做光线投射求零交叉，得到预测的顶点图和法向图。(4) 由粗到细、投影式数据关联、点到平面 ICP，使用全部像素。(5) 512³ 体素一次全量更新约 2 ms（超过 65 gigavoxels/s）。融合用原始深度而不是双边滤波后的深度，以保留细节。",
+  "anchor_link_zh": "Ha et al. A.2 回灌上一帧深度时，权重为 \\( \\omega_{tmp}=\\min(\\beta\\,\\omega_{acc}\\max(1-\\mathcal{M},0),\\ \\eta) \\)，η=15。这本质上就是 KinectFusion 式 (13) 的“权重上限 W_η → 移动平均”技巧：上限越小，旧几何忘得越快、越能跟上运动；上限越大，结果越稳但越容易拖影。Ha 另外用差分掩码 𝓜 在运动区把回灌权重直接压到 0。Ha 2b 阶段“沿射线步进、找零交叉”就是 KinectFusion 光线投射的图像空间版本。KinectFusion 的固定体素网格在分辨率和计算量之间难以两全，这也解释了 Ha 为什么选择不建体素网格。",
+  "concept_ids": [
+   "d-tsdf",
+   "f-optim",
+   "r-raymarch",
+   "d-sensors",
+   "f-prob"
+  ],
+  "difficulty": "入门",
+  "must_read": true,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "Encumbrance-free telepresence system with real-time 3D capture and display using commodity depth cameras",
+  "authors": "Andrew Maimone, Henry Fuchs (UNC Chapel Hill)",
+  "year": 2011,
+  "venue": "ISMAR 2011",
+  "url": "https://doi.org/10.1109/ISMAR.2011.6092379",
+  "citations": 266,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-fusion-capture",
+  "influence_zh": "它是最早用多台消费级 Kinect 搭出完整“免穿戴”三维临场系统的工作之一：动态场景实时采集，配合头部跟踪的裸眼立体显示，用户不用戴任何设备。它把临场研究从昂贵的穹顶拉到了廉价硬件上，并确立了“固定深度相机阵列 + 视点跟踪 + 裸眼 3D 屏”这一系统形态。Starline、VirtualCube 和 Tele-Aloha 都是这一形态的后继。",
+  "contributions_zh": "用 5 台 Kinect，深度为 640×480@30 Hz。整条流水线跑在 GPU 上：用改进的快速中值滤波补小洞，平滑深度，合并多相机数据，生成表面并做颜色校正，单机可达每秒 1 亿个三角形。另有三点：自动颜色标定；解决多台 Kinect 结构光图案重叠造成的互相干扰；用 Kinect 做 2D 人眼检测再结合深度，实现无标记的眼睛跟踪，驱动视差屏障裸眼立体屏。此外，屏障图案的生成与较慢的三维渲染被解耦，渲染帧率低时立体效果仍然稳定。",
+  "anchor_link_zh": "它把 Ha et al. 没有处理的临场环节都列了出来：观察者眼睛的位置决定目标相机，所以要做视点跟踪；每只眼一幅图，渲染成本翻倍；深度传感器的噪声和空洞需要补。Ha 的设定是“目标视角在阵列内部、渲染单一视角”，这与真实临场之间的差距，在这篇系统论文里看得很清楚。",
+  "concept_ids": [
+   "d-sensors",
+   "g-rig",
+   "v-perception",
+   "i-warping"
+  ],
+  "difficulty": "入门",
+  "must_read": false,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "Real-time 3D reconstruction at scale using voxel hashing",
+  "authors": "Matthias Nießner, Michael Zollhöfer, Shahram Izadi, Marc Stamminger",
+  "year": 2013,
+  "venue": "ACM TOG (SIGGRAPH Asia 2013)",
+  "url": "https://doi.org/10.1145/2508363.2508374",
+  "citations": 1113,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-fusion-capture",
+  "influence_zh": "KinectFusion 用固定的稠密体素网格，场景大小和分辨率不可兼得。本文的解法是：只在观测到表面的地方分配 8³ 的体素块，并用空间哈希表索引，使实时 TSDF 融合可以扩展到房间乃至建筑尺度。InfiniTAM、BundleFusion 等后续系统都沿用了这种数据结构。",
+  "contributions_zh": "把无限的均匀网格划分为 8³ 体素块，每个体素存 TSDF 值和权重。哈希函数把整数块坐标（乘以大素数后异或、再取模）映射到桶，桶里存块指针，并处理哈希冲突。块的分配、融合和垃圾回收都在 GPU 上并行完成。根据视锥在 GPU 与主机内存之间双向流式交换块，重访某区域时可以把块取回。在稀疏结构上也能高效地做光线投射。",
+  "anchor_link_zh": "它说明了体素 TSDF 的内存和计算随分辨率三次方增长这个痛点有多难绕开。Starline 进一步证明，在“输入深度少、输出视角少”的临场场景下，干脆不建体素、在射线上现场融合更快：总时间从体素版的 10.0 ms 降到 1.5 ms。Ha et al. 继承了这一选择，在 1352×1014 下 TSDF 只要 6 ms。",
+  "concept_ids": [
+   "d-tsdf",
+   "r-reps",
+   "r-raymarch"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "DynamicFusion: Reconstruction and tracking of non-rigid scenes in real-time",
+  "authors": "Richard A. Newcombe, Dieter Fox, Steven M. Seitz (University of Washington)",
+  "year": 2015,
+  "venue": "CVPR 2015 (Best Paper)",
+  "url": "https://grail.cs.washington.edu/projects/dynamicfusion/",
+  "citations": 1102,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-fusion-capture",
+  "influence_zh": "这是第一个只用单台商用 RGB-D 传感器、不需要模板、就能实时重建非刚性形变场景的稠密 SLAM 系统，获 CVPR 2015 最佳论文。它提出的范式是：在规范空间（canonical space）里保存几何，再用一个随时间变化的变形场把它 warp 到当前帧。VolumeDeform、Fusion4D、DoubleFusion，以及 D-NeRF、Nerfies 等动态神经表示，都沿用了这种“规范空间 + 变形场”的分解。",
+  "contributions_zh": "(1) 在规范空间维护一个 TSDF，每帧估计一个稠密的体积 6D 运动场，把规范几何 warp 到当前帧。(2) 运动场用稀疏的变形节点表示（embedded deformation 图）。每个节点带一个 SE(3) 变换，任意位置的变换由 k 个近邻节点的对偶四元数混合插值得到。(3) 能量 = 点到平面的 ICP 数据项 + 让相邻节点尽量刚性的正则项（加鲁棒核），在 GPU 上用 Gauss-Newton 求解。(4) 把当前深度按变形场反向融合回规范 TSDF，表面增长时插入新节点。它与 KinectFusion 一样能逐步细化，且不需要预先的模板。",
+  "anchor_link_zh": "Ha et al. 与 Quark 都没有持久的规范模型：Ha 只回灌“上一帧的目标视角深度”，Quark 完全逐帧独立。DynamicFusion 代表另一个极端：把全部历史压进一个规范模型，时间上非常稳定，但遇到快速运动或拓扑变化（张嘴、衣物分离）就会跟踪失败。理解它，就能明白 Ha et al. 为什么说“全局几何路线一致性好、但细节不足”。也能看出 Ha 的回灌实际上只在静止区起作用：运动区靠差分掩码 𝓜 关掉回灌，而不是像 DynamicFusion 那样把旧几何变形到当前帧。",
+  "concept_ids": [
+   "d-tsdf",
+   "n-dynamic",
+   "f-optim",
+   "d-flow"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "High-quality streamable free-viewpoint video",
+  "authors": "Alvaro Collet, Ming Chuang, ..., Hugues Hoppe, ..., Steve Sullivan (Microsoft)",
+  "year": 2015,
+  "venue": "ACM TOG (SIGGRAPH 2015)",
+  "url": "https://doi.org/10.1145/2766945",
+  "citations": 676,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-fusion-capture",
+  "influence_zh": "这是第一个端到端产出“高质量、可流式传输”自由视点视频的系统，也是微软 Mixed Reality Capture Studio 的技术基础。它让体积视频从实验室演示变成了可以商用的内容格式。它定义了离线 FVV 的标准流水线：多模态 MVS → 网格化 → 网格跟踪 → 纹理图集 → 视频编码。论文还公开了数据集，成为后续体积视频与压缩研究的参照。",
+  "contributions_zh": "使用 106 台相机（53 台 RGB + 53 台 IR），2048×2048@30 Hz（可提到 60 Hz）。重建空间直径 2.8 m、高 2.5 m，四周绿幕，用静态 IR 激光提供纹理。技术要点：(1) 融合 RGB 立体、IR 立体和剪影的多模态 MVS。(2) 加剪影约束的 screened Poisson 重建。(3) 自动识别脸、手等感知上重要的区域，给它们分配更多三角形和纹素。(4) 把序列切成若干子序列，每段用一个关键帧网格跟踪形变，得到时间一致的拓扑和纹理图集；关键帧平均存活 31.7 帧。(5) 网格流嵌入 MPEG-4，纹理用 H.264 编码：单人 1 万、双人 2 万个三角形，1024² 图集 4 Mbps，平均输出 9.5 Mbps，比约 60 Gbps 的原始输入低 3 个数量级。处理速度为单机约 28.2 分钟/帧，61 台机器的集群约 27.7 秒/帧。",
+  "anchor_link_zh": "它是 Ha et al. 与 Quark 所走的“在线、逐帧、feed-forward”路线的对立面：用离线全局优化换来时间一致性和极低码率。Ha 的“TSDF 引导 + 上一帧回灌”可以看作把 Collet 的“网格跟踪保持时间一致”压缩成一个只需几毫秒的轻量替代。两篇锚点都没讨论码率，Collet 给出了一个可以对照的量级：约 10 Mbps。",
+  "concept_ids": [
+   "d-mvs",
+   "d-tsdf",
+   "g-rig",
+   "v-codec",
+   "n-dynamic"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "Panoptic Studio: A Massively Multiview System for Social Motion Capture",
+  "authors": "Hanbyul Joo, ..., Yaser Sheikh (CMU)",
+  "year": 2015,
+  "venue": "ICCV 2015 (extended in TPAMI 2017)",
+  "url": "https://doi.org/10.1109/ICCV.2015.381",
+  "citations": 686,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-fusion-capture",
+  "influence_zh": "它把多相机穹顶推到了大规模（480 路 VGA），第一次在不贴标记的情况下重建五人以上社交互动的全身三维运动，并公开了大规模多视角数据集。这些数据和方法直接支撑了 OpenPose 手部关键点的多视角自举（multiview bootstrapping）、Total Capture 等工作。它也是 Sheikh 团队后来在 Meta 开展 Codec Avatars 采集的前身。",
+  "contributions_zh": "论文提出一套模块化的穹顶结构和硬件同步方案，核心输入是 480 路同步 VGA 视频（640×480@25 fps）。项目主页列出的完整硬件还有 31 台 HD 相机（1080p@30 fps）、10 台 Kinect v2 和 5 台投影仪。方法上，它把大量视角里各自“弱”的 2D 检测融合起来：先从低层外观线索逐步生成三维骨架候选，再把身体部位关联到重建出的稠密三维轨迹流上做时间细化。论文还实证分析了视角数量对重建成功率的影响。",
+  "anchor_link_zh": "与两篇锚点没有直接依赖关系。它代表“视角越多、遮挡越少”的另一个极端。对照它就能理解：Ha et al.（K=2–4）和 Quark（8 路）只有极少的输入视角，所以必须靠学习来补遮挡区域，前者预测背景图 I_BG，后者用多层 LDM。",
+  "concept_ids": [
+   "g-rig",
+   "g-epipolar",
+   "n-dynamic"
+  ],
+  "difficulty": "进阶",
+  "must_read": false,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "Fusion4D: Real-time Performance Capture of Challenging Scenes",
+  "authors": "Mingsong Dou, Sameh Khamis, ..., Shahram Izadi (Microsoft Research)",
+  "year": 2016,
+  "venue": "ACM TOG (SIGGRAPH 2016)",
+  "url": "https://doi.org/10.1145/2897824.2925969",
+  "citations": 527,
+  "citations_source": "OpenAlex",
+  "theme": "t-fusion-capture",
+  "influence_zh": "它把 DynamicFusion 的非刚性融合推广到多视角、快速运动和拓扑变化的真实场景，能实时得到时间一致的高质量网格，是 Holoportation 的核心算法。它提出的关键体（key volume）机制后来成为处理拓扑变化的常用手段。Ha et al. 所说的“稀疏相机 + 全局几何”路线，它是代表作。",
+  "contributions_zh": "(1) 多视角实时非刚性表演捕捉：8 个 pod 共 24 台相机（NIR 主动立体 + RGB），据 Montage4D 的描述约 25–30 fps。(2) 同时维护“数据体”（当前帧）和“参考体（关键体）”。参考体持续增量融合细节，在平滑形变期间一直复用；遇到剧烈拓扑变化就重置，类似视频里的关键帧。(3) 基于 embedded deformation 图做非刚性对齐，数据项结合稠密对应，另加视觉外壳项，惩罚表面移进已知的空区域。(4) 用体素碰撞检测防止 warp 后的体素相互穿插。(5) 选择性融合：只在对齐误差小的地方更新参考体，避免把跟踪错误写进模型。",
+  "anchor_link_zh": "Ha et al. 第 1 节把 Fusion4D 与 Starline 并列为“稀疏相机 + 全局几何”一类：一致性好，但细节和外观表达不足，还依赖深度传感器。Ha 的折中是保留“用全局几何保证一致性”的思想（TSDF 引导 + 上一帧回灌），但几何只起引导作用，最终像素仍来自输入图像的 IBR 混合，从而保留细节。Fusion4D 的选择性融合与关键体重置，和 Ha 的差分掩码 𝓜（运动区不回灌旧深度）回答的是同一个问题：旧几何什么时候还可信。",
+  "concept_ids": [
+   "d-tsdf",
+   "n-dynamic",
+   "d-stereo",
+   "d-sensors",
+   "v-temporal"
+  ],
+  "difficulty": "专家",
+  "must_read": false,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ },
+ {
+  "title": "Holoportation: Virtual 3D Teleportation in Real-time",
+  "authors": "Sergio Orts-Escolano, Christoph Rhemann, Sean Fanello, ..., Shahram Izadi (Microsoft Research)",
+  "year": 2016,
+  "venue": "UIST 2016",
+  "url": "https://doi.org/10.1145/2984511.2984517",
+  "citations": 753,
+  "citations_source": "Semantic Scholar",
+  "theme": "t-fusion-capture",
+  "influence_zh": "这是第一个端到端、实时、高质量的 AR/VR 三维临场系统。它捕捉整个空间（人、家具、物体）的三维模型，压缩后实时传到远端，用户在 HoloLens 或 VR 头显里就像与远程参与者同处一室。它的公开演示让“全息临场”成为业界目标，技术后来并入 Microsoft Mesh。之后的体积临场系统大多以它为比较基准。",
+  "contributions_zh": "用 8 个三目 pod，每个含 2 台 NIR 相机和 1 台 RGB 相机，外部触发同步到 30 fps；每个 pod 由 GPU 计算主动立体深度和前景分割。融合服务器（2 块 Titan X）用 Fusion4D 生成时间一致的网格；网格、RGB 视频和音频经轻量压缩后传输（后续文献估计每个场景约需 1–2 Gbps）。渲染端（GTX 1080）做投影纹理：按“表面法线与相机方向的点积”加权混合多视角纹理，即 \\( T_v^i = V_v\\cdot\\max(0,\\hat n_v\\cdot\\hat v_i)^\\alpha \\)，其中 V_v 为可见性。它用膨胀后的深度不连续检测遮挡，用多级多数投票剔除错误颜色，以减少重影。论文还做了 AR/VR 下的用户体验研究。",
+  "anchor_link_zh": "Holoportation 的纹理权重“可见性 × 法线与相机方向夹角”，就是 Ha et al. 融合网络输入特征“输入射线与 TSDF 法线的点积”的手工版本。Ha 的区别是用 4 层 U-Net 从这些几何特征学出逐像素权重 w_k，而不是用固定公式。Holoportation 需要 Gbps 级带宽，并且融合在发送端、纹理映射在接收端。这提醒了 Ha 没有交代的一个系统问题：渲染到底放在发送端还是接收端。",
+  "concept_ids": [
+   "d-tsdf",
+   "i-blending",
+   "v-codec",
+   "v-perception",
+   "g-rig"
+  ],
+  "difficulty": "进阶",
+  "must_read": true,
+  "themes": [
+   "t-fusion-capture"
+  ]
+ }
+]

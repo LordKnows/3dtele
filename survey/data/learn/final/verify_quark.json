@@ -1,0 +1,1130 @@
+{
+ "anchor": "quark",
+ "story_zh": "先看问题。远程临场（telepresence）或自由视点视频要求这样一件事：几台固定相机在拍，观众的头在动，系统要在每一帧、每一个观众视角上立刻合成一张照片级的新视角图像。NeRF 和 3DGS 的渲染可以做到实时，但前提是先花几分钟到几小时对每个场景做离线优化。视频里的场景每帧都在变，这条路走不通。Quark 给自己定的目标是：输入 8 路已标定、彼此最远相距约 30 cm 的相机，把“重建 + 渲染”合在一起放进 33 ms 以内，在单张 A100 上输出 1080p/30fps，而且不对任何场景单独训练，要能跨数据集泛化。\n\n第一个关键想法：没必要重建一个完整的 3D 世界，只需要为“当前这一个目标视角”准备刚好够用的几何。Quark 在目标相机的视锥里放几层可以弯曲的“深度片”，也就是分层深度图 LDM。每层每个像素有三样东西：深度、不透明度 σ，以及“这里的颜色该从 8 张输入照片里各取多少”的混合权重 β。颜色本身直接从全分辨率的真实照片里取，这就是基于图像的渲染（IBR）。于是网络只需在低分辨率上回答两个问题：“表面在哪里”和“从哪张图取色”。第二个关键想法来自同一第一作者 2019 年的 DeepView（Flynn et al. 2019）：求这个 LDM 可以像梯度下降一样，先猜一个解，把它渲染回每张输入照片的视角，和真实照片对比，再按差异修正。不同的是，每一步修正由网络学出来，大约 5 步就收敛，而经典优化要上千步。\n\n具体方案是把这种 render-and-refine 嵌进一个 UNet 式的金字塔。迭代从 24 层 × 36×64 的极低分辨率开始，到 6 层 × 288×512 结束：早期用很多层密集扫描深度，把表面“找出来”；后期层数减半再减半（layer collapse），同时空间分辨率翻倍，让少数几层“贴着”表面走。每一步把 8 个视角的信息融合起来，用的是 One-to-many attention：每个 LDM 元素作为唯一的 query，对 8 个视角做 cross-attention，并把 K/V 投影矩阵代数地折叠进 Q 和输出投影，这样对 8 个视角完全不做矩阵乘。最后把未激活的深度、不透明度和混合 logits 双线性放大 3.75 倍，再过非线性（post-activation），边缘可以保持锐利。最终的 IBR 合成在 CUDA 上约 1.3 ms。\n\n效果是：在 RFF、Shiny 和动态的 N3DV 上，Quark 全面超过可泛化基线 ENeRF、GPNR、SIMPLI，速度分别快 6 倍、700 倍和 100 倍以上；在 DL3DV 协议下，它甚至略高于需要逐场景优化的 Zip-NeRF 和 3DGS（31.31 对 31.22 和 29.82）。代价也很明确。第一，逐帧独立求解、没有时间状态，目标视角移动引起输入相机集合切换时会闪烁。第二，颜色只是输入像素的凸组合，对输入之间的曝光、焦距差异和标定误差很敏感，出错时是硬边而不是模糊（§4.3）。第三，只用最近 8 个视角，覆盖不足时会失败，Deep Blending 上是 23.61 对 3DGS 的 30.04。第四，LDM 只属于某一个目标视角，双目 VR 要跑两遍，多个观众要跑多遍（论文没有讨论这一点，这是由其设计推出的）。第五，不论输出分辨率多大，内部 LDM 每层的像素数大致固定（§4.1），2K 输出依赖上采样；2048×1536 下 RFF 的 LPIPS 为 0.233，而 1024×768 下为 0.137（两者评测分辨率不同，不能严格对比）。第六，论文和项目页都没有给出代码链接。\n\n读这篇论文时，可以对照一张“基础知识映射”：针孔相机与视差（g-pinhole、g-depth）决定了 LDM 放在哪里、层怎样按等视差排列；平面扫描与多视角立体（i-psv、d-mvs）解释了初始化和反投影 Δ 为什么能找到表面；splatting 与 over 合成（r-raster、r-alpha）就是 Render to Input Views 和最终合成的全部内容；学习式迭代（l-iterative、f-optim）解释了“渲染—比较—更新”为什么类似于展开的（学习化）梯度下降；注意力（l-attention）加上一点线性代数（f-linalg）就能推出 K/V 折叠；图像插值（f-image）解释了 post-activation 为什么能保边；IBR 混合（i-blending）则决定了 Quark 的上限和典型失败方式。下面 12 步按论文的数据流展开，每一步都标出用到哪块基础。",
+ "before_you_read": [
+  {
+   "concept_id": "g-pinhole",
+   "why_zh": "Quark 每一步都在“目标视锥中的 LDM 元素 ↔ 3D 点 ↔ 输入图像像素”之间换算（Bp、Render、IBR 采样都要用 K、[R|t] 做投影与反投影）。不熟悉内外参和反投影，Eq.1、Eq.2 里的投影算子 P、P^T 就只是符号。"
+  },
+  {
+   "concept_id": "g-depth",
+   "why_zh": "Eq.3–4 把每层深度约束在近/远平面 η、f 之间的等视差带内，这背后是“视差 ∝ 1/深度、近处需要更密的采样”。另外，在“纯平移、归一化图像坐标”的特例下，射线方向编码的 2D 差向量恰好等于基线乘以视差范围 (1/η−1/f)。这是本导读的推导，论文没有给出。"
+  },
+  {
+   "concept_id": "g-epipolar",
+   "why_zh": "初始化时把特征反投影到平面上等价于平面诱导单应；按本导读的几何解释，射线编码量的是一条输入射线在目标图像上投出的极线段。理解极线才能看懂“为什么与目标射线重合时编码为 0”。"
+  },
+  {
+   "concept_id": "f-image",
+   "why_zh": "特征金字塔、双线性采样和 splat、3.75× 双线性上采样，以及“先插值再激活”为什么能保边，都是数字图像采样与插值的问题。"
+  },
+  {
+   "concept_id": "r-alpha",
+   "why_zh": "LDM 的渲染就是按 σ 由后向前做 over 合成：中间步骤在输入视角里合成 Ĩ，最终在目标视角合成 RGB 和深度。"
+  },
+  {
+   "concept_id": "r-raster",
+   "why_zh": "Render to Input Views 用双线性 splat（前向点溅射）代替光线追踪或光栅化。需要知道 splat 与 gather（后向采样）的区别，以及二者互为转置。"
+  },
+  {
+   "concept_id": "i-layered",
+   "why_zh": "Quark 的核心表示是 LDM，它是 MPI（平面层）与分层网格 LM 之间的折中。不了解 MPI/LDI/LDM 的谱系，很难理解作者为什么这样选。"
+  },
+  {
+   "concept_id": "i-psv",
+   "why_zh": "初始化的 Bp 和每步的 Δ 都是平面扫描体（PSV）思想的变体：把多视角特征堆到同一 3D 位置，看它们是否一致。"
+  },
+  {
+   "concept_id": "i-blending",
+   "why_zh": "Quark 最终不回归 RGB，而是对 8 张全分辨率输入图做逐层逐像素的凸组合（β）。这是 ULR 类混合权重的学习版，也决定了它对曝光与标定误差敏感。"
+  },
+  {
+   "concept_id": "l-iterative",
+   "why_zh": "5 步 Update & Fuse 是 DeepView 的学习式梯度下降（展开优化）。看懂“渲染—比较—反投影—更新”与梯度 J^T·残差的对应关系，是理解 Quark 的主线。"
+  },
+  {
+   "concept_id": "l-attention",
+   "why_zh": "Fusion Block 是 pre-LN Transformer 结构，One-to-many attention 是单 query 对 M 个视角的 cross-attention。必须熟悉 Q/K/V、多头和输出投影，才能推出 Eq.8 的折叠技巧。"
+  },
+  {
+   "concept_id": "l-encoding",
+   "why_zh": "射线方向编码 γ 用 tanh 加 8 个 octave 的正弦编码，替代 Transformer 的位置编码。需要知道傅里叶特征为什么能提高网络对小差异的分辨能力。"
+  }
+ ],
+ "walkthrough": [
+  {
+   "id": "q1",
+   "title_zh": "问题设定与输入：M=8 个最近视角，近/远平面由 SfM 点估计",
+   "paper_ref": "§1 Introduction；§3.4 Training（视角选择）及其后的数据集段（近/远平面按 SfM 点逐样本设定）；§4.1（每 8 张取 1 张作目标；按相机中心 L2 距离选视角；Deep Blending 的改进启发式）；Fig. 1",
+   "what_zh": "输入：离目标视角最近的 M=8 张 RGB 图像，每张的内参 K_m 与外参 [R_m|t_m]，目标相机的内外参，以及目标视锥的近平面 η 与远平面 f。输出：目标视角的 RGB 图像（论文主打 1920×1080），可选输出深度图。每帧、每个目标视角独立执行一遍，不保留任何状态。",
+   "plain_zh": "先用针孔模型（g-pinhole）把任务说清楚。每台相机用 x ≃ K[R|t]X 把 3D 点 X 投到像素 x。只要所有相机参数已知（论文里来自数据集或 COLMAP 这类 SfM，见 g-sfm），就能在“像素—射线—3D 点”之间自由换算。Quark 不估计相机，它假设标定准确（g-rig）；标定有误时，它会产生错误的硬边，而不是柔和的模糊（§4.3）。\n\n然后是两个“场景范围”参数。视角选择：按相机中心的欧氏距离挑最近的 8 个；训练时从最近的 16 个中随机抽 8 个（§3.4；论文没有说明动机，可以理解为一种数据增强）。近/远平面 η、f：每个样本根据 SfM 重建的稀疏点深度分布自适应设定，论文没有给出具体分位数规则。它们规定了 LDM 能表示的深度区间（g-depth），区间外的物体根本无法表示。\n\n为什么是“最近 8 个”：运行时间约为 T_V + M·T_image，随 M 线性增长（附录 B），8 是实时预算下的折中。近邻视角与目标视角的视差小、遮挡关系相似，IBR 取色也更可靠。反面教材是 Deep Blending：最近 8 个相机覆盖不足，即使改用同时考虑视角夹角的启发式，仍出现硬边伪影。",
+   "analogy_zh": "好比一位摄影师接到订单“从这个位置给我一张照片”，他不去重建整栋房子，只翻出离这个位置最近的 8 张照片来拼。",
+   "equations": [
+    {
+     "tex": "\\tilde{\\mathbf{x}}_m \\simeq K_m\\,[\\,R_m \\mid \\mathbf{t}_m\\,]\\,\\tilde{\\mathbf{X}}",
+     "explain_zh": "针孔投影。X̃ 是齐次世界坐标 (X,Y,Z,1)；R_m（3×3 旋转）和 t_m（3 维平移）把世界坐标变到第 m 台相机坐标系；K_m（3×3 内参，含焦距与主点）再映射到像素；≃ 表示相差一个尺度因子，即要做透视除法。Quark 的所有投影和反投影都建立在这个式子上。"
+    },
+    {
+     "tex": "\\mathcal{S}_t = \\{\\, m : \\lVert \\mathbf{o}_m - \\mathbf{o}_t \\rVert_2 \\ \\text{is among the 8 smallest} \\,\\}",
+     "explain_zh": "视角选择规则的形式化（论文用文字描述）。o_m 是输入相机 m 的光心，o_t 是目标相机光心；取欧氏距离最小的 8 个。训练时先取最近 16 个，再从中随机抽 8 个。"
+    },
+    {
+     "tex": "\\frac{1}{z} \\in \\left[\\frac{1}{f},\\ \\frac{1}{\\eta}\\right]",
+     "explain_zh": "LDM 的全部可表示范围，用视差（逆深度）表示。z 是目标相机坐标系中的深度，η 是近平面，f 是远平面（注意这里的 f 不是焦距）。后面的 Eq.3–4 把这个区间等分成 L 份。"
+    }
+   ],
+   "numbers_zh": "M=8（训练时从最近 16 个中随机抽 8 个；另有支持 4–16 张输入的可变版本）。输入间距最大约 30 cm；Spaces 实验的基线约 10/20/30 cm。评测时每 8 张取 1 张作目标，目标图不参与输入。N3DV 协议：裁到 300 帧，每 10 帧评一次，以 0 号相机为目标。输出 1920×1080；单张 A100 上重建加渲染 30 fps。",
+   "why_design_zh": "作者在 §2.3 明确排除单图、单目、生成式和人体先验方法，认为多视角方法质量更高、泛化更广。只取局部视角、不用全部视角做全局优化，是为了保证逐帧实时；NeRF/3DGS 式的全局优化需要离线计算。近/远平面取自 SfM 点而不是让网络预测。论文没有解释原因，合理的解读是：这样能让等视差采样覆盖场景的实际深度范围。作者把学习式视角选择列为未来工作。",
+   "pitfalls_zh": "（1）“实时”指重建加渲染的网络时间，不含采集、解码、标定和传输。（2）近/远平面在训练和评测时来自 SfM 点，实时系统里怎么在线获取，论文没有讨论；固定的 telepresence 舱体可以直接用固定值。（3）8 个视角是按目标视角选的，目标一移动，输入集合就可能切换，这正是闪烁的来源之一。（4）Quark 的“稀疏宽基线”指 8 张图、最远约 30 cm，不是 2–3 张环绕 360° 的极稀疏设定。",
+   "concept_ids": [
+    "g-pinhole",
+    "g-sfm",
+    "g-depth",
+    "g-rig",
+    "n-generalizable"
+   ],
+   "check_q_zh": "场景完全静止，只是目标相机缓慢平移，为什么 Quark 的输出仍可能突然跳变？",
+   "check_a_zh": "输入集合按相机中心距离重新挑选最近的 8 个。集合一变，blend weights 混合的就是另一组照片，曝光和噪声都不同；而且每帧独立重建、没有时间状态，前后帧之间没有任何平滑约束，所以会出现跳变或闪烁（§4.1 末、§4.3）。"
+  },
+  {
+   "id": "q2",
+   "title_zh": "输入编码：残差 CNN 特征金字塔 + 射线方向编码 γ",
+   "paper_ref": "§3.2.1 Encode Input Images；Fig. 2；Fig. 3(b)；Tab. 8/9 “Encoded image feature map dimensions” 列",
+   "what_zh": "输入：M 张 RGB 图，相机参数，目标视锥的近/远平面。输出：每个视角的 K 级特征金字塔 I_k（C=32 通道；Quark 实际用到 36×60、72×120、144×240、288×480 四级），以及每一级对应的射线方向编码 γ_k（同为 32 通道）。",
+   "plain_zh": "特征金字塔（f-image、l-cnn）：残差 CNN 加带步长的 mean-pooling，逐级把分辨率减半，相当于“可学习的图像金字塔”。后面每个 Update & Fuse 步都从中取与当前 LDM 分辨率相当的那一级，作用类似 UNet 的 skip connection（论文称整体结构 “reminiscent of a UNet”）。这样一来，所有推理都在低分辨率上进行，高频细节最后由 IBR 直接从原图里取。\n\n射线方向编码（l-encoding、g-epipolar、g-depth）：输入视角 m 的每个像素对应一条 3D 射线。求这条射线与目标 LDM 视锥近平面、远平面的交点，把两个交点投到目标相机的投影空间（透视除法后的 2D 坐标），相减得到一个 2D 向量 v。如果这条射线正好穿过目标相机光心，也就是与某条目标射线重合，它在目标图像上投成一个点，v=0。否则，v 就是这条射线在目标图像上从近到远扫出的那段极线。在纯平移、归一化坐标的特例下，它的长度恰好是“基线 × 视差范围”（见下方第三个公式）；一般情况下还受旋转和焦距影响。这是本导读的几何解释，论文只给出了文字定义。所以 v 编码了这台相机相对目标偏了多远、偏向哪个方向。接着用 tanh 把视锥外的大值压进 (−1,1)，做 8 个 octave 的正弦编码，再由线性层投到 C 维。\n\n计算上，这个编码只在低分辨率算一次，再双线性上采样到各级，每一级用独立的投影矩阵。它在 Transformer 里扮演位置编码的角色，但编码的是“与目标视角的相对方向”，让注意力倾向于离目标更近的射线，这对反射和非朗伯表面有帮助。",
+   "analogy_zh": "金字塔好比先看缩略图、再看原图。射线编码好比给每张照片的每个像素贴一张小标签，写着“我看的方向和你想看的方向差多少”。",
+   "equations": [
+    {
+     "tex": "\\mathbf{v} = \\pi_t\\big(\\mathbf{r}(z{=}\\eta)\\big) - \\pi_t\\big(\\mathbf{r}(z{=}f)\\big) \\in \\mathbb{R}^2",
+     "explain_zh": "按 §3.2.1 的文字描述改写（论文没有给公式，差的先后次序也未说明）。r(z) 是输入射线上、在目标相机坐标系中深度为 z 的点；π_t 是目标相机的投影，含透视除法；η 和 f 是近、远平面。v 是两个交点在目标投影平面上的 2D 差。"
+    },
+    {
+     "tex": "\\gamma = W_k\\,\\Big[\\sin\\!\\big(2^{j}\\pi\\tanh\\mathbf{v}\\big),\\ \\cos\\!\\big(2^{j}\\pi\\tanh\\mathbf{v}\\big)\\Big]_{j=0}^{7}",
+     "explain_zh": "j=0…7 共 8 个 octave，每个频率对 v 的 2 个分量各取 sin 和 cos，合计 2×2×8=32 维（维数是按描述推断的；论文未给出频率基和是否拼接原值，这里沿用 NeRF 惯例）。W_k 是第 k 级独立的线性投影，把结果投到 C=32 维。"
+    },
+    {
+     "tex": "\\mathbf{v} = b\\left(\\frac{1}{\\eta} - \\frac{1}{f}\\right)\\hat{\\mathbf{e}}_x",
+     "explain_zh": "特例：输入相机相对目标相机沿 x 轴平移 b，射线平行于光轴，坐标取归一化图像坐标（u=X/Z）。深度 z 处的点投影为 u=b/z，两交点之差为 b(1/η−1/f)，也就是“基线 × 视差范围”。ê_x 是 x 方向单位向量。"
+    }
+   ],
+   "numbers_zh": "C=32。Quark 的金字塔为 288×480、144×240、72×120、36×60；Quark+ 为 432×720、216×360、108×180、54×90。正弦编码 8 个 octave。数值例：b=0.1 m，η=1 m，f=10 m，得 v=0.09，tanh(0.09)≈0.0898。消融：把射线编码置零后 PSNR 30.4071→30.3179（−0.09 dB），运行时间 −1.28%。",
+   "why_design_zh": "作者不用 NeRF 的 3D 方向正弦编码，也不用 Ref-NeRF 的球谐编码，理由是 LDM 的几何允许更简单的编码：v 的零点恰好对应“与目标射线重合”，精度集中在穿过视锥近/远平面的那些射线上，tanh 又保证视锥外的射线仍有（较粗的）表示。金字塔用 mean-pooling 而非 max-pooling，论文没有解释；从采样的角度看，均值池化是一种抗混叠的低通滤波（f-image）。",
+   "pitfalls_zh": "（1）γ 定义在每个输入像素上，而且依赖目标视角：换一个目标视角就要重算。（2）符号不一致：§3.2.1 和 Fig.3 写作 γ_k，§3.2.2 正文写成 ρ_k，二者是同一个量。（3）表 8 的图像特征是 36×60，LDM 是 36×64：前者在输入图像空间，后者在目标视锥空间，宽高比不同本身不矛盾，但论文没交代输入图原始分辨率。（4）射线编码在消融里只贡献 0.09 dB，不要把它当作 Quark 的主要贡献。",
+   "concept_ids": [
+    "f-image",
+    "l-cnn",
+    "l-encoding",
+    "g-epipolar",
+    "g-depth"
+   ],
+   "check_q_zh": "如果某台输入相机与目标相机光心重合、只是朝向不同，它的射线编码 γ 是多少？",
+   "check_a_zh": "按定义，v 为 0（γ 则是零向量经正弦编码和投影后的常数）。这台相机的每条射线都穿过目标光心，在目标投影平面上，近、远交点投到同一位置。纯旋转不产生视差，射线编码只反映平移造成的视差。"
+  },
+  {
+   "id": "q3",
+   "title_zh": "LDM 表示与深度参数化：等视差锚点，每层只能在自己的视差带内移动",
+   "paper_ref": "§3.1（Eq. 1 与 LDM 定义）；§3.2.3（Eq. 3、Eq. 4 与 σ 的解码）；Fig. 1 右上；§2.1 末段",
+   "what_zh": "LDM 由 L 层组成，每层尺寸 [H,W]，位于目标视锥内。属性有：深度 d [L,H,W,1]、density σ [L,H,W,1]（实为 alpha，取值 (0,1)）、混合权重 β [L,H,W,M]。深度参数化：特征 V 经线性投影、tanh 后，映射成落在第 ℓ 条等视差带内的深度。",
+   "plain_zh": "先理解这是什么表示（i-layered、r-reps）。MPI 是 L 张与图像平面平行、深度固定的平面。LDM 让每层每个像素都有自己的深度，所以每层能“弯曲”去贴合表面，同时保留半透明的 σ 来处理遮挡边缘和抗锯齿。与体渲染相比（r-volume），层数就是沿射线的采样步数，只是少得多（最终 6 层）。与分层网格 LM 相比，它不需要生成三角网格。LDM 不存颜色，只存“到哪张输入图取色”的 β。\n\n再看为什么用等视差（g-depth）。立体测量中，深度误差随 Z² 增长，而视差误差大致恒定，所以近处需要更密的采样。Eq.3–4 把视差区间 [1/f, 1/η] 等分成 L 段：ℓ=1 是最远的一段，ℓ=L 是最近的一段。tanh 的输出在 (−1,1) 内，乘以 0.5/L 后，每层最多只能偏离自己的锚点半个带宽，所以层与层永远不会交叉。这样目标视角下的前后顺序是固定的，over 合成时不需要排序。\n\n给一个 telepresence 尺度的数值例子：η=0.5 m，f=3 m，L=6。各层可活动的深度范围是：层 1 为 1.636–3.0 m，层 2 为 1.125–1.636 m，层 3 为 0.857–1.125 m，层 4 为 0.692–0.857 m，层 5 为 0.581–0.692 m，层 6 为 0.5–0.581 m。最近一层只有约 8 cm 宽，最远一层宽约 1.36 m，这正是逆深度采样的效果。",
+   "analogy_zh": "像一叠可以各自起伏的透明塑料膜，每张膜被限制在书架的某一格里，可以在格内上下起伏贴合物体，但不能跑进别的格子。",
+   "equations": [
+    {
+     "tex": "\\delta_\\ell = \\frac{\\ell - 0.5}{L},\\qquad \\ell = 1,\\dots,L",
+     "explain_zh": "论文 Eq.3。δ_ℓ 是第 ℓ 层锚点在归一化视差 [0,1] 中的位置，即第 ℓ 条带的中心；L 是当前层数。"
+    },
+    {
+     "tex": "d_\\ell = \\left[\\left(\\delta_\\ell + \\frac{0.5}{L}\\tanh(\\mathbf{V}W_d)\\right)\\left(\\frac{1}{\\eta} - \\frac{1}{f}\\right) + \\frac{1}{f}\\right]^{-1}",
+     "explain_zh": "论文 Eq.4。V 是该层该像素的 C 维特征，W_d 是线性投影（C→1）；tanh(·)∈(−1,1)，乘以 0.5/L 后，归一化视差被限制在 [δ_ℓ−0.5/L, δ_ℓ+0.5/L]；再线性映射到真实视差区间 [1/f, 1/η]，最后取倒数得到深度 d_ℓ。η 是近平面，f 是远平面。"
+    },
+    {
+     "tex": "\\sigma_\\ell = \\operatorname{sigmoid}(\\mathbf{V}W_\\sigma)",
+     "explain_zh": "density 的解码（§3.2.3）。W_σ 是线性投影；sigmoid 把输出压到 (0,1)，因此它其实是 alpha（不透明度），不是 NeRF 的体密度。"
+    },
+    {
+     "tex": "\\mathbf{C} = \\sum_{\\ell=1}^{L} \\mathbf{c}_\\ell\\,\\sigma_\\ell \\prod_{j=\\ell+1}^{L} (1 - \\sigma_j)",
+     "explain_zh": "over 算子 𝒪 展开后的形式（r-alpha）。按 Eq.4，ℓ=L 离相机最近。c_ℓ 是第 ℓ 层颜色；σ_ℓ 是它的 alpha；∏(1−σ_j) 是比它更近的所有层的透射率。“从后往前 over” 与这个求和式等价。"
+    }
+   ],
+   "numbers_zh": "Quark：初始 24 层，输出 6 层×288×512。Quark+：初始 32 层，输出 8 层×432×768（按表 9；§3.4 正文写成 “768×438”，属于笔误）。每层深度最多偏离锚点 ±0.5/L（归一化视差）。例：η=0.5 m，f=3 m，L=6，视差带宽 (2−0.333)/6≈0.278 m⁻¹，对应最近层约 8 cm、最远层约 1.36 m；若 L=24，最近层只有 0.500–0.518 m 约 1.8 cm。",
+   "why_design_zh": "论文的对照（§1、§2.1、§4.1）：平面层表示，包括 MPI（如 DeepView、LLFF）和 MSI（如 Immersive Light Field Video、MatryODShka），每层深度固定、无法贴合表面，而作者称 LDM 能 “efficiently represent scenes with complex depth and occlusions”。LM（Immersive Light Field Video、Khakhulin et al. 2022 的 StereoLayers、SIMPLI）内部其实也在解 LDM，但要先映射成网格才能重投影；Quark 直接渲染 LDM，不需要网格。ENeRF 用“单层带厚度的深度图”，作者在定性分析中认为它在深度复杂的场景里表现较差。NeRF/3DGS 这类全局表示需要逐场景离线优化。等视差硬约束保证层序固定、每层只负责一段深度（至于“让训练更稳定”之类的收益，论文没有验证）。LDM 的 2D 结构允许使用高效的 2D 网络组件（§2.1）。",
+   "pitfalls_zh": "（1）论文把 σ 叫 density，但它是 sigmoid 输出的 alpha，不像 NeRF 那样要乘步长再算 1−exp(−σδ)。（2）层号方向：ℓ=1 视差最小，离相机最远。（3）深度被硬性限制在 [η,f] 内，视锥外的物体无法表示，η 或 f 设错会直接失败。（4）LDM 本身不存 RGB，只存对 M 张输入图的 β；中间迭代步用的外观 c 是另一回事（见 q5）。",
+   "concept_ids": [
+    "i-layered",
+    "r-reps",
+    "g-depth",
+    "r-alpha",
+    "r-volume"
+   ],
+   "check_q_zh": "L=6、η=0.5 m、f=3 m 时，第 6 层（最近层）能在什么深度范围内移动？tanh 输出为 +1 时深度是多少？",
+   "check_a_zh": "第 6 层的归一化视差带为 [5/6, 1]，对应真实视差 [1.722, 2.0] m⁻¹，深度 0.581–0.5 m。tanh=+1 时 δ+0.5/L=1，视差 = 1·(2−0.333)+0.333 = 2.0 m⁻¹，深度为 0.5 m，正好落在近平面上。"
+  },
+  {
+   "id": "q4",
+   "title_zh": "学习式初始化：可学习特征广播 + back-projection 到锚定平面",
+   "paper_ref": "§3.2.2 “Initialization”；Tab. 8/9 “Initialize” 行（Bp, A4, C, C, A4, C, C, A4, C, C）；Fig. 1 “Learned Initialization”",
+   "what_zh": "输入：最低一级特征 I_k 与 γ_k（Quark 为 36×60），各相机参数，锚点深度。输出：初始特征体 V^(0)，形状 [24,36,64,32]（Quark+ 为 [32,54,96,32]）。",
+   "plain_zh": "第一步还没有“当前 LDM”可以渲染，所以作者这样处理：V 被初始化为一个可学习的 32 维向量，广播到所有层、所有像素，每个位置完全相同，信息只能来自图像；深度直接取锚点，也就是 Eq.4 中 tanh 项为 0，于是得到 24 张等视差的平面。这恰好就是 MPI 和平面扫描的出发点（i-psv、d-mvs）。\n\nBack-projection（记作 Bp）的做法：对每张平面上的每个 LDM 像素，算出它的 3D 点，投到输入视角 m，在特征图上做双线性采样，得到 Δ_m。对平面来说，这个映射就是平面诱导单应 H（g-epipolar）。8 个视角的特征都被放到同一个 3D 位置上：如果这个深度正好是真实表面，各视角采到的是同一个表面点，特征一致（光度一致性）；如果不是，各视角沿各自的极线采到不同的点，特征就不一致。这正是平面扫描体的匹配线索。\n\n之后，3 个 Fusion Block（各含 A4、C、C）用 One-to-many attention 把 8 个视角融合进 V^(0)。这里的 Update Block 是简化版，只组合图像特征和射线方向，没有渲染图 Ĩ。",
+   "analogy_zh": "像刚开始拼图：先把 8 张照片按 24 个固定距离分别投到 24 块透明玻璃上，看哪块玻璃上各张照片的图案能对得上。",
+   "equations": [
+    {
+     "tex": "\\mathbf{X}_\\ell(\\mathbf{p}) = R_t^{\\top}\\big(d_\\ell\\,K_t^{-1}\\tilde{\\mathbf{p}} - \\mathbf{t}_t\\big)",
+     "explain_zh": "把目标视锥中第 ℓ 层、像素 p 的 LDM 元素反投影为世界坐标 3D 点。p̃ 是齐次像素坐标 (x,y,1)；K_t^{-1}p̃ 是深度为 1 的射线方向；乘以深度 d_ℓ 得到相机坐标；R_t、t_t 是目标相机的世界到相机变换，这里取其逆。"
+    },
+    {
+     "tex": "\\Delta_m(\\ell,\\mathbf{p}) = \\operatorname{Bilinear}\\Big(\\mathbf{F}_m,\\ \\pi\\big(K_m(R_m\\mathbf{X}_\\ell(\\mathbf{p}) + \\mathbf{t}_m)\\big)\\Big)",
+     "explain_zh": "反投影算子 P^T 的具体做法（gather）。先把 3D 点变到输入相机 m，经 K_m 投影并做透视除法 π，得到非整数像素坐标，再在特征图 F_m 上双线性采样。结果 Δ_m 与 LDM 同形状，每个视角一份。"
+    },
+    {
+     "tex": "H_{\\ell,m} = K_m\\left(R + \\frac{\\mathbf{t}\\,\\mathbf{n}^{\\top}}{d_\\ell}\\right)K_t^{-1}",
+     "explain_zh": "锚定平面是正对目标相机的平面 n^T X = d_ℓ，其中 n=(0,0,1)，X 在目标相机坐标系中。R、t 是目标相机到输入相机 m 的相对位姿（X_m = R X + t）。此时上面的逐点投影等价于用 3×3 单应 H 对整张特征图做 warp，这就是经典平面扫描。"
+    }
+   ],
+   "numbers_zh": "Quark：24 层×36×64，C=32，使用 36×60 的图像特征；Quark+：32 层×54×96，使用 54×90 的特征。块序列为 Bp，再接 (A4, C, C)×3，即 3 个 4 头注意力块和 6 个残差卷积块。",
+   "why_design_zh": "用可学习常数作为初始 query，让初始化变成纯数据驱动的集合聚合，没有位置偏置。从等视差平面出发等价于经典平面扫描：一开始不知道深度，均匀覆盖整个视差范围最稳妥。论文没有讨论用单目深度等外部先验初始化。“Fewer iterations” 消融去掉前两次 Update & Fuse、把初始 LDM 分辨率加倍，PSNR 只低 0.08 dB（30.3227 对 30.4071），提示迭代次数还有压缩余地。但该消融同时改变了初始分辨率，所以不能直接得出“初始化本身已经足够强”的结论。",
+   "pitfalls_zh": "（1）广播出的初始特征在所有位置都相同，它不是随机初始化；位置和深度信息全部来自 Bp 采到的特征和 γ。（2）Bp 是 gather（在输入图上采样），不是 splat。（3）Init 本身就是一次完整的融合，含 3 个注意力块和 6 个卷积块，并不轻量。正文说“5 个 Update & Fuse 步”，加上 Init 实际上是 6 轮融合。",
+   "concept_ids": [
+    "i-psv",
+    "d-mvs",
+    "g-epipolar",
+    "g-pinhole",
+    "l-attention"
+   ],
+   "check_q_zh": "某像素的真实表面在第 10 层锚定平面附近。初始化时，8 个视角在第 10 层该位置采到的特征有什么特点？第 3 层呢？",
+   "check_a_zh": "在第 10 层，各视角采到的是同一个表面点，特征高度一致，跨视角方差小；在第 3 层，各视角沿各自的极线采到场景中不同的点，特征不一致。融合块据此判断表面在哪一层，这就是 PSV/MVS 的光度一致性原理，只不过这里比较的是学习到的特征，而不是原始颜色。"
+  },
+  {
+   "id": "q5",
+   "title_zh": "Render：把当前 LDM 双线性 splat 到每个输入视角并 over 合成得到 Ĩ",
+   "paper_ref": "§3.2.2 “Decoding and rendering the intermediate LDM”（Eq. 2）；Fig. 3(a) 及其底部插图 “Render to Input Views”",
+   "what_zh": "输入：当前特征体 V^(n) [L,H,W,C]，各输入相机参数。输出：每个输入视角的渲染特征图 Ĩ_m。渲染分辨率论文没有明确给出；按 Fig. 3 图注，Ĩ_m 在当前级别渲染，如果这一步要升分辨率，就先做 2× 上采样，再与下一级图像特征拼接（例如 U&F1 的 72×120）。",
+   "plain_zh": "先解码出中间 LDM：深度 d 按 Eq.4 计算，σ=sigmoid(VW_σ)，外观 c=sigmoid(VW_a)。中间步骤不用 blend weights，而是直接给出一个“外观特征”，至少有 3 个通道（RGB Output 消融用的就是它的前 3 个通道）。为了效率，这里先激活、再投影，与最终输出“先上采样、后激活”的顺序相反。\n\n把每层 splat 到每个输入视角（r-raster、i-warping）：LDM 元素在目标视锥里有确定的 3D 位置，投到输入视角 m 后落在非整数像素坐标上，按双线性权重把它的值分给周围 4 个像素，这就是前向 warping，也就是点溅射。这样做不需要光线追踪，也不需要把 LDM 转成网格再光栅化。然后在输入视角里逐层做 over 合成（r-alpha），得到 Ĩ_m，意思是“如果当前 LDM 是对的，第 m 台相机应该看到什么”。\n\n为什么要渲染回输入视角？这就是分析—合成（analysis by synthesis）和梯度下降里的“前向模型”（l-iterative、f-optim）：只有把假设渲染到有观测的地方，才能算出误差。推理时目标视角没有真值，只有输入视角有照片。splat 是 P，Bp（gather）是 P^T，两者互为转置（伴随），这正是论文把反投影写成 P^T 的原因。",
+   "analogy_zh": "就像把那叠半透明胶片从另外 8 个位置各拍一张照片，看每个位置“拍出来”的样子与真实照片差多少。",
+   "equations": [
+    {
+     "tex": "\\tilde{\\mathbf{I}}_m = \\mathscr{O}\\Big(\\mathscr{P}_{\\theta_m}(\\mathbf{c},\\mathbf{d}),\\ \\mathscr{P}_{\\theta_m}(\\boldsymbol{\\sigma},\\mathbf{d})\\Big)",
+     "explain_zh": "论文 Eq.2（原文把外观写成 a）。𝒫_θm 是用相机参数 θ_m 把各层按深度 d 投影（splat）到输入视角 m 的算子；c 是逐层外观，σ 是逐层 alpha；𝒪 是 over 合成。结果 Ĩ_m 是输入视角 m 的渲染特征图。"
+    },
+    {
+     "tex": "\\tilde{\\mathbf{F}}(\\mathbf{q}) = \\sum_{\\mathbf{p}} w\\big(\\mathbf{q} - \\mathbf{u}_m(\\mathbf{p})\\big)\\,\\mathbf{F}(\\mathbf{p}),\\qquad w(\\mathbf{r}) = \\max(0,1-|r_x|)\\,\\max(0,1-|r_y|)",
+     "explain_zh": "双线性 splat。p 遍历源（LDM 层）上的元素，u_m(p) 是它在输入视角 m 中的非整数投影坐标，q 是目标整数像素，w 是双线性核，只对最近的 4 个像素非零。论文没有说明是否对累加权重做归一化，也没有说明怎样处理空洞。"
+    },
+    {
+     "tex": "\\langle \\mathscr{P}\\mathbf{x},\\ \\mathbf{y} \\rangle = \\langle \\mathbf{x},\\ \\mathscr{P}^{T}\\mathbf{y} \\rangle",
+     "explain_zh": "伴随（转置）关系。x 是层空间的量，y 是图像空间的量。当 𝒫 是用同一组坐标、同一个双线性核做 splat 时，用这组坐标做双线性 gather 恰好就是 𝒫^T。PyTorch 中 grid_sample（gather）的反向传播就是 splat。"
+    }
+   ],
+   "numbers_zh": "每个 Update & Fuse 步都对 M=8 个视角各渲染一次。与 Ĩ 拼接的图像特征分辨率依次为 36×60（U&F0）、72×120（U&F1、U&F2）、144×240（U&F3）、288×480（U&F4）；其中 U&F1、U&F3、U&F4 是升分辨率的步，Ĩ 要先 2× 上采样（Fig. 3 图注）。消融 “No render-and-refine”（Ĩ 置零）：PSNR 30.4071→29.7106（−0.70 dB），SSIM 0.9165→0.9111，LPIPS 0.1543→0.1599，运行时间 −5.22%。",
+   "why_design_zh": "选择 splat 而不是光追或光栅化：LDM 是逐像素深度，没有三角面片；双线性 splat 可微、易于并行，而且不必像 LM 类前作那样先实例化网格。选择渲染到输入视角：只有那里有观测可比。DeepView（MPI）、Immersive Light Field Video 和 SIMPLI 等前作也用 learned render-and-refine，但作者称它们 “far too slow for real-time”（§1）。Quark 的关键改动是把这个过程嵌进多尺度的 UNet 式结构。",
+   "pitfalls_zh": "（1）记号不一致：Eq.2 写 P(a,d)，而前文把外观定义为 c=sigmoid(VW_a)，a 和 c 指同一个量。（2）Ĩ 是渲染出的“外观特征”，不一定是 RGB 图像。（3）论文没有说明 splat 的归一化、空洞处理，也没有说明在输入视角里层序是否需要重排。各层在目标视角下被限制在互不相交的视差带里，层序严格固定；当输入基线较小时，在输入视角里大致也保持这个顺序，但这是推断。（4）中间 LDM 是“先激活后投影”，最终 LDM 是“先上采样后激活”，两者不一样。",
+   "concept_ids": [
+    "r-raster",
+    "r-alpha",
+    "i-warping",
+    "l-iterative",
+    "g-pinhole"
+   ],
+   "check_q_zh": "为什么论文把反投影算子写成 P^T，而不是 P^{-1}？",
+   "check_a_zh": "投影（splat）是线性的，但多对一、存在遮挡，因此没有逆。反投影（在输入图上 gather 采样）恰好是 splat 的伴随，满足 ⟨Px,y⟩=⟨x,P^T y⟩。在梯度下降中，损失对 LDM 的梯度正是 P^T 作用在图像空间的残差上，所以这里要用转置，而不是逆。"
+  },
+  {
+   "id": "q6",
+   "title_zh": "Update：比较 Ĩ 与观测特征，生成逐视角 update feature，再按当前深度反投影成 Δ",
+   "paper_ref": "§3.2.2 前三段；Fig. 3(b)(c)；Tab. 8/9 中的块记号 U；§1（learned render-and-refine 被类比为展开的梯度下降）",
+   "what_zh": "输入：每个视角的 Ĩ_m（跨分辨率的那一步先做 2× 上采样）、这一级的特征 I_{k,m}、射线编码 γ_{k,m}、当前深度 d。输出：逐视角的 update feature U_m（位于图像空间），以及反投影到 LDM 层空间后的 Δ_m [L,H,W,C]，m=1…M。",
+   "plain_zh": "Update Block 是一个小型残差 CNN（l-cnn），在每个输入视角的图像平面上逐视角运行。它把三样东西拼在一起：渲染出的样子 Ĩ_m、真实观测的特征 I_{k,m}、射线方向 γ。输出的 update feature 同时包含两类信息：一是图像特征本身，相当于 PSV 里的匹配线索；二是“渲染与观测之间的差异”，指出 LDM 在哪里把遮挡关系弄错了，论文称之为 visibility 信息。\n\n接着，用当前深度 d 把 U_m 反投影回层空间，得到 Δ_m：对每个 LDM 元素，投到视角 m，在 U_m 上采样。这和初始化时的 Bp 是同一个操作，只是深度不再是平面（i-psv、d-mvs）。\n\n与梯度下降对照一下（f-optim、l-iterative）。若用最小二乘光度损失 E(x)=Σ_m‖R_m(x)−I_m‖²，梯度是 Σ_m J_m^T(R_m(x)−I_m)：先在图像空间算残差，再用雅可比转置搬回参数空间。Quark 的 Update 把“残差”换成可学习的 CNN(Ĩ, I, γ)，把 J^T 换成几何反投影 P^T，再由 Fuse 去学“往哪走、走多远”。DeepView 把这叫作 learned gradient descent。还有一点很重要：大部分逐视角计算都在图像空间（H_k×W_k）完成，不需要在 L×H×W 的层空间里重复 M 次。这部分计算就是附录 B 中的 T_image。",
+   "analogy_zh": "每台相机派一位质检员，对照渲染图和真实照片写一份批注（哪里错了、这里的纹理长什么样），再按当前的深度把批注贴回那叠透明膜的对应位置。",
+   "equations": [
+    {
+     "tex": "\\mathbf{U}_m = \\operatorname{CNN}_{\\text{upd}}\\Big(\\big[\\,\\operatorname{up}(\\tilde{\\mathbf{I}}_m);\\ \\mathbf{I}_{k,m};\\ \\gamma_{k,m}\\,\\big]\\Big)",
+     "explain_zh": "Update Block 的文字描述改写成公式。[;] 表示按通道拼接；up(·) 只在分辨率切换的那一步做 2× 上采样；I_{k,m} 是视角 m 在第 k 级的特征；γ_{k,m} 是射线编码；CNN_upd 是小型残差 CNN，具体层数论文未给出。"
+    },
+    {
+     "tex": "\\Delta_m = \\mathscr{P}^{T}_{\\theta_m}(\\mathbf{U}_m,\\ \\mathbf{d})",
+     "explain_zh": "用当前深度 d 把视角 m 的 update feature 反投影到 LDM 层空间，得到 [L,H,W,C] 的 Δ_m。它像平面扫描体，但层面是弯曲的，内容也不是原始颜色，而是学出来的特征。"
+    },
+    {
+     "tex": "\\nabla_{\\mathbf{x}} E = \\sum_{m=1}^{M} J_m^{\\top}\\big(\\mathcal{R}_m(\\mathbf{x}) - \\mathbf{I}_m\\big)",
+     "explain_zh": "经典的对照。x 是场景参数；ℛ_m 是可微渲染到视角 m；I_m 是观测；J_m = ∂ℛ_m/∂x 是雅可比矩阵。“图像空间残差 → 转置搬回参数空间”的结构与 Quark 的“Update CNN → P^T”一一对应。"
+    },
+    {
+     "tex": "\\mathbf{V}^{(n+1)} = \\Phi\\big(\\mathbf{V}^{(n)},\\ \\{\\Delta_m\\}_{m=1}^{M}\\big)",
+     "explain_zh": "学习化的更新步。Φ 就是下一步要讲的 Fusion Block（One-to-many attention 加残差卷积），它代替了经典梯度下降里的 x ← x − λ∇E。"
+    }
+   ],
+   "numbers_zh": "每步都要对 M=8 个视角各跑一次 Update CNN，C=32；Quark 各步的图像分辨率为 36×60（Init、U&F0）、72×120（U&F1、U&F2）、144×240（U&F3）、288×480（U&F4）。运行时间约为 T_V + M·T_image；在 32 个输入视角以内仍大于 10 fps（Fig. 7）。§1 称学习化更新约 5 步即可收敛，经典梯度下降则需要上千步。",
+   "why_design_zh": "逐视角的计算放在图像空间做，因为图像比 L 层的体小 L 倍，这也是 One-to-many attention 能省掉层空间矩阵乘的前提。不直接使用解析梯度，是因为学习化更新 5 步就能收敛，还能利用学到的场景先验。把“渲染 vs 观测”显式交给网络，是因为去掉 Ĩ 会掉 0.7 dB。",
+   "pitfalls_zh": "（1）“No render-and-refine” 消融只把 Ĩ 置零，迭代和多尺度结构全部保留，所以它去掉的只是“比较”这一信号，而不是整个迭代。（2）Δ 看起来像 PSV，但里面装的是学到的 update feature，不是原始颜色。（3）论文没有给出 Update CNN 的具体结构。（4）在分辨率切换的那一步，论文只说明 Ĩ 要做 2× 上采样，没说特征体 V 本身怎样上采样。",
+   "concept_ids": [
+    "l-iterative",
+    "f-optim",
+    "l-cnn",
+    "i-psv",
+    "d-mvs"
+   ],
+   "check_q_zh": "如果把 Update CNN 换成纯差值 Ĩ_m − I_{k,m} 再反投影，把 Fuse 换成 V ← V − λ·mean_m(Δ_m)，这相当于什么？Quark 为什么不这么做？",
+   "check_a_zh": "这近似于对某种光度损失做一步梯度下降：Δ 相当于 J^T 乘残差，但忽略了遮挡导数等项。Quark 不这么做，原因有三：经典梯度下降需要成百上千步、对步长 λ 敏感；遮挡边界处的目标函数高度非凸；而学习化更新能利用图像特征先验（匹配线索、真实场景的流形），5 步左右就收敛。"
+  },
+  {
+   "id": "q7",
+   "title_zh": "Fuse：One-to-many attention 跨视角融合（含 W^K/W^V 折叠技巧）",
+   "paper_ref": "§3.3（Eq. 5–10）；附录 A（Eq. 11–15，Tab. 6、Tab. 7）；Fig. 3(d) 及顶部插图；Tab. 8/9 中的 A4/A2/A1",
+   "what_zh": "输入：当前 V [L,H,W,C] 和 M 个 Δ_m [L,H,W,C]。输出：更新后的 V^(n+1)。对每个 LDM 元素 (ℓ,y,x)，由 V 给出 1 个 query，对该位置上 M 个视角的 Δ_m 向量（作 key/value）做 cross-attention，与 3×3 残差卷积交替堆叠。",
+   "plain_zh": "为什么用注意力（l-attention）：跨视角融合必须与视角顺序无关，并且支持可变的 M。可选方案各有问题：均值（pixelNeRF）或方差（IBRNet）这类统计量表达力有限；max-pool（DeepView）是较强的集合聚合器；NerFormer 在视角之间做 self-attention，代价是 O(M²)。Quark 的做法是以 V 为唯一 query、M 个视角为 key/value 做 cross-attention。这样每个 LDM 元素都能“软选择”哪些视角的信息可信，隐式完成匹配和遮挡推理。\n\n折叠技巧（f-linalg）：标准的某个头 i 里，注意力 logit 是 (vW_i^q)(Δ_m W_i^k)^T = v(W_i^q W_i^{kT})Δ_m^T。两个矩阵可以先乘成一个 C×C 矩阵，只作用在 1 个 query 上，而不必对 M 个 Δ 各乘一次 W^k。value 一侧同理：Σ_m a_m Δ_m W_i^v W_i^O = (Σ_m a_m Δ_m)(W_i^v W_i^O)，W^v 可以并进输出投影。于是 head_i = Attention(V W_i^q, Δ, Δ)，M 个 key/value 不再需要任何矩阵乘，只剩点积和加权求和。代价是每个头的点积维度从 C/h 变成 C，头数越多节省越少，h=8 时两者持平。Quark 只用 4、2、1 个头。\n\n更关键的收益在系统层面。Δ 位于层空间，有 L×H×W×M 个向量；标准做法要在层空间里对每个元素做 O(LM) 次矩阵乘。折叠之后，层空间里只剩点积，重活都在图像空间的 Update CNN 里做完再“lift”到 3D。Fusion Block 的结构就是 pre-LN Transformer：Eq.9 是注意力残差，Eq.10 用 3×3 卷积残差代替 MLP。论文写的是 2D 3×3 卷积，推测是在每层内部让相邻像素交换信息。论文说整个 Fusion Block 既负责跨视角聚合，也负责把 LDM 约束在“真实场景”的流形上。",
+   "analogy_zh": "标准做法是给 8 位证人每人配一名翻译（W^k、W^v），再听他们的证词。Quark 的做法是法官自己学会听 8 位证人的原话：只把自己的问题翻译一次（W^q 吸收 W^k），听完之后再把结论统一翻译一次（W^O 吸收 W^v）。",
+   "equations": [
+    {
+     "tex": "\\operatorname{Attention}(Q,K,\\mathit{Val}) = \\operatorname{softmax}\\!\\left(\\frac{QK^{\\top}}{\\sqrt{C}}\\right)\\mathit{Val}",
+     "explain_zh": "论文 Eq.5。Q 是 query（这里每个元素只有 1 个），K 是 M 个 key 堆成的矩阵，Val 是 M 个 value；C 是通道数，用于缩放；softmax 在 M 个视角上归一化。"
+    },
+    {
+     "tex": "\\text{head}_i = \\operatorname{Attention}\\big(\\mathbf{V}W_i^{q},\\ \\Delta W_i^{k},\\ \\Delta W_i^{val}\\big),\\qquad \\operatorname{MultiHead} = \\operatorname{concat}(\\text{head}_1,\\dots,\\text{head}_h)\\,W^{O}",
+     "explain_zh": "论文 Eq.6–7，标准多头 cross-attention。W_i^q、W_i^k、W_i^val 都是 C×(C/h) 的投影；W^O 是 C×C 的输出投影；h 是头数。"
+    },
+    {
+     "tex": "(\\mathbf{v}W_i^{q})(\\Delta_m W_i^{k})^{\\top} = \\mathbf{v}\\,\\underbrace{W_i^{q}W_i^{k\\top}}_{\\widehat{W}_i^{q}\\in\\mathbb{R}^{C\\times C}}\\,\\Delta_m^{\\top},\\qquad \\sum_m a_{im}\\,\\Delta_m W_i^{val}W_i^{O} = \\Big(\\sum_m a_{im}\\Delta_m\\Big)\\widehat{W}_i^{O}",
+     "explain_zh": "折叠的推导。v 是 1×C 的 query 行向量；Δ_m 是视角 m 的 1×C 向量；a_im 是头 i 对视角 m 的注意力权重；W_i^O 是 W^O 中与头 i 对应的 (C/h)×C 行块。两个矩阵乘积在推理前就可以合并成 Ŵ。"
+    },
+    {
+     "tex": "\\text{head}_i = \\operatorname{Attention}\\big(\\mathbf{V}\\widehat{W}_i^{q},\\ \\Delta,\\ \\Delta\\big)",
+     "explain_zh": "论文 Eq.8（原文仍写 W_i^q，这里用 Ŵ 强调它已吸收 W_i^k）。key 和 value 直接就是 Δ 本身，对 M 个视角不做任何投影。"
+    },
+    {
+     "tex": "\\mathbf{V}' = \\mathbf{V} + \\operatorname{MultiHead}\\big(\\mathscr{N}(\\mathbf{V}),\\Delta\\big),\\qquad \\mathbf{V}'' = \\mathbf{V}' + \\operatorname{Conv}\\Big(\\operatorname{gelu}\\big(\\operatorname{Conv}(\\mathscr{N}(\\mathbf{V}'))\\big)\\Big)",
+     "explain_zh": "论文 Eq.9–10。𝒩 是归一化，引用的是 Zhang & Sennrich 2019 的 RMSNorm；Conv 是 2D 3×3 卷积；gelu 是激活函数。原文两式都写成 V′ = V + …，这里按先后顺序串联写成 V′、V″。两式都是 pre-norm 残差结构，分别对应 Transformer 的注意力子层和 MLP 子层。"
+    },
+    {
+     "tex": "F_{\\text{std}} = (2N+1)\\,d_k^2 + N d_k + d_k^2,\\qquad F_{\\text{1toN}} = h\\,d_k^2 + N h\\,d_k + h\\,d_k^2",
+     "explain_zh": "附录 A 的 Eq.14 与 Eq.15，是单个 query 对 N 个输入的理论 FLOPs。d_k 是通道数（=C=32），N 是输入视角数（即正文的 M），h 是头数。标准版需要投影 1 个 query、N 个 key 和 N 个 value，再做点积和输出投影；折叠版只需 h 次 C×C 的 query 投影、N·h 次 C 维点积，以及一次 C×(hC) 的输出投影。"
+    }
+   ],
+   "numbers_zh": "d_k=32、N=8 时：标准版 18688 FLOPs；折叠版 h=1 为 2304（快 8.1×），h=2 为 4608（4.1×），h=4 为 9216（2.0×），h=8 为 18432（1.0×）。固定 h=4、N 从 4 增到 64 时，标准版 10368→135168（13.0×），折叠版 8704→16384（1.9×）。Quark 的块数（Tab. 8）：Init、U&F0、U&F1 各为 (A4,C,C)×3，U&F2 为 (A4,C)×2，U&F3 为 (A2,C)×2，U&F4 为 (A1,C)×2，合计 15 个注意力块、24 个卷积块。消融 “No cross attention”（只在求解器内部把 keys 置零，退化为均值；计算 blend weights 时仍用完整的 keys）：PSNR 30.4071→29.7289，SSIM 0.9097，LPIPS 0.1621，运行时间 −3.09%。",
+   "why_design_zh": "单 query 的 cross-attention 把 AggTransformer 的效率和完整 Transformer 的表达力结合起来，同时与顺序无关、支持可变 M。头数随分辨率递减（A4→A2→A1）。附录 A 的说法是 “never uses more than 4 heads, and at high resolutions it uses just 1 or 2 heads, leading to large savings”：高分辨率时元素最多，h=1 的理论加速最大（8.1×）。论文没有解释为什么用 3×3 卷积代替 MLP，合理的解释是为了提供空间上的邻域交互。",
+   "pitfalls_zh": "（1）折叠不是近似。任何标准多头注意力都能写成折叠形式，而且折叠后的 C×C 矩阵不再受秩 ≤C/h 的限制，表达力只多不少；√C 与 √(C/h) 的缩放差别也可以被学习权重吸收。（2）附录 A 有好几处笔误：“a single query attending against N heads” 应为 N 个 key；“we again have a single key attending” 应为 query；Eq.13 中 (W_i^K)^T K 应为 (W_i^K)^T K^T；“instead of applying both W_i^Q and W_i^V” 应为 W_i^K；另外附录里的 V 指 values，与正文的特征体 V 同名。（3）这是“对视角”的注意力，不对空间位置做注意力，空间信息靠 3×3 卷积交换。（4）FLOPs 表只是单个注意力操作的理论值，不是实测运行时间，也不包括 O(M) 的 Update CNN。（5）正文称 pre-LayerNorm，但归一化 𝒩 引用的是 RMSNorm。",
+   "concept_ids": [
+    "l-attention",
+    "f-linalg",
+    "l-cnn",
+    "n-generalizable"
+   ],
+   "check_q_zh": "用 Eq.14/15 算一下 h=2、N=8、d_k=32 时 One-to-many attention 的 FLOPs，并解释为什么头数越多，它的优势越小。",
+   "check_a_zh": "F_1toN = 2·1024 + 8·2·32 + 2·1024 = 2048 + 512 + 2048 = 4608；F_std = 17·1024 + 256 + 1024 = 18688；比值约 4.1×。折叠后每个头都要用满 C 维做投影和点积，成本随 h 线性增长；标准多头把 C 拆成 h 份，每份 C/h 维，总成本与 h 无关。所以 h 越大，二者越接近，h=8 时持平。"
+  },
+  {
+   "id": "q8",
+   "title_zh": "由粗到细：分辨率翻倍 + Layer Collapse（24 层 36×64 → 6 层 288×512）",
+   "paper_ref": "§1 “Multi-scale learned render-and-refine network core”；§3.2 开头；§3.2.2 “Layer Collapse”；Tab. 8/9；Tab. 4 中的 “No layer collapse” 与 “Fewer iterations”",
+   "what_zh": "输入：V^(0) [24,36,64,32]。输出：最终特征体 [6,288,512,32]。Quark 的路径是：Init 24×36×64 → U&F0 24×36×64 → U&F1 24×72×128 → U&F2 24×72×128 → U&F3（先 Lc）12×144×256 → U&F4（先 Lc）6×288×512。",
+   "plain_zh": "整体类似一个 UNet（l-cnn、f-image；论文的措辞是 “reminiscent of a UNet”）：编码器金字塔是收缩路径，各个 U&F 步是扩张路径，每步用同一级的图像特征做 skip。如果直接在 288×512×24 层上迭代 5 次，计算量太大。\n\n“升分辨率、降层数”的依据是：大多数场景在深度方向上只有少数几个“冲激”，也就是表面。早期分辨率低时，用 24 层密集扫描深度，把表面找出来；后期分辨率高时，只留 6 层，让每层可弯曲的深度贴着表面走。Layer collapse 把相邻两层合并成一层：直通支路取两层的均值，残差支路把两层拼接后送进 MLP。§3.2.2 称之为 “residual MLP”，Fig. 3 图注却写成 “residual CNN”，原文前后不一致。由 Eq.3–4，L 减半后每条视差带宽度加倍，新的第 j 条带正好是旧的第 2j−1 和第 2j 条带的并集，因此合并后的深度仍然合法（这一点是由公式推出的）。\n\n算一下计算量。各步的 LDM 元素数：Init 和 U&F0 为 55,296，U&F1 和 U&F2 为 221,184，U&F3 为 442,368，U&F4 为 884,736。如果不做 collapse，U&F3 会是 884,736（2 倍），U&F4 会是 3,538,944（4 倍）。消融 “No layer collapse” 显示运行时间 +115%，PSNR 提高 0.16 dB（30.5635 对 30.4071）：用很小的质量代价换来了超过 2 倍的加速。注意消融的基线是 Quark+（32 层→8 层），在半分辨率上训练 250K 步，不是这里算元素数用的 Quark；不过 Quark+ 不做 collapse 时，最后一步同样是 4 倍元素数。",
+   "analogy_zh": "像找东西：先在一张模糊的大地图上把整条街（所有深度）扫一遍，确定东西在哪几段；再拿放大镜只看这几段。",
+   "equations": [
+    {
+     "tex": "\\operatorname{Lc}(\\mathbf{V}_{2j-1},\\mathbf{V}_{2j}) = \\tfrac{1}{2}\\big(\\mathbf{V}_{2j-1} + \\mathbf{V}_{2j}\\big) + \\operatorname{MLP}\\big([\\mathbf{V}_{2j-1};\\mathbf{V}_{2j}]\\big)",
+     "explain_zh": "Layer collapse 的残差 MLP（§3.2.2 的文字描述）。V_{2j−1} 和 V_{2j} 是相邻两层在同一像素上的 C 维特征；[;] 是拼接，得到 2C 维；输出第 j 层的 C 维特征。直通支路是均值，残差支路是 MLP。"
+    },
+    {
+     "tex": "\\left[\\frac{j-1}{L'},\\ \\frac{j}{L'}\\right] = \\left[\\frac{2j-2}{L},\\ \\frac{2j-1}{L}\\right] \\cup \\left[\\frac{2j-1}{L},\\ \\frac{2j}{L}\\right],\\qquad L' = L/2",
+     "explain_zh": "由 Eq.3–4 推出的视差带合并关系（归一化视差）。L 是 collapse 前的层数，L' 是之后的层数；新的第 j 条带覆盖旧的两条带。"
+    },
+    {
+     "tex": "\\text{cost}^{(n)} \\propto L^{(n)}\\,H^{(n)}\\,W^{(n)}",
+     "explain_zh": "层空间计算量（注意力点积、3×3 卷积）大致正比于第 n 步的 LDM 元素数。分辨率翻倍会让 H·W 变成 4 倍，层数减半能抵消其中一半。"
+    }
+   ],
+   "numbers_zh": "Quark 各步形状见上；注意力头数 A4（≤72×128）→ A2（144×256）→ A1（288×512）。Quark+：32×54×96 → 32×108×192 → 16×216×384 → 8×432×768。消融：No layer collapse 运行时间 +115.18%，PSNR/SSIM/LPIPS 为 30.5635/0.9184/0.1531（基线 30.4071/0.9165/0.1543）。Fewer iterations（去掉前两次 U&F、初始分辨率加倍）运行时间 −17.49%，指标 30.3227/0.9153/0.1554。",
+   "why_design_zh": "作者对比了两种方案。一是已有的 learned render-and-refine 实现（DeepView、Immersive Light Field Video、SIMPLI），作者称其 “far too slow for real-time”（SIMPLI 在表 1 中需要 4.4 s），并指出与 SIMPLI 最主要的差异就是多尺度 LDM 结构。二是全程保持层数（消融中运行时间 +115%）。UNet 式结构能在空间维和深度维之间平衡计算量：少层配高分辨率负责细节，多层配低分辨率负责定位。",
+   "pitfalls_zh": "（1）分辨率翻倍发生在 U&F1、U&F3、U&F4（Tab. 8 从 0 开始编号）；Intro 从 1 开始数，说成“第二、四、五步”；Layer collapse 发生在 U&F3 和 U&F4 开头。两种编号方式很容易混。（2）正文说“5 次 Update & Fuse”，加上同样包含 3 个融合块的 Init，实际是 6 轮融合。（3）“Fewer iterations” 几乎不掉点，作者也承认设计空间没有搜索充分，所以不要把 5 步当成必需的。（4）论文没说明 V 在分辨率翻倍时用什么方式上采样。",
+   "concept_ids": [
+    "l-cnn",
+    "f-image",
+    "i-layered",
+    "l-iterative",
+    "r-volume"
+   ],
+   "check_q_zh": "如果一直保留 24 层到最后，U&F4 的 LDM 元素数是现在的几倍？这与消融里“只慢了 115%”矛盾吗？",
+   "check_a_zh": "24×288×512 = 3,538,944，是现在 884,736 的 4 倍；U&F3 则是 2 倍。这并不矛盾：总运行时间里还有大量与层数无关的部分，包括逐视角的图像空间计算（编码、Update CNN、γ）、低分辨率的前几步和最终渲染。而且消融实现没有做优化，运行时间只是近似值。另外，该消融是在 Quark+ 上做的（最后一步 32×432×768 对 8×432×768，同样是 4 倍）。"
+  },
+  {
+   "id": "q9",
+   "title_zh": "上采样后再激活（post-activation，借鉴 ReLU Fields）",
+   "paper_ref": "§1 末段（Upsample & Activate）；§3.2.3（Eq. 3–4 之后的段落）；§3.4 模型变体段；引用 Karnewar et al. 2022（ReLU Fields）与 Sun et al. 2022（DVGO）",
+   "what_zh": "输入：V^(N)，Quark 为 [6,288,512,32]。输出：全分辨率 LDM，其中 d、σ 为 [6,1080,1920,1]，β 为 [6,1080,1920,8]。步骤：线性投影得到 logits → 双线性上采样 3.75× → 施加 tanh 并做视差到深度的映射、sigmoid、softmax。",
+   "plain_zh": "先看为什么要这样做（f-image）。如果先激活再插值，一条从“完全透明”到“完全不透明”的边缘会被插成一段线性斜坡，宽度等于 1 个低分辨率像素，也就是 3.75 个输出像素，看起来就是糊的。如果先对 logits 插值、再过 sigmoid，logit 线性穿过 0 的那一小段会被 sigmoid 变成陡峭的台阶：边缘位置可以在子像素精度上移动，同时保持锐利。这就是 ReLU Fields 和 DVGO 的 post-activation：低分辨率网格加上“插值后的非线性”，就能表示分段光滑、边界锐利的函数。\n\n数值例子：相邻两个低分辨率像素的 σ logit 分别为 −6 和 +6，上采样 3.75×。用 post-activation，σ 从 0.1 升到 0.9 的过渡宽度约为 1.37 个输出像素；先激活再插值则约为 3.0 个输出像素。\n\nBlend weights 的 logits 来自最后一个融合块的 One-to-many attention，用的是该块的 Δ；softmax 推迟到上采样之后才施加。最后一步只有 1 个头（A1），每个元素恰好得到 M 个 attention logits，可以直接当作 M 路 blend logits。这个对应关系是推断，论文没有明说。深度一侧，tanh 在上采样之后施加，再做视差到深度的映射，所以上采样后的深度仍然落在各自的带内。",
+   "analogy_zh": "好比先把海拔数据放大，再画出海岸线；而不是先画好一条粗糙的海岸线再把图片放大。前者画出的海岸线依然锐利。",
+   "equations": [
+    {
+     "tex": "\\mathbf{z}^{\\uparrow} = \\operatorname{Bilinear}_{s}\\big(\\mathbf{V}^{(N)}W\\big),\\quad \\sigma = \\operatorname{sigmoid}(z_\\sigma^{\\uparrow}),\\quad \\beta_m = \\frac{\\exp(z^{\\uparrow}_{\\beta,m})}{\\sum_{m'=1}^{M}\\exp(z^{\\uparrow}_{\\beta,m'})}",
+     "explain_zh": "V^(N) 是最后的特征体；W 是各属性的线性投影（W_σ、W_d，以及 β 对应的注意力 logits）；Bilinear_s 按 s 倍做双线性上采样；z↑ 是上采样后、尚未激活的 logits；σ 用 sigmoid，β 在 M 个视角上做 softmax，深度则代入 Eq.4 的 tanh。"
+    },
+    {
+     "tex": "\\operatorname{sigmoid}\\big(\\operatorname{Bilinear}(z)\\big) \\neq \\operatorname{Bilinear}\\big(\\operatorname{sigmoid}(z)\\big)",
+     "explain_zh": "非线性函数与插值不可交换。左边是 post-activation，边缘锐利、位置可达子像素精度；右边是 pre-activation，边缘是线性斜坡。"
+    },
+    {
+     "tex": "s = \\frac{1080}{288} = \\frac{1920}{512} = 3.75",
+     "explain_zh": "Quark 的上采样因子。Quark+ 按表 9 算是 1080/432 = 1920/768 = 2.5，但正文写的是 2.4×。"
+    }
+   ],
+   "numbers_zh": "Quark 的 s=3.75。Quark+ 正文写 2.4×，而按表 9 的 432×768 算应为 2.5×；正文还把 Quark+ 的输出写成 “768×438”，与表 9 不一致。§1 称 s 约为 2–4×。边缘例子：logits 为 −6/+6 时，过渡宽度 1.37 像素（post）对 3.0 像素（pre）。",
+   "why_design_zh": "网络只需在 288×512 上求解，剩下的交给便宜的双线性上采样和 IBR 取样。作者给出的理由有两条：直接在最终分辨率上求解 LDM 代价过高（§3.2）；post-sampling activation 能得到锐利的遮挡边界（§3.2.3，引用 ReLU Fields 和 DVGO）。论文没有与学习式上采样器做比较。",
+   "pitfalls_zh": "（1）中间 LDM 为了效率是先激活再投影，只有最终 LDM 是先上采样后激活。（2）post-activation 能让边缘锐利，但无法凭空造出低分辨率网格里没有的几何细节：同一个低分辨率像素里的两条边缘分不开。这可能是 2K 输出时 LPIPS 变差的原因之一（RFF 上 1024×768 为 0.137，2048×1536 为 0.233；两者在不同分辨率下评测，论文没有做归因分析）。（3）注意上采样因子和 Quark+ 尺寸的笔误。",
+   "concept_ids": [
+    "f-image",
+    "i-layered",
+    "i-blending",
+    "g-depth"
+   ],
+   "check_q_zh": "沿用 −6/+6 的例子：post-activation 的边缘宽度与 logit 差值是什么关系？如果 logits 是 −1/+1 会怎样？",
+   "check_a_zh": "sigmoid 从 0.1 到 0.9 需要 logit 变化约 4.39，所以过渡宽度 ≈ 4.39 ÷ logit 差值 × 3.75 像素。差值为 12 时约 1.37 像素；差值为 2 时比值大于 1，也就是在整个低分辨率像素间距内，σ 只从 0.27 变到 0.73，边缘是软的。网络可以通过 logit 的幅度来控制边缘有多锐利。"
+  },
+  {
+   "id": "q10",
+   "title_zh": "IBR 混合与 over 合成：全分辨率输入像素的凸组合",
+   "paper_ref": "§3.1（Eq. 1）；§3 开头（可选深度输出）；Tab. 8/9 的 Output 行；Tab. 4 “RGB Output”；§4.3 Limitations",
+   "what_zh": "输入：全分辨率 LDM（d、σ、β），M 张原始全分辨率输入图像及其相机参数。输出：目标视角 RGB [1080,1920,3]；可选地对深度做 over 合成，得到深度图。",
+   "plain_zh": "这是经典 IBR 的思路（i-lightfield、i-blending）：新视角像素的颜色不是网络“画”出来的，而是从真实照片里“拿”来的，几何只负责告诉你去哪里拿。对每个输出像素和每一层：用该层深度得到 3D 点 → 投影到每张输入图 → 双线性采样颜色（P^T，即 i-warping 中的后向 warping）→ 用 β 做凸组合得到该层颜色。在 ULR（Unstructured Lumigraph Rendering）里，这个权重由角度、距离等手工规则给出；Quark 让网络逐层、逐像素地学出来。\n\n然后按 σ 从后往前把 6 层 over 合成（r-alpha）。CUDA 渲染器在 1080p 下约 1.3 ms。输出分辨率几乎不影响运行时间（1024×768 为 32.2 ms，2048×1536 为 33.0 ms），因为不论输出分辨率多少，内部 LDM 每层的像素数都与 1080p 模型的 288×512 大致相同（§4.1；4:3 画幅时按宽高比调整形状）。\n\n凸组合带来的后果（r-appearance）：输出颜色必然落在各输入颜色的凸包里，任何一张输入图都没拍到的高光是生成不出来的。Quark 靠“为每个目标视角重新求 β”加上“射线编码偏向近邻视角”来近似反射和折射。如果输入之间曝光或焦距不一致（§4.3；白平衡差异同理，但这是推断），β 在空间上的变化就会表现为可见的接缝和闪烁；如果标定有误差，采样会错位，出现硬边而不是模糊。",
+   "analogy_zh": "像做马赛克拼贴：每块瓷砖的位置（每层每个像素）按比例从 8 张照片里取色。网络只决定位置和比例，瓷砖本身来自真实照片，所以画面清晰。",
+   "equations": [
+    {
+     "tex": "\\mathbf{c}_{\\text{target}} = \\mathscr{O}\\!\\left(\\sum_{m=1}^{M}\\beta_m\\cdot\\mathscr{P}^{T}_{\\theta_m}(\\mathbf{I}_m,\\mathbf{d}),\\ \\boldsymbol{\\sigma}\\right)",
+     "explain_zh": "论文 Eq.1（这里把原文的 P^T(I,d) 写成按视角的 P^T(I_m,d)）。I_m 是第 m 张全分辨率输入图；P^T 按各层深度 d 把它反投影（采样）到 LDM 各层；β_m 是逐层逐像素的权重，满足 β≥0、Σ_m β_m = 1；𝒪 按 σ 做 over 合成。"
+    },
+    {
+     "tex": "\\mathbf{c}_\\ell(\\mathbf{p}) = \\sum_{m=1}^{M} \\beta_{\\ell,m}(\\mathbf{p})\\;\\mathbf{I}_m\\big(\\pi_m(\\mathbf{X}_\\ell(\\mathbf{p}))\\big)",
+     "explain_zh": "逐层颜色。X_ℓ(p) 是第 ℓ 层、像素 p 的 3D 点（见 q4）；π_m 投影到输入 m 的像素坐标；I_m(·) 表示双线性采样；β_{ℓ,m}(p) 是 softmax 权重。"
+    },
+    {
+     "tex": "\\mathbf{C}(\\mathbf{p}) = \\sum_{\\ell=1}^{L} \\mathbf{c}_\\ell(\\mathbf{p})\\,\\sigma_\\ell(\\mathbf{p})\\prod_{j=\\ell+1}^{L}\\big(1-\\sigma_j(\\mathbf{p})\\big),\\qquad D(\\mathbf{p}) = \\sum_{\\ell=1}^{L} d_\\ell(\\mathbf{p})\\,\\sigma_\\ell(\\mathbf{p})\\prod_{j=\\ell+1}^{L}\\big(1-\\sigma_j(\\mathbf{p})\\big)",
+     "explain_zh": "over 合成的最终颜色 C，以及可选的深度图 D（把颜色换成各层深度后同样合成）。ℓ=L 是最近层，∏ 是更近各层的透射率。"
+    }
+   ],
+   "numbers_zh": "1080p 约 1.3 ms/帧；Quark 6 层，Quark+ 8 层，M=8。消融 “RGB Output”：PSNR 30.4071→29.1779（−1.23 dB），SSIM 0.9165→0.8926，LPIPS 0.1543→0.1788，运行时间 −4.56%，是所有消融中退化最大的一项。",
+   "why_design_zh": "选 IBR，是因为高频纹理直接取自全分辨率输入，网络在低分辨率上求解就够了，从而能以实时速度输出 1080p 到 2K。作者用 “RGB Output” 消融（−1.23 dB）否定了直接输出 RGB；在定性分析中还推测，Quark 比 SIMPLI 更锐利 “likely aided by its use of IBR with blend weights”。显式的视角相关外观模型（NeX、Ref-NeRF）则被留作未来工作。",
+   "pitfalls_zh": "（1）Eq.1 原文写的是 Σ_m β_m·P^T(I,d)，每一项都放了整组 I，应理解为 P^T(I_m,d)。（2）表 8（Quark）的 Output 行写 “8,1080,1920,4 (RGB+σ)”，但 Quark 只有 6 层：这个 8 可能指 M=8 张重采样后的输入图，也可能是从表 9（8 层）抄来的笔误。（3）凸组合意味着没有生成颜色的能力：8 张输入都没看到的遮挡区域，只能取到错误的像素，表现为硬边。（4）“RGB Output” 消融只是取外观特征的前 3 个通道，不是精心设计的 RGB 解码器，所以 −1.23 dB 可能高估了 IBR 相对于一个好的 RGB 头的优势。",
+   "concept_ids": [
+    "i-lightfield",
+    "i-blending",
+    "i-warping",
+    "r-alpha",
+    "r-appearance"
+   ],
+   "check_q_zh": "一面白墙在 8 张输入里的亮度因曝光不同而略有差异。目标相机平移时，为什么这块墙面的亮度会跳动？",
+   "check_a_zh": "该处颜色等于 Σ β_m I_m，而 β 会随目标视角变化（射线编码让权重偏向近邻视角），输入集合切换时甚至会突变。既然各输入曝光不同，β 一变，输出亮度就跟着变，于是出现闪烁。要解决这个问题，需要做颜色和曝光标定，或者在网络里显式建模曝光差异。"
+  },
+  {
+   "id": "q11",
+   "title_zh": "训练：数据混合、10·L1 + LPIPS、两阶段分辨率、学习率日程",
+   "paper_ref": "§3.4 Training（含其后的数据集段与模型变体段）；§4.2（消融的训练设置）；引用 Zhang et al. 2018（LPIPS）、Radford et al. 2019（GPT-2 的 residual scaling）",
+   "what_zh": "输入：Spaces、RFF、NeX-Shiny、SWORD 中已标定的多视角静态图像；每个样本包含 8 张输入和 1 张 held-out 目标。输出：训练好的 Quark / Quark+ 权重。",
+   "plain_zh": "损失函数是 10·L1 + LPIPS（l-loss、v-metrics）。L1 保证逐像素的颜色和亮度正确，而且比 L2 对离群值更鲁棒；LPIPS 在预训练网络的特征空间里比较两张图，会惩罚模糊、奖励锐利的纹理。系数 10 大概是为了让两项量级可比，论文没有解释。\n\n数据方面：四个静态数据集加权混合，较小的 Shiny 权重为 0.25，其余等权。每个样本按其宽高比调整内部 LDM 的形状，同时保持每层像素总数与 1080p 模型相同。近/远平面按 SfM 点的深度分布逐样本设定（g-sfm）。训练中没有任何动态视频，但模型可以直接用在 N3DV 视频上，因为它逐帧处理，每一帧对它来说就是一个静态多视角样本。\n\n优化方面（f-optim）：先用半分辨率的输入和 LDM 训练 250K 步，再在全分辨率上训练 350K 步，共 600K 步。目标图和渲染图随机裁剪（两阶段分别为 256² 和 512²）以节省显存，因为 IBR 渲染是逐像素的，只需渲染裁剪区域。学习率先用 20K 步 warmup 到 1.5e-4，保持 520K 步，再在“最后 680K 步”里 cosine 衰减到 0。全网络使用 GPT-2 式的 residual scaling（按残差层数缩放残差分支的初始化），以稳定深层网络的训练。",
+   "analogy_zh": "先在小图上学会大致怎么对齐，再到大图上练精细活。裁剪就像每次只检查拼图的一个角，但拼图本身每次都要完整拼一遍。",
+   "equations": [
+    {
+     "tex": "\\mathcal{L} = 10\\,\\lVert \\hat{\\mathbf{I}} - \\mathbf{I} \\rVert_1 + \\operatorname{LPIPS}(\\hat{\\mathbf{I}},\\mathbf{I})",
+     "explain_zh": "Î 是渲染出的目标视角图（裁剪区域），I 是 held-out 的真实目标图；‖·‖_1 是逐像素绝对误差的平均。"
+    },
+    {
+     "tex": "\\operatorname{LPIPS}(\\hat{x},x) = \\sum_{l}\\frac{1}{H_l W_l}\\sum_{h,w}\\big\\lVert \\mathbf{w}_l \\odot (\\hat{\\mathbf{y}}^{l}_{hw} - \\mathbf{y}^{l}_{hw}) \\big\\rVert_2^2",
+     "explain_zh": "LPIPS 的定义（Zhang et al. 2018）。ŷ^l、y^l 是两张图在预训练网络第 l 层的特征，已按通道归一化；H_l、W_l 是该层的空间尺寸；w_l 是学到的逐通道权重；⊙ 是逐元素乘。"
+    },
+    {
+     "tex": "\\eta_{\\text{lr}}(t) = \\begin{cases} 1.5\\times10^{-4}\\cdot t/20\\text{K}, & t < 20\\text{K} \\\\ 1.5\\times10^{-4}, & 20\\text{K} \\le t < 540\\text{K} \\\\ 0.75\\times10^{-4}\\big(1 + \\cos\\frac{\\pi(t-540\\text{K})}{680\\text{K}}\\big), & t \\ge 540\\text{K} \\end{cases}",
+     "explain_zh": "按原文字面写出的学习率日程，t 是训练步数。按字面理解，衰减到 0 要到 1.22M 步，而总步数只有 600K。在 600K 处，余弦项只走了 60K/680K，学习率仍约为峰值的 98%。这说明原文有笔误，或者“最后 680K”另有所指。"
+    }
+   ],
+   "numbers_zh": "batch size 16，单台 16×A100 机器。250K + 350K = 600K 步；裁剪 256×256 和 512×512；学习率峰值 1.5e-4，warmup 20K，保持 520K，cosine 680K（与总步数矛盾）；Shiny 权重 0.25。消融模型在半分辨率下训练 250K 步；另有一个 4–16 张输入的可变版本。训练总时长、框架和显存都未报告。",
+   "why_design_zh": "论文没有逐条说明这些选择的动机，以下是合理的解读：多数据集混合是为了泛化；从最近 16 个视角中随机抽 8 个，是为了对视角选择更鲁棒；加 LPIPS 是为了锐利，避免 L2 带来的模糊；先低分辨率后高分辨率，是为了在大部分训练时间里降低成本。",
+   "pitfalls_zh": "（1）学习率日程与总步数矛盾。（2）训练集包含 RFF 和 Shiny，表 1 又在这两个数据集上评测，论文没说明评测场景是否从训练集中剔除。（3）ENeRF 等基线是在 RFF+IBRNet 数据上重训的，与 Quark 的训练数据不同。（4）训练集里没有视频、没有专门的人像数据，也没有 DL3DV，在这些数据上的表现属于零样本泛化。",
+   "concept_ids": [
+    "l-loss",
+    "f-optim",
+    "v-metrics",
+    "g-sfm",
+    "n-generalizable"
+   ],
+   "check_q_zh": "为什么只对 256×256 的裁剪计算损失，训练出的网络却能输出整幅图？这样做省了什么，没省什么？",
+   "check_a_zh": "IBR 渲染是逐像素独立的：每个输出像素只依赖该位置的 LDM 列和对输入图的采样，所以只渲染裁剪区域就能得到正确的局部监督。省下的是全分辨率渲染和 LPIPS 的显存与时间。没省的是 LDM 求解本身：按论文的描述推断，Update & Fuse 仍要在整个内部分辨率上运行，并参与反向传播。"
+  },
+  {
+   "id": "q12",
+   "title_zh": "如何读实验、运行时间与消融",
+   "paper_ref": "§4.1（Tab. 1–3，Fig. 4–6）；§4.2（Tab. 4–5）；§4.3；附录 A（Tab. 6–7）；附录 B（Fig. 7–8）；附录 C（Fig. 9）",
+   "what_zh": "输入：论文的全部表格和图。输出：判断 Quark 到底证明了什么、没有证明什么。",
+   "plain_zh": "先弄清指标（v-metrics）。PSNR = 10·log10(1/MSE)，逐像素计算，偏好平滑的结果；SSIM 看局部结构；LPIPS 看感知差异，越低越好。三者都是逐帧指标，没有任何一个衡量时间闪烁（作者自己承认，见 v-temporal）。TIME 列包含重建和渲染。\n\n表 1 是核心的同类比较：可泛化方法、同一硬件。Quark 在三个数据集上全面领先，速度快 6 倍以上。但要注意两点：训练数据不同；2048×1536 那几行里，内部几何分辨率并没有变。表 2 和表 3 是跨类比较，对手是逐场景优化方法。这里的基线数字照搬原论文；DL3DV 的评测分辨率较低；“每 8 张取 1 张作目标”在稠密轨迹上接近插值，天然有利于 IBR。Deep Blending 上的失败则标出了“最近 8 个视角够用”这一假设的边界。\n\n表 4 的消融在半分辨率上训练 250K 步，没有报告多次运行或方差，PSNR 差异在 0.08–1.23 dB 之间。按影响排序：IBR 输出（−1.23）> render-and-refine（−0.70）≈ cross attention（−0.68）> 射线编码（−0.09）；layer collapse 用 0.16 dB 换来了超过 2 倍的加速。附录 A 的 FLOPs 是理论值；Fig. 7 显示运行时间随输入数线性增长；Fig. 8 显示大部分时间花在 Update & Fuse 上，最终上采样和渲染占比很小。",
+   "analogy_zh": "像读体检报告：先看每项指标测的是什么（PSNR 看像素，LPIPS 看观感，没有哪项测“闪不闪”），再看对照组是不是在同样条件下测的。",
+   "equations": [
+    {
+     "tex": "\\operatorname{PSNR} = 10\\log_{10}\\frac{1}{\\operatorname{MSE}},\\qquad \\frac{\\operatorname{MSE}_2}{\\operatorname{MSE}_1} = 10^{-\\Delta\\operatorname{PSNR}/10}",
+     "explain_zh": "像素值取 [0,1] 时的 PSNR。ΔPSNR 是两者的差：+0.7 dB 意味着 MSE 降到原来的 10^{−0.07}≈0.85 倍，即减少约 15%；+1.23 dB 意味着 MSE 约减少 25%。"
+    },
+    {
+     "tex": "T(M) \\approx T_V + M\\,T_{\\text{image}}",
+     "explain_zh": "附录 B 的运行时间模型。T_V 是特征体上的固定开销（One-to-many attention 近似 O(1)、Fusion 里的卷积、渲染）；T_image 是每多一个输入视角增加的开销（编码和 Update CNN，属于 O(M)）；M 是输入视角数。"
+    }
+   ],
+   "numbers_zh": "表 1，1024×768（PSNR/SSIM/LPIPS）：Quark 在 RFF 26.03/0.850/0.137，Shiny 26.51/0.866/0.108，N3DV 31.57/0.942/0.127，32.2 ms；Quark+ 在 RFF 26.53、N3DV 31.95，91.9 ms；ENeRF 在 RFF 23.71、N3DV 29.86，205 ms；GPNR 在 RFF 25.42，25 s；SIMPLI 在 RFF 23.35，4.4 s。表 1，2048×1536：Quark 在 RFF 25.42/0.809/0.233，Shiny 24.66/0.799/0.174，N3DV 31.46/0.940/0.187，33.0 ms；ENeRF 811 ms。表 2（DL3DV）：Quark 31.31/0.932/0.103，Zip-NeRF 31.22/0.921/0.112，3DGS 29.82/0.919/0.120。表 3：Mip-NeRF360 上 Quark 26.60，3DGS-30K 27.21，M-NeRF360 27.69；T&T 上 Quark 23.60，3DGS-30K 23.14；Deep Blending 上 Quark 23.61，3DGS-30K 30.04。表 5（Spaces，小/中/大基线）：29.03/29.57/29.43。Fig. 7：32 个输入视角以内仍大于 10 fps。",
+   "why_design_zh": "作者的实验设计是：和最相近的三种可泛化方法（ENeRF、GPNR、SIMPLI）在同一硬件上重训后比较，再借用公开数字与逐场景优化方法比较。没有与同期或稍早公开的 feed-forward 3DGS（如 pixelSplat、MVSplat、GPS-Gaussian）以及大模型 NVS（LVSM，2024 年 10 月公开于 arXiv）做比较。",
+   "pitfalls_zh": "（1）“超过 Zip-NeRF 和 3DGS”只在 DL3DV 的这个协议下成立，而且设定并不完全相同。（2）“2K 实时”不等于 2K 几何。（3）消融没有方差；“No cross attention” 只在求解器内部把 keys 置零，计算 blend weights 时仍用完整的 keys，所以低估了注意力对混合的作用。（4）N3DV 只以 0 号相机为目标、每 10 帧评一帧，不能说明时间稳定性。（5）表 5 没给出 DeepView 的数值，SSIM 也因预处理差异不可比。",
+   "concept_ids": [
+    "v-metrics",
+    "v-temporal",
+    "n-nerf",
+    "n-3dgs",
+    "n-generalizable"
+   ],
+   "check_q_zh": "Quark 在 RFF 上从 1024×768 升到 2048×1536，PSNR 从 26.03 降到 25.42，运行时间却只从 32.2 ms 增加到 33.0 ms。这说明了什么？",
+   "check_a_zh": "内部 LDM 每层的像素数没有变（与 288×512 等面积），输出分辨率只影响上采样和 IBR 采样，这部分只有毫秒级，所以时间几乎不变。但输出分辨率更高时，几何细节不足、上采样后的边缘和混合误差可能都会暴露出来，LPIPS 从 0.137 升到 0.233（论文没有做归因；而且两者针对不同分辨率的真值评测，不能严格对比）。“2K 实时”应理解为“2K 输出，每层几何约 15 万像素”。"
+  }
+ ],
+ "tensor_trace": [
+  {
+   "stage_zh": "原始输入",
+   "tensor": "I_m, θ_m",
+   "shape": "[M=8, H_in, W_in, 3]；每个视角有 K_m (3×3)、R_m (3×3)、t_m (3)；目标相机同理；标量 η、f",
+   "note_zh": "输入原始分辨率随数据集而定，论文没有统一给出。目标输出为 1080×1920。"
+  },
+  {
+   "stage_zh": "编码金字塔（Encode Input Images）",
+   "tensor": "I_{k,m}",
+   "shape": "[8,288,480,32]、[8,144,240,32]、[8,72,120,32]、[8,36,60,32]",
+   "note_zh": "Quark 的情况，由残差 CNN 加步长 mean-pool 得到。Quark+ 为 432×720、216×360、108×180、54×90。"
+  },
+  {
+   "stage_zh": "射线方向编码",
+   "tensor": "v → tanh → sin/cos → γ_k",
+   "shape": "[8,h,w,2] → [8,h,w,32]（2 维 × 8 octave × sin/cos，按描述推断）→ 线性层 → [8,h_k,w_k,32]",
+   "note_zh": "只在低分辨率算一次，再双线性上采样到各级，每级一个独立的投影矩阵。"
+  },
+  {
+   "stage_zh": "初始化：广播特征与锚点深度",
+   "tensor": "V_init, d_anchor",
+   "shape": "[1,1,1,32] 广播为 [24,36,64,32]；d 为 [24,36,64,1]（24 张等视差平面）",
+   "note_zh": "Eq.4 中 tanh 项取 0，每层深度就是锚点。"
+  },
+  {
+   "stage_zh": "初始化：Back-projection（Bp）",
+   "tensor": "Δ_m^(0)",
+   "shape": "[8,24,36,64,32]",
+   "note_zh": "在 36×60 的特征图上 gather，相当于平面扫描体。"
+  },
+  {
+   "stage_zh": "One-to-many attention（逐 LDM 元素）",
+   "tensor": "q, {Δ_m}, logits, heads",
+   "shape": "q：每个头 1×32（经 C×C 的 Ŵ^q）；key/value：8×32；logits：[h,8]；头输出：[h,32]；拼接为 [h·32]，经 W^O 得到 [32]",
+   "note_zh": "对 8 个视角的 Δ 不做任何投影。Init/U&F0–2 中 h=4，U&F3 中 h=2，U&F4 中 h=1。"
+  },
+  {
+   "stage_zh": "Init 输出",
+   "tensor": "V^(0)",
+   "shape": "[24,36,64,32]",
+   "note_zh": "经过 (A4,C,C)×3，LDM 元素数 55,296。"
+  },
+  {
+   "stage_zh": "U&F0：解码并渲染到输入视角",
+   "tensor": "d, σ, c → Ĩ_m",
+   "shape": "d、σ：[24,36,64,1]；c：[24,36,64,C_a]（C_a≥3，具体未报告）；Ĩ：[8,36,60,C_a]",
+   "note_zh": "中间 LDM 先激活再 splat，然后在输入视角里做 over 合成。Ĩ 的渲染分辨率是推断的，论文只说明在升分辨率的步里要做 2× 上采样。"
+  },
+  {
+   "stage_zh": "U&F0：Update 与反投影",
+   "tensor": "U_m → Δ_m → V^(1)",
+   "shape": "U：[8,36,60,32]；Δ：[8,24,36,64,32]；V^(1)：[24,36,64,32]",
+   "note_zh": "Update CNN 在图像空间运行，是 O(M) 的部分。"
+  },
+  {
+   "stage_zh": "U&F1（分辨率翻倍）",
+   "tensor": "up(Ĩ), I_{72×120}, V",
+   "shape": "Ĩ 上采样为 [8,72,120,·]；V：[24,36,64,32] → [24,72,128,32]",
+   "note_zh": "LDM 元素数 221,184，融合块为 (A4,C,C)×3。"
+  },
+  {
+   "stage_zh": "U&F2",
+   "tensor": "V^(3)",
+   "shape": "[24,72,128,32]",
+   "note_zh": "分辨率不变，融合块为 (A4,C)×2。"
+  },
+  {
+   "stage_zh": "U&F3（先 Layer collapse，再翻倍）",
+   "tensor": "Lc(V), V^(4)",
+   "shape": "[24,72,128,32] → Lc → [12,72,128,32] → [12,144,256,32]",
+   "note_zh": "使用 144×240 的特征，A2。元素数 442,368；不做 collapse 则为 884,736。"
+  },
+  {
+   "stage_zh": "U&F4（再次 Layer collapse 并翻倍）",
+   "tensor": "V^(5)",
+   "shape": "[12,144,256,32] → Lc → [6,144,256,32] → [6,288,512,32]",
+   "note_zh": "使用 288×480 的特征，A1。元素数 884,736；不做 collapse 则为 3,538,944。若显式存储 8 个视角的 Δ，共 8×884,736×32 ≈ 2.26 亿个数（fp32 约 0.9 GB），这是按形状估算的，论文未报告显存。"
+  },
+  {
+   "stage_zh": "解码 logits",
+   "tensor": "z_d, z_σ, z_β",
+   "shape": "z_d、z_σ：[6,288,512,1]；z_β：[6,288,512,8]",
+   "note_zh": "z_β 由最后一个融合块中同样的 One-to-many attention 机制计算（最可能就是它的注意力 logits，论文没有明说）；这里都还没有激活。"
+  },
+  {
+   "stage_zh": "上采样并激活",
+   "tensor": "d, σ, β",
+   "shape": "d、σ：[6,1080,1920,1]；β：[6,1080,1920,8]（在 8 个视角维上 softmax）",
+   "note_zh": "s=3.75。Quark+ 为 [8,432,768,·] 经 2.5× 放大（论文写的是 2.4×）。"
+  },
+  {
+   "stage_zh": "IBR 采样与混合",
+   "tensor": "P^T(I_m, d) → c_ℓ",
+   "shape": "概念上为 [8,6,1080,1920,3]，加权后得 [6,1080,1920,3]",
+   "note_zh": "CUDA 渲染器很可能把这些步骤融合执行，不显式存储中间张量；1080p 约 1.3 ms。"
+  },
+  {
+   "stage_zh": "over 合成输出",
+   "tensor": "C_target (+ 深度 D)",
+   "shape": "[1080,1920,3]；可选深度 [1080,1920,1]",
+   "note_zh": "表 8 把输出写作 “8,1080,1920,4 (RGB+σ)”，与 Quark 的 6 层对不上（见 q10）。"
+  }
+ ],
+ "reading_experiments": [
+  {
+   "item": "Tab. 1 与可泛化方法比较（RFF / Shiny / N3DV，1024×768 和 2048×1536）",
+   "how_to_read_zh": "先看 TIME 列：它包含重建和渲染，是 Quark 相对 ENeRF（205 ms）、SIMPLI（4.4 s）、GPNR（25 s）的核心卖点。再横向看三个数据集：Quark 的 PSNR 比最强基线高约 0.5–1.7 dB，LPIPS 明显更低。然后对比上下两半：2048×1536 时 Quark 仍只要 33.0 ms，但 LPIPS 在 RFF 上从 0.137 升到 0.233，在 Shiny 上从 0.108 升到 0.174。",
+   "takeaway_zh": "同类比较中，Quark 的质量和速度都占优，这个结论可信。但有三个混杂因素：基线在 RFF+IBRNet 数据上重训，而 Quark 用自己的 4 个数据集训练，训练集里就包含 RFF 和 Shiny，评测场景是否被剔除论文没说；N3DV 只以 0 号相机为目标、每 10 帧评一帧；2K 那几行说明输出分辨率与几何分辨率是脱钩的。"
+  },
+  {
+   "item": "Tab. 2 DL3DV 上与逐场景优化方法比较",
+   "how_to_read_zh": "Quark 31.31/0.932/0.103，Quark+ 31.53；Zip-NeRF 31.22，3DGS 29.82。基线数字直接取自 DL3DV 论文，作者说明这些分数只有较低分辨率的版本。评测协议是每 8 帧取 1 帧作目标，其余作候选输入。",
+   "takeaway_zh": "一个不在 DL3DV 上训练的前馈模型能与逐场景优化持平甚至略高，说明 LDM 加 IBR 的归纳偏置很强。但在稠密的手持视频轨迹上，最近邻视角离目标非常近，这天然有利于 IBR，更接近插值，而不是引言强调的 “wide baseline” 设定（这是本导读的判断）。不要把它读成“Quark 普遍优于 3DGS”。"
+  },
+  {
+   "item": "Tab. 3 Mip-NeRF360 / Tanks&Temples / Deep Blending",
+   "how_to_read_zh": "Mip-NeRF360 上 Quark 排第三（26.60，3DGS-30K 为 27.21）；T&T 上排第一（23.60 对 23.14）；Deep Blending 上远低于 3DGS（23.61 对 30.04），只胜过 Plenoxels 和 INGP。看 LPIPS 时要注意，Mip-NeRF360 上 Quark 与 3DGS 持平（0.214）。",
+   "takeaway_zh": "这张表揭示了 Quark 的失败模式：只用最近 8 个视角，覆盖不足时就会出错。即使改用同时考虑视角夹角的启发式，仍出现硬边伪影。逐场景方法用全部视角优化一个全局几何，失败时只是变糊，而 Quark 的 blend weights 会产生错误的硬边。"
+  },
+  {
+   "item": "Tab. 4 消融（Quark+，半分辨率训练 250K 步，DL3DV 1080p 评测）",
+   "how_to_read_zh": "以基线 30.4071 为参照读 ΔPSNR：RGB Output −1.23，No render-and-refine −0.70，No cross attention −0.68，Fewer iterations −0.08，No ray encoding −0.09，No layer collapse +0.16（但运行时间 +115%）。运行时间变化来自未优化的实现，只是近似值。",
+   "takeaway_zh": "真正的贡献排序是：IBR 混合 > 学习式迭代 ≈ 注意力融合 >> 射线编码。Layer collapse 是纯粹的速度设计。这张表的弱点：没有报告多次运行或方差；训练缩短；“No cross attention” 只在求解器里把 keys 置零，blend weights 仍用完整 keys；“RGB Output” 只取外观特征的前 3 个通道，不是精心设计的 RGB 头。“Fewer iterations” 几乎无损，这提示还存在更快的配置。"
+  },
+  {
+   "item": "Tab. 5 Spaces 数据集上的基线距离实验",
+   "how_to_read_zh": "这里用的是 4–16 张可变输入的模型，小/中/大基线（约 10/20/30 cm）的 PSNR 分别为 29.03/29.57/29.43，LPIPS 约 0.154–0.159。",
+   "takeaway_zh": "在 30 cm 以内，Quark 对基线距离不敏感。但表里没有 DeepView 的数值，作者也说明 SSIM 因预处理不同而不可比，所以“比 DeepView 更稳健”这一点无法从表中核实。"
+  },
+  {
+   "item": "Tab. 6 / Tab. 7 One-to-many attention 的理论 FLOPs",
+   "how_to_read_zh": "表 6 固定 N=8，看头数 h 的影响：h=1 时快 8.1×，h=8 时持平。表 7 固定 h=4，看 N 从 4 增到 64：标准注意力的开销涨 13.0×，折叠版只涨 1.9×。可以用 Eq.14/15 亲手验证每一个数。",
+   "takeaway_zh": "这只是单个注意力操作的理论计数，不是实测运行时间，也不包括 O(M) 的编码和 Update CNN。所以“接近 O(1)”只对融合这一环成立，整体仍然是 T_V + M·T_image。"
+  },
+  {
+   "item": "Fig. 7 运行时间与输入视角数",
+   "how_to_read_zh": "看曲线的斜率：运行时间随输入数线性增长，32 个视角以内仍大于 10 fps。",
+   "takeaway_zh": "它证实了附录 B 的 T_V + M·T_image 模型。对阵列设计的意义是：相机越多，每帧开销越大，除非改用视角选择或者持久表示。"
+  },
+  {
+   "item": "Fig. 8 A100 上的分阶段计时",
+   "how_to_read_zh": "看各子阶段的时间占比：大部分时间在迭代的 Update & Fuse 上，最终的 Upsample & Activate 与渲染占比很小。",
+   "takeaway_zh": "说明想提速应该从求解器入手（更少的迭代、更小的 LDM），而不是优化渲染器。这与 “Fewer iterations” 消融（−17.49% 运行时间）的结论一致。"
+  },
+  {
+   "item": "Fig. 4–6 定性比较与补充视频",
+   "how_to_read_zh": "重点看物体边界、深度复杂的区域（树叶、栏杆），以及反射和折射物体（DL3DV 前 4 行）。ENeRF 在深度复杂处失败；NeRF 类方法有 speckle 伪影；Quark 与 3DGS 的锐度相近。",
+   "takeaway_zh": "静态截图对 Quark 有利。作者自己说明，时间闪烁只能在视频里看到，而且 NeRF/3DGS 在这一点上更好。评估是否适用于 telepresence 时，一定要看视频，并自行计算时间一致性指标。"
+  },
+  {
+   "item": "Fig. 9 Quark 与 Quark+（SWORD）",
+   "how_to_read_zh": "对比右侧深度图的特写：Quark+ 的 LDM 更大（8 层×432×768），深度细节更精细。",
+   "takeaway_zh": "几何分辨率确实是质量上限之一：Quark+ 每帧用 92 ms，换来的 PSNR 提升在多数基准上约 0.15–0.5 dB（Deep Blending 上反而低 0.03 dB），深度也更好。这从另一个角度说明，“2K 输出”的真实细节受限于内部 LDM 的分辨率。"
+  }
+ ],
+ "tradeoffs": [
+  {
+   "choice_zh": "逐目标视角即时生成并丢弃 LDM，而不是维护一个持久的全局表示",
+   "gain_zh": "无需离线优化；几何和混合权重可以针对当前视角“过拟合”，从而近似反射和折射；LDM 是 2D 结构，可以用高效的 2D 网络。",
+   "cost_zh": "每个视点都要完整跑一遍网络：双目 VR 要 2 次，多名观众要 N 次（论文没有讨论，由设计推出）；没有跨视角、跨时间的一致性，会闪烁；无法“一次重建、多次渲染”。"
+  },
+  {
+   "choice_zh": "IBR 凸组合输出，而不是直接回归 RGB",
+   "gain_zh": "高频纹理直接来自全分辨率输入，网络只需在 288×512 上求解，就能以实时速度输出 1080p/2K；消融中比直接输出 RGB 高 1.23 dB。",
+   "cost_zh": "无法生成未观测到的颜色和视角相关高光；对输入之间的曝光、焦距差异和标定误差敏感（§4.3）；失败时是硬边而不是模糊。"
+  },
+  {
+   "choice_zh": "多尺度的“升分辨率、降层数”加 layer collapse",
+   "gain_zh": "运行时间降到不做 collapse 时的一半以下（后者 +115%）；早期多层负责找表面，后期少层负责贴表面。",
+   "cost_zh": "PSNR 损失约 0.16 dB（消融基于 Quark+）；最终只剩 6 层（Quark）或 8 层（Quark+），深度复杂的区域可用的层更少。"
+  },
+  {
+   "choice_zh": "只用离目标最近的 8 个输入视角",
+   "gain_zh": "每帧计算量有界（T_V + 8·T_image），能达到实时；近邻视角的遮挡关系相似，混合更准。",
+   "cost_zh": "覆盖不足时失败（Deep Blending 23.61 对 30.04）；目标移动导致输入集合切换，引发闪烁；更远视角里的有用信息被丢掉。"
+  },
+  {
+   "choice_zh": "One-to-many attention 加 K/V 折叠",
+   "gain_zh": "融合与视角顺序无关，支持可变 M；h=1 时理论 FLOPs 比标准 cross-attention 少 8.1 倍；层空间里没有逐视角的矩阵乘。",
+   "cost_zh": "头数多时优势消失（h=8 时持平）；编码和 Update CNN 仍是 O(M)；每个位置只在视角之间做注意力，空间交互要靠卷积。"
+  },
+  {
+   "choice_zh": "深度被硬约束在等视差带内，η、f 来自 SfM",
+   "gain_zh": "层序固定，over 合成无需排序；每层分工明确；近处采样更密，符合立体测量的误差规律。",
+   "cost_zh": "必须有可靠的近/远平面，视锥外的物体无法表示；每层只能在自己的带内移动，很薄的多层结构可能挤不下；实时系统里怎样在线确定 η、f，论文没有讨论。"
+  },
+  {
+   "choice_zh": "学习式 render-and-refine 迭代（5 次 Update & Fuse 加 Init）",
+   "gain_zh": "比把 Ĩ 置零的版本高 0.70 dB（该消融保留了迭代结构，只去掉“渲染—比较”这一信号）；把遮挡和可见性推理显式交给网络；远比经典梯度下降收敛得快。",
+   "cost_zh": "每一步都要把 LDM 渲染到 M 个视角并跑 Update CNN，串行步骤增加延迟；“Fewer iterations” 几乎无损，说明当前的迭代次数未必最优。"
+  },
+  {
+   "choice_zh": "低分辨率求解加 post-activation 上采样",
+   "gain_zh": "边缘保持锐利、可达子像素精度，上采样几乎不花时间；输出分辨率基本不影响运行时间（32.2 对 33.0 ms）。",
+   "cost_zh": "不能恢复小于一个低分辨率像素的几何结构（例如细发丝、两条相邻的边缘），高分辨率下感知质量下降。"
+  }
+ ],
+ "faq": [
+  {
+   "q_zh": "Quark 算 NeRF 吗？它和 3DGS 是什么关系？",
+   "a_zh": "都不是。NeRF 用 MLP 表示一个全局的辐射场，靠光线步进做体渲染；3DGS 用一组全局的 3D 高斯，靠光栅化渲染。两者都要对每个场景做离线优化。Quark 是一个前馈网络，每帧在目标视锥里即时生成一个 6 层的 LDM，渲染方式是 IBR 取色加 over 合成，用完就丢。它与 NeRF/3DGS 的共同点在于都能归入“体渲染的离散近似”（r-volume）：LDM 的每层相当于一个采样步。论文在 DL3DV 上与 Zip-NeRF、3DGS 做了比较，但那是跨类别的比较。"
+  },
+  {
+   "q_zh": "LDM、MPI 和普通深度图有什么区别？",
+   "a_zh": "深度图每个像素只有 1 个深度，遮挡边缘处只能“二选一”。MPI 有很多层，但每层是固定深度的平面，需要大量层才能贴合表面。LDM 有少量层（6–8 层），每层每个像素的深度都可变，还有半透明的 σ。它既能表示多个表面前后叠加的遮挡，又能用少数几层贴合弯曲的表面。Quark 进一步用等视差带约束每层的深度范围，使层序固定。"
+  },
+  {
+   "q_zh": "说 render-and-refine 像梯度下降，网络里哪里有“梯度”？",
+   "a_zh": "推理时并不求任何解析梯度，这个说法是结构上的类比。经典梯度是 Σ J^T(渲染−观测)：先在图像空间算残差，再用雅可比转置搬回参数空间。Quark 的做法是：把 LDM 渲染到输入视角得到 Ĩ（前向模型），由 Update CNN 比较 Ĩ 和观测，得到“学出来的残差”，用 P^T 反投影回层空间（对应 J^T），再由 Fusion Block 决定怎样更新（对应“学出来的步长和方向”）。论文正是因此把反投影写成 P^T。"
+  },
+  {
+   "q_zh": "σ 叫 density，它和 NeRF 里的体密度 σ 一样吗？",
+   "a_zh": "不一样。Quark 的 σ = sigmoid(VW_σ) ∈ (0,1)，直接当作 alpha 用于 over 合成，§3.1 也写明它是 “transparency (i.e. alpha)”。NeRF 的 σ 是非负的体密度，要乘以采样步长 δ 再算 α = 1−exp(−σδ)，才能得到 alpha。"
+  },
+  {
+   "q_zh": "既然每帧都重新重建，为什么不能直接用在双目 VR 头显或光场显示器上？",
+   "a_zh": "技术上可以，但成本随视点数线性增长。LDM 只属于某一个目标视角，左右眼需要两个不同的 LDM，就要跑两次网络，约 2×32 ms，已经超出 30 fps 的预算。光场显示器需要几十个视点，差距就更大了。论文完全没有讨论立体或多视点输出。如果需要本地多视点显示，应该考虑能“一次重建、多次渲染”的持久表示（例如 feed-forward 3DGS）。"
+  },
+  {
+   "q_zh": "K/V 折叠会不会损失表达力？为什么大模型不普遍这样做？",
+   "a_zh": "不会损失。标准多头注意力的 W^q W^{kT} 是一个秩不超过 C/h 的 C×C 矩阵，折叠后变成一个自由的 C×C 矩阵，能表示的函数只多不少；W^v 并入 W^O 同理。大模型一般不这么做，是因为 self-attention 里 query 和 key 一样多，折叠省不了多少，反而会把每个头的维度从 C/h 放大到 C。它只在“1 个 query 对少量 key、头数少”的情形下划算，而 Quark 恰好属于这种情形。"
+  },
+  {
+   "q_zh": "Quark 训练时没见过视频，为什么能在 N3DV 动态场景上评测，而且分数不错？",
+   "a_zh": "因为它逐帧独立处理。同步的多相机视频在每个时刻都只是一组静态的多视角照片，对 Quark 来说和训练样本没有区别，所以单帧质量可以泛化过来（N3DV 上 31.57 dB）。代价是完全没有时间建模：评测协议每 10 帧才评一帧，也不衡量闪烁，因此这些分数不能说明视频的观看体验。"
+  },
+  {
+   "q_zh": "近/远平面 η、f 在实时系统里怎么给？",
+   "a_zh": "论文中它们来自每个样本 SfM 点的深度分布，并没有讨论在线怎么获取。对固定的 telepresence 舱体来说，最简单的办法是按空间几何给定固定值，例如 0.5–3 m。也可以用上一帧的深度或传感器深度来统计分位数。要注意，深度被硬性限制在 [η,f] 内：设得太窄，前景或背景就会被截掉；设得太宽，每条带变粗，近处的精度就会下降。"
+  },
+  {
+   "q_zh": "Quark 与本调研的另一篇锚点论文 Ha et al.（CVPR 2025）有什么异同？",
+   "a_zh": "相同点：两者都是可泛化、前馈、逐帧的 IBR 方法，都不保留持久的 3D 模型。不同点在于几何从哪里来、优先保证什么。Quark 的几何由网络通过 5 步 render-and-refine 学出来，追求单帧质量和分辨率，没有任何时间机制。Ha et al. 的几何来自外部立体深度（RAFT-Stereo），在目标视角用 image-based TSDF 融合出一致的引导深度，再用颜色差分掩码做深度的时间滤波，并把上一帧深度回灌，融合网络只是一个 4 级（4-level）U-Net。它优先保证视角和时间一致性（STED 等指标）。二者的长短正好互补。"
+  },
+  {
+   "q_zh": "论文和项目页都没有给出代码，该从哪里开始复现？",
+   "a_zh": "论文和项目页（https://quark-3d.github.io/）都没有给出代码链接。建议按依赖顺序逐块实现并单独验证：①Eq.3–4 的深度参数化和 over 合成；②基于 grid_sample 的 Bp（P^T），并用伴随测试验证 splat（P）是它的转置；③在 LLFF 数据上用锚定平面做一个 PSV 基线；④实现 One-to-many attention，并验证折叠前后数值等价；⑤在低分辨率上训练 2–3 步的小型 render-and-refine；⑥最后加 post-activation 上采样和 IBR 混合。结构细节参照附录 C 的表 8 和表 9，同时留意原文里学习率日程、Quark+ 尺寸等数值不一致之处。"
+  },
+  {
+   "q_zh": "射线方向编码在消融里只提升 0.09 dB，作者为什么还保留？",
+   "a_zh": "它几乎不耗时（−1.28% 运行时间），作者认为它主要帮助反射和非朗伯表面，也就是 Shiny 类场景。这类效果集中在少量像素上，平均 PSNR 很难体现出来。此外，它为注意力提供了类似位置编码的信息，让网络能够偏向近邻视角。不过，按论文给出的证据，不应把它当作关键贡献。"
+  },
+  {
+   "q_zh": "如果要把 Quark 用于远程临场通话，最缺什么？",
+   "a_zh": "主要缺四样。①时间稳定性：需要时间状态或记忆，以及闪烁指标。与 Quark 作者部分重叠的 Google 后续工作正在补这一块，例如 SplatVoxel（arXiv 2503.14698，现已更名为 “Learning Efficient Fuse-and-Refine for Feed-Forward 3D Gaussian Splatting”）和 NSTM（“Online Neural Space Time Memory for Dynamic Novel View Synthesis”，arXiv 2607.15271）。②人像评测：头发、面部、快速手势和遮挡都没有测过。③端到端数据：延迟、显存、在消费级 GPU 上的速度、编码与传输，全部没有报告。④颜色和标定的稳健性：IBR 对相机间曝光差异和标定漂移非常敏感，实际系统必须做颜色标定和在线标定监控。"
+  }
+ ],
+ "exercises": [
+  {
+   "title_zh": "等视差分层与 over 合成（NumPy）",
+   "level": "入门",
+   "task_zh": "用 NumPy 实现 Eq.3–4：输入 η、f、L 和任意的 tanh 输出，返回每层深度。先打印 η=0.5、f=3、L=6 时每层可移动的深度范围，并与 L=24 的结果对比。然后构造一个 1D 的“场景”：前景在 0.8 m、α=0.7，背景在 2.5 m、α=1，让相应层的 σ 取这些值、其余层取 0，用 over 公式合成颜色和期望深度。最后用 LLFF 数据集（NeRF 官方发布的 nerf_llff_data，例如 fern 场景）中 poses_bounds.npy 每张图最后两列的 COLMAP 近/远深度，模仿论文“由 SfM 点估计 η、f”的做法，设定 η、f 并画出 24 层锚点的深度分布。",
+   "expected_zh": "一张表或图，内容包括：L=6 时各层的深度区间（应与本导读 q3 的数值一致，最近层约 8 cm 宽，最远层约 1.36 m 宽）；各层深度随 tanh 从 −1 到 1 的变化曲线，相邻层互不交叉；以及合成颜色和深度的数值验证。",
+   "hint_zh": "ℓ=1 是最远层。over 合成可以从后往前循环 C = c_ℓ σ_ℓ + (1−σ_ℓ) C，也可以用透射率的累积乘积写成向量化形式。poses_bounds.npy 是 N×17 的数组，前 15 列是 3×5 的位姿，最后 2 列是近、远深度。",
+   "concept_ids": [
+    "g-depth",
+    "r-alpha",
+    "i-layered",
+    "g-sfm"
+   ]
+  },
+  {
+   "title_zh": "反投影 P^T 与 splat P 的伴随测试，以及平面扫描体（PyTorch）",
+   "level": "入门",
+   "task_zh": "在 PyTorch 中用 F.grid_sample 实现 Bp：给定目标相机和输入相机的 K、R、t 以及一组锚定深度，把输入特征图 gather 到 [L,H,W,C] 的层空间。再用 torch.autograd 求 grid_sample 对输入的反向，得到 splat 算子 P。对随机张量 x、y 做伴随测试，数值检查 ⟨P x, y⟩ = ⟨x, P^T y⟩。最后在 LLFF 的 fern 场景上，以一张图作目标、其余 8 张作输入，构建 32 层的 RGB 平面扫描体，对每个像素取“跨视角方差最小的层”作为深度，与 COLMAP 深度范围对照。",
+   "expected_zh": "伴随测试的两边在 float64 下相对误差约 1e-10；得到一张粗糙但结构正确的 PSV 深度图（弱纹理区域有噪声）；能说清为什么 Quark 把反投影写成 P^T。",
+   "hint_zh": "grid_sample 需要把像素坐标归一化到 [−1,1]，注意 align_corners 要与坐标换算一致。可以用 torch.func.vjp 或者对 (grid_sample(x)·y).sum() 求 x 的梯度，得到 P 作用在 y 上的结果。LLFF 的位姿是 [down, right, back] 约定，要先转换成 OpenCV 约定。",
+   "concept_ids": [
+    "i-psv",
+    "d-mvs",
+    "r-raster",
+    "g-pinhole",
+    "g-epipolar"
+   ]
+  },
+  {
+   "title_zh": "射线方向编码 γ 与最近 8 视角选择",
+   "level": "进阶",
+   "task_zh": "对 LLFF 或 Spaces 数据集（Google 在 GitHub 上公开的 DeepView 数据集）的某个场景，实现：①按相机中心 L2 距离为每个目标视角选最近 8 个输入；②对每个输入视角的每个像素，计算其射线与目标视锥近/远平面交点在目标归一化图像坐标中的 2D 差向量 v，再算 tanh 和 8 个 octave 的正弦编码。可视化 ‖v‖ 的热图，并验证 v 近似等于 b(1/η−1/f)，以及把目标相机本身当输入时 v=0。",
+   "expected_zh": "每个输入视角一张 ‖v‖ 热图（平移越大值越大，方向与基线方向一致），一张“v 与 b(1/η−1/f) 的散点图”（平行相机时近似落在对角线上），以及一个 [8,h,w,32] 的 γ 张量。",
+   "hint_zh": "输入射线：o_m + s·R_m^T K_m^{-1} p̃。在目标相机坐标系中求 z=η 和 z=f 两处的 s，得到 3D 点后再除以 z，就得到归一化坐标。论文没有给出频率基，可以用 2^j π，j=0…7。",
+   "concept_ids": [
+    "l-encoding",
+    "g-epipolar",
+    "g-depth",
+    "g-pinhole"
+   ]
+  },
+  {
+   "title_zh": "One-to-many attention：验证折叠等价性并测量 FLOPs 与时间",
+   "level": "进阶",
+   "task_zh": "实现两个模块：①标准多头 cross-attention，1 个 query 对 M 个 key/value，带 W^q、W^k、W^v、W^O（C=32，h 可取 1/2/4）；②折叠版，其中 Ŵ_i^q = W_i^q W_i^{kT}，Ŵ^O 的第 i 块为 W_i^{v} W_i^{O}，key/value 直接用 Δ。随机初始化标准版，按公式构造折叠版的权重，验证两者输出一致（注意缩放因子的处理）。再在 [N_elem=55,296, M, C] 的批量上，对 M=4…64 测 GPU 或 CPU 时间，并与附录 A 的表 6、表 7 对照。",
+   "expected_zh": "两种实现的输出在 float64 下误差约 1e-12；一张“时间随 M 变化”的曲线，标准版斜率明显更大；能复算出 18688、2304、9216、135168、16384 等 FLOPs 数字。",
+   "hint_zh": "折叠后 softmax 的缩放：若标准版用 √(C/h)，折叠版也要用同一个缩放常数，才能严格相等（论文 Eq.5 写的是 √C）。可以用 einsum('nc,nmc->nm') 计算每个元素的 M 个 logits。“No cross attention” 相当于 logits 全为 0，输出等于 Δ 的均值，可顺便验证。",
+   "concept_ids": [
+    "l-attention",
+    "f-linalg",
+    "n-generalizable"
+   ]
+  },
+  {
+   "title_zh": "post-activation 上采样的边缘实验",
+   "level": "进阶",
+   "task_zh": "生成一张 1080×1920 的二值 alpha 图（包含斜边和圆边），下采样到 288×512 得到 logits（可以用 ±k 表示前景/背景，也可以用一个小 CNN 拟合）。对比两条流水线：A 先 sigmoid 再双线性上采样 3.75×；B 先双线性上采样 logits 再 sigmoid。测量两者边缘处 0.1→0.9 的过渡宽度（单位：像素），以及与真值的 L1 和 IoU。改变 k（1、3、6、12），画出“边缘宽度 vs k”的曲线。",
+   "expected_zh": "B 的边缘明显更窄，k=6 时约 1.4 像素，A 约 3 像素，与本导读 q9 的数值一致；k 越大，B 的边缘越锐；A 的边缘宽度与 k 基本无关。",
+   "hint_zh": "注意：k=1 时 σ 只在 0.27–0.73 之间变化，0.1→0.9 的过渡宽度无定义，可以改用 0.3→0.7 来测量。用 F.interpolate(mode='bilinear', scale_factor=3.75)；做 1D 剖面时沿边缘法线采样。可以进一步让 logits 可学习（直接优化 288×512 的 logit 网格去拟合真值），比较两种流水线在训练后能达到的最好 IoU，复现 ReLU Fields 的结论。",
+   "concept_ids": [
+    "f-image",
+    "r-alpha",
+    "i-layered"
+   ]
+  },
+  {
+   "title_zh": "Mini-Quark：低分辨率的 LDM + IBR render-and-refine",
+   "level": "挑战",
+   "task_zh": "在 LLFF（或 Spaces）上实现一个缩小版 Quark：M=4 或 8 个输入，特征金字塔 2 级（例如 64×96 与 128×192），C=32，初始 L=8 层；Init（Bp 加 2 个 One-to-many 融合块）→ 2 个 Update & Fuse 步（中间 LDM splat 到输入视角得到 Ĩ，Update CNN，P^T 反投影，融合），第 2 步做 layer collapse（8→4 层）；最终 logits 用 post-activation 上采样到 256×384 或原图的 1/4，按 Eq.1 用 β 混合输入图，再做 over 合成。损失为 10·L1 + LPIPS（pip install lpips）。做两组消融：Ĩ 置零（No render-and-refine），以及直接输出 RGB（取外观特征的前 3 通道）。",
+   "expected_zh": "在留出的目标视角上，完整模型的 PSNR 和 LPIPS 优于两组消融，趋势应与论文表 4 一致：RGB 输出退化最大，去掉 Ĩ 次之。还应给出可视化：各层的深度图、σ 图，以及 β 的 argmax 视角图。另外测一下单帧推理时间随 M 的变化，验证 T_V + M·T_image。",
+   "hint_zh": "splat 可以直接写成 grid_sample 的伴随，用 autograd 取转置，或者用 scatter_add 实现双线性 splat 并用累加权重做归一化。训练初期把 V 的深度偏置初始化为 0（即锚点），学习率 warmup 后用 cosine 衰减。不要照搬原文的学习率日程（它有矛盾），按自己的总步数设置。显存不够时，就像论文那样只对随机裁剪的目标区域做渲染和计算损失。",
+   "concept_ids": [
+    "l-iterative",
+    "i-layered",
+    "i-blending",
+    "l-attention",
+    "l-loss"
+   ]
+  }
+ ],
+ "glossary": [
+  {
+   "term_en": "Novel View Synthesis (NVS)",
+   "term_zh": "新视角合成",
+   "def_zh": "给定若干已知视角的图像，合成场景在新相机位姿下的图像。Quark 要求重建和渲染合起来实时完成。"
+  },
+  {
+   "term_en": "Generalizable / feed-forward",
+   "term_zh": "可泛化 / 前馈式",
+   "def_zh": "跨很多场景训练一个网络，推理时对新场景只做一次前向计算、不做逐场景优化。与 NeRF/3DGS 的逐场景拟合相对。"
+  },
+  {
+   "term_en": "Layered Depth Map (LDM)",
+   "term_zh": "分层深度图",
+   "def_zh": "位于目标视锥内的 L 层表示，每层每个像素有自己的深度、alpha（σ）和对 M 张输入图的混合权重 β。Quark 的核心表示。"
+  },
+  {
+   "term_en": "Multiplane Image (MPI)",
+   "term_zh": "多平面图像",
+   "def_zh": "由固定深度、与图像平面平行的 RGBA 平面组成的分层表示，由 Stereo Magnification（Zhou et al. 2018）提出，DeepView、LLFF 等工作沿用。LDM 可以看作“可弯曲的 MPI”。"
+  },
+  {
+   "term_en": "Layered Mesh (LM)",
+   "term_zh": "分层网格",
+   "def_zh": "把每层深度图转成三角网格的分层表示（Immersive Light Field Video、SIMPLI）。Quark 直接渲染 LDM，不需要实例化网格。"
+  },
+  {
+   "term_en": "Disparity band / depth anchor",
+   "term_zh": "视差带 / 深度锚点",
+   "def_zh": "把 [1/f, 1/η] 等分成 L 段，每段的中心 δ_ℓ=(ℓ−0.5)/L 就是锚点。第 ℓ 层的深度只能在自己那一段内移动（Eq.3–4）。"
+  },
+  {
+   "term_en": "Near / far plane (η, f)",
+   "term_zh": "近平面 / 远平面",
+   "def_zh": "目标视锥中 LDM 能覆盖的最小和最大深度。Quark 按每个样本的 SfM 点深度分布设定。"
+  },
+  {
+   "term_en": "Image-Based Rendering (IBR)",
+   "term_zh": "基于图像的渲染",
+   "def_zh": "新视角的颜色直接从输入照片里采样和混合得到，几何只作为“去哪里取色”的代理。Quark 最终用 β 对全分辨率输入像素做凸组合。"
+  },
+  {
+   "term_en": "Blend weights (β)",
+   "term_zh": "混合权重",
+   "def_zh": "每层每个像素对 M 张输入图的非负、和为 1 的权重，由最后一个融合块中同样的 One-to-many attention 机制计算（最可能就是它的注意力 logits，这一点论文没有明说），上采样后再做 softmax。"
+  },
+  {
+   "term_en": "Over operator (𝒪)",
+   "term_zh": "over 合成算子",
+   "def_zh": "Porter–Duff 的 alpha 合成：从后往前 C ← c_ℓσ_ℓ + (1−σ_ℓ)C。Quark 用它在输入视角里合成 Ĩ，在目标视角里合成最终 RGB 和深度。"
+  },
+  {
+   "term_en": "Bilinear splatting (𝒫)",
+   "term_zh": "双线性溅射",
+   "def_zh": "前向 warping：把源元素的值按双线性权重分给投影位置周围的 4 个像素。Quark 用它把中间 LDM 渲染到输入视角，从而避免光追和光栅化。"
+  },
+  {
+   "term_en": "Back-projection (𝒫^T, Bp)",
+   "term_zh": "反投影",
+   "def_zh": "对每个 LDM 元素，投到输入图并做双线性采样（gather）。它是 splat 的伴随或转置，用于初始化、生成 Δ，以及最终的 IBR 取色。"
+  },
+  {
+   "term_en": "Plane Sweep Volume (PSV)",
+   "term_zh": "平面扫描体",
+   "def_zh": "把多视角图像（或特征）按一组深度平面 warp 到参考视角后堆叠成的体。表面所在深度处，各视角一致。Quark 的初始化和 Δ 都是它的变体。"
+  },
+  {
+   "term_en": "Learned render-and-refine / learned gradient descent",
+   "term_zh": "学习式渲染—细化 / 学习化梯度下降",
+   "def_zh": "DeepView 提出的迭代求解：把当前估计渲染到输入视角，与观测比较，由网络学出更新，约 5 步收敛。"
+  },
+  {
+   "term_en": "Update & Fuse step",
+   "term_zh": "更新—融合步",
+   "def_zh": "Quark 的一次迭代：解码并渲染中间 LDM（Render），逐视角生成 update feature 并反投影成 Δ（Update），再用跨视角注意力和卷积更新 V（Fuse）。"
+  },
+  {
+   "term_en": "Feature volume (V)",
+   "term_zh": "特征体",
+   "def_zh": "LDM 在求解过程中的编码形式，形状为 [L,H,W,C=32]，由线性投影解码出深度、σ、外观或 β。"
+  },
+  {
+   "term_en": "Update feature (Δ)",
+   "term_zh": "更新特征",
+   "def_zh": "每个视角由 Update CNN 在图像空间生成、再按当前深度反投影到层空间的特征，形状为 [M,L,H,W,C]。它同时包含匹配线索和“渲染 vs 观测”的可见性信息。"
+  },
+  {
+   "term_en": "One-to-many attention",
+   "term_zh": "一对多注意力",
+   "def_zh": "每个 LDM 元素用 1 个 query 对 M 个视角的 Δ 做 cross-attention，并把 W^K 折叠进 W^Q、把 W^V 折叠进 W^O，从而省去对 M 个输入的投影。"
+  },
+  {
+   "term_en": "Layer collapse (Lc)",
+   "term_zh": "层折叠",
+   "def_zh": "在最后两个 Update & Fuse 步开始时，把相邻两层合并成一层：直通支路取均值，残差支路是拼接后接 MLP（§3.2.2 写 MLP，Fig. 3 图注写 CNN）。层数减半，视差带宽度加倍。"
+  },
+  {
+   "term_en": "Post-activation upsampling",
+   "term_zh": "上采样后激活",
+   "def_zh": "先对未激活的 logits 做双线性上采样，再施加 sigmoid、tanh、softmax，可以在低分辨率网格上得到锐利边界（ReLU Fields、DVGO）。"
+  },
+  {
+   "term_en": "Ray directional encoding (γ)",
+   "term_zh": "射线方向编码",
+   "def_zh": "输入射线与目标视锥近、远平面交点在投影空间中的 2D 差向量，经 tanh 和 8 个 octave 的正弦编码后线性投影到 C 维。与目标射线重合时为 0。"
+  },
+  {
+   "term_en": "Feature pyramid",
+   "term_zh": "特征金字塔",
+   "def_zh": "残差 CNN 加步长 mean-pooling 得到的多分辨率特征图（Quark 为 36×60 到 288×480），供不同分辨率的迭代步使用。"
+  },
+  {
+   "term_en": "Pre-LN Transformer / RMSNorm",
+   "term_zh": "前置归一化 Transformer / 均方根归一化",
+   "def_zh": "残差分支里先归一化再做注意力或 MLP 的结构。Quark 的 Fusion Block 沿用这种结构，用 3×3 卷积代替 MLP，归一化引用的是 RMSNorm。"
+  },
+  {
+   "term_en": "Residual scaling",
+   "term_zh": "残差缩放",
+   "def_zh": "GPT-2 提出的初始化技巧：按残差层数缩放残差分支的权重，以稳定深层网络的训练。"
+  },
+  {
+   "term_en": "LPIPS",
+   "term_zh": "学习式感知图像块相似度",
+   "def_zh": "在预训练网络特征空间里加权比较两张图的感知距离，越低越好。Quark 的损失是 10·L1 + LPIPS。"
+  },
+  {
+   "term_en": "PSNR / SSIM",
+   "term_zh": "峰值信噪比 / 结构相似度",
+   "def_zh": "逐帧的像素级和结构级指标。PSNR = 10·log10(1/MSE)。二者都不衡量时间闪烁。"
+  },
+  {
+   "term_en": "Temporal flicker",
+   "term_zh": "时间闪烁",
+   "def_zh": "视频中相邻帧之间不应有的亮度或几何跳变。Quark 逐帧独立重建、输入集合会切换，因此存在闪烁；论文所有指标都不衡量它。"
+  },
+  {
+   "term_en": "Wide baseline",
+   "term_zh": "宽基线",
+   "def_zh": "输入相机之间间距较大，Quark 中最大约 30 cm，视差大、遮挡多，比小基线的光场插值更难。"
+  }
+ ],
+ "fixes": [
+  {
+   "location": "story_zh",
+   "problem": "把失败原因写成“曝光、白平衡、标定误差”，但论文没有提到白平衡",
+   "fix": "改为“曝光、焦距差异和标定误差（§4.3）”",
+   "evidence": "§4.3: \"Blend weights also struggle in situations where images are taken with different exposures or focal lengths\"；此外还提到 camera calibration 误差"
+  },
+  {
+   "location": "story_zh",
+   "problem": "把“2K 输出只是上采样”作为 LPIPS 变差的因果解释，但论文没有做归因分析，而且两种分辨率的指标不能直接比较",
+   "fix": "改为陈述 §4.1 的事实（每层像素数大致固定、依赖上采样），并注明两处 LPIPS 在不同分辨率下评测",
+   "evidence": "§4.1: \"regardless of the required output resolution, Quark ... produce an LDM with approximately the same number of pixels per layer, and rely on upsampling\"；Tab. 1 中 0.137 与 0.233 分别对应 1024×768 和 2048×1536"
+  },
+  {
+   "location": "story_zh",
+   "problem": "“没有开源代码”无法从论文中得到验证",
+   "fix": "改为“论文和项目页都没有给出代码链接”（已检查 https://quark-3d.github.io/ 上的链接）",
+   "evidence": "项目页只链接到 arXiv、ACM DL 和数据集，没有代码仓库"
+  },
+  {
+   "location": "story_zh",
+   "problem": "说 render-and-refine “等价于”学习化梯度下降，原文只说 “similar to”；“同一团队”的说法不精确",
+   "fix": "改为“类似于展开的（学习化）梯度下降”，并写明 DeepView 与 Quark 是同一第一作者（Flynn）",
+   "evidence": "§1: \"The learned render-and-refine approach was first introduced by (Flynn et al., 2019) and is similar to an unrolled gradient descent\""
+  },
+  {
+   "location": "story_zh; tradeoffs[0]",
+   "problem": "“双目 VR 要跑两遍”被写成论文的结论，实际上论文没有讨论立体或多视点输出",
+   "fix": "标注为由设计推出、论文没有讨论",
+   "evidence": "全文检索 stereo/VR/headset，没有相关讨论"
+  },
+  {
+   "location": "before_you_read g-depth / g-epipolar",
+   "problem": "把“2D 差向量 = 基线×视差范围”和“极线段”写成一般性事实，但这只在特例下成立，而且是导读自己的推导",
+   "fix": "限定为“纯平移、归一化坐标”的特例，并注明是本导读的推导",
+   "evidence": "§3.2.1 只给出文字定义：\"difference vector between the ray's intersections with the near and far planes of the LDM frustum in projective space\""
+  },
+  {
+   "location": "q1 plain_zh / why_design_zh",
+   "problem": "把“从 16 个中抽 8 个以增强鲁棒性”“近/远平面取自 SfM 是为了覆盖场景”写成作者的动机，但论文没有说明",
+   "fix": "改为“论文没有说明动机”加上合理的解读",
+   "evidence": "§3.4: \"The 8 input views are randomly selected from the sixteen views closest to the target\"，没有给出理由"
+  },
+  {
+   "location": "q2 plain_zh",
+   "problem": "把特征金字塔直接说成“就是 UNet 的 skip connection”，把 ‖v‖ 说成“约等于基线×视差范围”，都有过度断言",
+   "fix": "改为“作用类似 UNet 的 skip”（引用原文措辞），v 的长度关系限定在特例下",
+   "evidence": "§3.2.2: \"reminiscent of a UNet (Ronneberger et al., 2015)\""
+  },
+  {
+   "location": "q3 numbers_zh",
+   "problem": "没有指出 Quark+ 输出尺寸的原文笔误",
+   "fix": "补充：表 9 为 432×768，§3.4 正文写作 768×438",
+   "evidence": "Tab. 9 Output 行为 \"8, 432, 768, 32\"；§3.4 为 \"output LDM of resolution 768×438 with 8 layers\""
+  },
+  {
+   "location": "q3 why_design_zh",
+   "problem": "把 Stereo Magnification 列为作者否定的方案，但 Quark 没有引用它；还说“MPI 需要大量层”“等视差让优化更稳定”，这些都是作者没有给出的理由",
+   "fix": "改用 Quark 实际引用的 MPI/MSI/LM 工作（DeepView、LLFF、Immersive LF Video、MatryODShka、StereoLayers、SIMPLI），引用原文措辞，并注明“训练更稳定”未经验证",
+   "evidence": "§2.1 的 MPI 引用为 Flynn 2019、Mildenhall 2019、Wizadwongsa 2021、Tucker & Snavely 2020，参考文献中没有 Zhou et al. 2018；§2.1: \"Previous work that use LMs also internally solve an LDM and then map to an LM\""
+  },
+  {
+   "location": "q4 why_design_zh",
+   "problem": "从 “Fewer iterations” 消融得出“初始化本身已经给出相当强的估计”，属于过度解读：该消融同时把初始分辨率加倍了",
+   "fix": "改为给出具体数值（−0.08 dB），并说明混杂因素",
+   "evidence": "§4.2: \"removing the first and second Update & Fuse iterations. To preserve the output resolution of the LDM, we doubled the resolution of the initial LDM\"；Tab. 4 为 30.3227 对 30.4071"
+  },
+  {
+   "location": "q5 what_zh / numbers_zh",
+   "problem": "说 Ĩ 的分辨率“与这一级的图像特征相同”，并给 U&F1 列 72×120，但原文说升分辨率的步里 Ĩ 是先渲染、再 2× 上采样的",
+   "fix": "改为：渲染分辨率论文未明说；在升分辨率的步（U&F1、U&F3、U&F4）里，Ĩ 先 2× 上采样，再与下一级特征拼接",
+   "evidence": "Fig. 3 图注: \"During iterations where the feature volume is upscaled, the rendered intermediate LDM is upsampled by a factor of two in the spatial dimension and combined with image features at the next level of detail\""
+  },
+  {
+   "location": "q5 why_design_zh; q8 why_design_zh",
+   "problem": "断言 DeepView 和 SIMPLI 是“单一分辨率”的 render-and-refine，论文没有这样说",
+   "fix": "改为原文的说法：前作 \"far too slow for real-time\"，与 SIMPLI 最主要的差异是多尺度 LDM 结构",
+   "evidence": "§1: \"previous implementations of learned render-and-refine (Flynn 2019; Broxton 2020; Solovev 2023) are far too slow for real-time\"；§2.2: \"most significantly our multi-scale LDM architecture\""
+  },
+  {
+   "location": "q7 plain_zh",
+   "problem": "把均值和方差聚合都归到 IBRNet，归属不对",
+   "fix": "改为：均值对应 pixelNeRF（Yu 2021b），方差对应 IBRNet（Wang 2021c）",
+   "evidence": "§2.2: \"Statistical measures such as mean (Yu et al., 2021b) and variance (Wang et al., 2021c)\"；参考文献对应 pixelNeRF 和 IBRNet"
+  },
+  {
+   "location": "q7 why_design_zh / plain_zh",
+   "problem": "把“头数随分辨率递减”“用卷积代替 MLP”的动机写成作者的解释；“卷积在同层内交换信息”也是推断",
+   "fix": "引用附录 A 的原话说明头数的选择；卷积的动机标注为论文未解释，同层卷积标注为推断",
+   "evidence": "附录 A: \"our algorithm never uses more than 4 heads, and at high resolutions it uses just 1 or 2 heads, leading to large savings\"；§3.3 只写 \"2D 3×3 residual convolutional blocks\""
+  },
+  {
+   "location": "q7 equations (Eq.9–10) / numbers_zh",
+   "problem": "把 Eq.10 串联改写成 V″，但没有说明；No cross attention 消融漏掉了“blend weights 仍用完整 keys”这一限定",
+   "fix": "注明是按先后串联改写的；在消融数字旁补充这一限定",
+   "evidence": "§3.3 的 Eq.9、Eq.10 都写成 V′ = V + …；§4.2: \"we only zero-ed out the keys within the core solver, we retained the full keys when computing the blend weights\""
+  },
+  {
+   "location": "q8 plain_zh / check_a_zh",
+   "problem": "用 Quark 的元素数去解释 “No layer collapse” 消融，但没有说明消融的基线是 Quark+（半分辨率，250K 步）；PSNR 提升用了“反而”这种误导性的说法；也没有指出 layer collapse 在原文中 MLP/CNN 的描述不一致",
+   "fix": "补充消融基线的设置，改为“提高 0.16 dB”，并注明 MLP 与 CNN 的不一致",
+   "evidence": "§4.2: \"We used the Quark+ network as our baseline for ablations ... trained on half resolution training data and for only 250k training steps\"；§3.2.2 \"residual MLP\" 对 Fig. 3 \"via a residual CNN\""
+  },
+  {
+   "location": "q9 pitfalls_zh / why_design_zh",
+   "problem": "把 2K 下 LPIPS 变差断言为 post-activation 局限造成的，并把“否定先激活再上采样”说成作者的实验结论",
+   "fix": "改为“可能的原因之一”，作者的理由改为引用 §3.2 和 §3.2.3 的原话",
+   "evidence": "§3.2.3: \"post-sampling activation (Karnewar 2022; Sun 2022) can produce crisp occlusion boundaries\"；论文没有做 pre/post 激活的对比实验"
+  },
+  {
+   "location": "q10 plain_zh / why_design_zh",
+   "problem": "说网络“只在 288×512 上求解”（4:3 输出时实际是等面积的其他形状）；加入了论文没有的白平衡；说“SIMPLI 式外观偏糊”是作者否定的方案，但原文只是推测",
+   "fix": "改为“每层像素数与 288×512 大致相同、按宽高比调整”；白平衡标为推断；引用原文对 SIMPLI 的推测",
+   "evidence": "§4.1: \"adjust the aspect ratio of the internal LDM dimensions ... retaining the same total area per layer\"；§4.1 定性分析: \"Relative to SIMPLI, Quark's sharper results are likely aided by its use of IBR with blend weights\""
+  },
+  {
+   "location": "q11 why_design_zh / pitfalls_zh",
+   "problem": "把数据混合、抽样、LPIPS、两阶段训练的动机写成作者的陈述；“训练集没有人像”无法核实",
+   "fix": "注明这些是合理的解读，不是作者的陈述；改为“没有专门的人像数据”",
+   "evidence": "§3.4 只列出了设置，没有说明动机；训练集为 Spaces、RFF、NeX-Shiny、SWORD"
+  },
+  {
+   "location": "q12 plain_zh; reading_experiments[3]",
+   "problem": "说消融“只训练了一次”（论文没有说明），并把差异范围写成 0.1–1.2 dB（实际最小为 0.08）",
+   "fix": "改为“没有报告多次运行或方差”，范围改为 0.08–1.23 dB",
+   "evidence": "Tab. 4：Fewer iterations 30.3227、No ray enc. 30.3179、RGB Output 29.1779，基线 30.4071"
+  },
+  {
+   "location": "q12 check_a_zh / why_design_zh",
+   "problem": "说 2K 时的几何是“约 512 宽”（4:3 输出时并非如此），并给 LPIPS 恶化加了因果解释；LVSM 缺少时间背景",
+   "fix": "改为“每层约 15 万像素（与 288×512 等面积）”，因果解释标为推测，并注明 LVSM 公开的时间",
+   "evidence": "§4.1 关于等面积的说明；Tab. 1 的 2048×1536 行"
+  },
+  {
+   "location": "tensor_trace[7] / tensor_trace[13]",
+   "problem": "把 Ĩ 的形状 [8,36,60,C_a] 和“z_β 来自注意力 logits”当作论文给出的事实",
+   "fix": "注明 Ĩ 的渲染分辨率是推断的，z_β 的来源也是推断的",
+   "evidence": "Fig. 3 图注只说明在升分辨率的步里做 2× 上采样；§3.2.3 只说 β 用 \"the same One-to-many attention mechanism\" 计算"
+  },
+  {
+   "location": "reading_experiments[1]",
+   "problem": "说摘要称“稀疏宽基线”：摘要只说 sparse set，wide baseline 出现在引言",
+   "fix": "改为“引言强调的 wide baseline 设定（本导读的判断）”",
+   "evidence": "Abstract: \"From a sparse set of input RGB images\"；§1: \"an array of wide baseline high-resolution images\""
+  },
+  {
+   "location": "reading_experiments[9]",
+   "problem": "说 Quark+ 的提升“约 0.2–0.5 dB”，与表中数据不符：Shiny 只有 +0.16，Deep Blending 为 −0.03",
+   "fix": "改为“多数基准约 0.15–0.5 dB，Deep Blending 上反而略低”",
+   "evidence": "Tab. 1: Shiny 26.51→26.67；Tab. 3: Deep Blending 23.61→23.58"
+  },
+  {
+   "location": "tradeoffs[2] / [5] / [6]",
+   "problem": "把 layer collapse 的代价写成“几何上限由 288×512 决定”（那是空间分辨率的问题，与 collapse 无关）；“训练稳定”没有依据；把去掉 Ĩ 的消融称为“一次性前馈”，但该消融保留了迭代",
+   "fix": "改为 collapse 的真实代价（0.16 dB、层数更少），删去“训练稳定”，并准确描述该消融",
+   "evidence": "§4.2: \"No render-and-refine: ... we replaced the rendered image with zeroes\"（迭代和多尺度结构都保留）"
+  },
+  {
+   "location": "faq[8]",
+   "problem": "把 Ha et al. 的融合网络写成“4 层 U-Net”",
+   "fix": "改为“4 级（4-level）U-Net”",
+   "evidence": "anchor_ha.json 和 deepread.md: \"A 4-level U-Net takes (9K+1) channels\""
+  },
+  {
+   "location": "faq[9] / faq[11]",
+   "problem": "说“没有开源代码”，并把 SplatVoxel、NSTM 称为“Quark 团队后续工作”，但没有给出核实依据",
+   "fix": "注明项目页没有代码链接；将 SplatVoxel（arXiv 2503.14698）和 NSTM（arXiv 2607.15271）描述为与 Quark 作者部分重叠的 Google 后续工作，并写明 SplatVoxel 已更名",
+   "evidence": "arXiv API 作者列表：SplatVoxel 含 Lucy Chai、Xuan Luo、Stephen Lombardi、Tiancheng Sun；NSTM 含 Lynn Tsai、Tiancheng Sun、Stephen Lombardi、Xuan Luo"
+  },
+  {
+   "location": "exercises[4]",
+   "problem": "k=1 时 σ 只在 0.27–0.73 之间变化，按 0.1→0.9 定义的边缘宽度无定义，任务里没有交代",
+   "fix": "在提示中说明，并建议改用 0.3→0.7 来测量",
+   "evidence": "sigmoid(±1) = 0.269 / 0.731"
+  },
+  {
+   "location": "glossary MPI / β / Layer collapse",
+   "problem": "说 MPI “出自” DeepView；把 β 来自注意力 logits 写成事实；没有指出 layer collapse 的 MLP/CNN 不一致",
+   "fix": "改为 MPI 由 Stereo Magnification 提出、DeepView 等沿用；β 的来源标为推断；注明 MLP/CNN 不一致",
+   "evidence": "§3.2.3: \"We compute the blend weights β using the same One-to-many attention mechanism ... incorporated into the final fusion block\"（没有提到 logits）"
+  }
+ ]
+}
