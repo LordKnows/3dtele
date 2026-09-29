@@ -1,0 +1,943 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>动态场景、4D 与人体（2019–2025） · 3D 临场研究图谱</title>
+<meta name="description" content="本主题收录 25 篇论文。范围：D-NeRF, Nerfies, HyperNeRF, NSFF, DyNeRF (N3DV), K-Planes, HexPlane, 4DGS, Dynamic 3D Gau…">
+<meta name="color-scheme" content="light dark">
+
+<script>
+  // Apply a saved light/dark choice before first paint; without one the page follows the system setting.
+  try { var t = localStorage.getItem("atlas-theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) { /* storage unavailable */ }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Serif+SC:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/lxgwwenkai-regular.css">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]] },
+    options: { skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code", "input", "select", "button"] },
+    svg: { fontCache: "global" },
+    startup: {
+      typeset: false,
+      ready: function () {
+        window.MathJax.startup.defaultReady();
+        if (typeof window.__atlasMathReady === "function") window.__atlasMathReady();
+      }
+    }
+  };
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js"></script>
+<style>
+/* Tufte-style layout for Chinese long-form pages, after tufte-css (MIT, (c) 2014 Dave Liepmann; see LICENSE-tufte-css).
+   ET Book: MIT, (c) 2015 Dmitry Krasny, Bonnie Scranton, Edward Tufte (fonts/et-book/LICENSE).
+   ../../ is the page's path to the site root. */
+
+/* ---------- fonts: ET Book for Latin (self-hosted), Noto Serif SC for Chinese text, LXGW WenKai for notes ---------- */
+/* ET Book leaves curly quotes, dashes and ellipses to the Chinese font so they keep full width in Chinese prose,
+   and single guillemets (› ‹), which it lacks. */
+@font-face { font-family: "et-book"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-roman-line-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book"; font-weight: 400; font-style: italic; font-display: swap;
+  src: url("../../fonts/et-book/et-book-display-italic-old-style-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book"; font-weight: 700; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-bold-line-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+/* Notes pair Latin italic with upright Kai (the "italic ↔ 楷体" rule): the italic cut is registered as an upright
+   family so the browser never slants the Chinese glyphs. */
+@font-face { font-family: "et-book-note"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-display-italic-old-style-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book-osf"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-roman-old-style-figures.woff") format("woff"); }
+
+:root {
+  --bg: #fffff8;
+  --ink: #111111;
+  --ink-2: #3c3c36;
+  --muted: #74746a;
+  --rule: #d8d6c8;
+  --rule-2: #b9b6a4;
+  --accent: #a8322d;
+  --serif: "et-book", "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", Palatino, Georgia, serif;
+  --note: "et-book-note", "LXGW WenKai", "Kaiti SC", "STKaiti", "KaiTi", "et-book", serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --side: clamp(12rem, 21vw, 17rem);
+  --gap: 2.75rem;
+  --main: calc(100% - var(--side) - var(--gap));
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161614; --ink: #e2e0d6; --ink-2: #c3c1b6; --muted: #979589; --rule: #34332e; --rule-2: #4d4b44; --accent: #e8836f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161614; --ink: #e2e0d6; --ink-2: #c3c1b6; --muted: #979589; --rule: #34332e; --rule-2: #4d4b44; --accent: #e8836f;
+  color-scheme: dark;
+}
+
+/* ---------- base ---------- */
+* { box-sizing: border-box; }
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--serif); font-size: 1.15625rem; line-height: 1.85;
+  font-kerning: normal; font-variant-numeric: lining-nums;
+  /* Space between Chinese and Latin text where the source has none; squeeze adjacent CJK punctuation
+     (text-spacing-trim applies the fonts' halt / chws features). Browsers without them keep the source spacing. */
+  text-autospace: normal; text-spacing-trim: normal;
+  overflow-wrap: break-word;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+[hidden] { display: none !important; }
+a { color: inherit; text-decoration-line: underline; text-decoration-thickness: 1px; text-underline-offset: .18em; text-decoration-color: var(--rule-2); }
+a:hover { color: var(--accent); text-decoration-color: currentColor; }
+a:focus-visible, button:focus-visible, summary:focus-visible, label:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.skip { position: absolute; left: -999px; top: 0; }
+.skip:focus { left: 1rem; top: .5rem; background: var(--bg); padding: .2rem .5rem; z-index: 60; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+p { margin: 0; }
+p + p { margin-top: .9em; }
+
+/* ---------- top bar ---------- */
+.topbar { border-bottom: 1px solid var(--rule); }
+.bar-in { max-width: 67rem; margin: 0 auto; padding: 0 1.5rem; display: flex; align-items: center; gap: 2.2rem; min-height: 3.1rem; }
+.brand { font-size: 1rem; text-decoration: none; letter-spacing: .02em; white-space: nowrap; }
+.site-nav { flex: 1; }
+.menus { list-style: none; margin: 0; padding: 0; display: flex; gap: 1.6rem; }
+.menu { position: relative; }
+.menu-btn, .theme-btn, .burger {
+  font-family: "et-book", var(--serif); font-variant-caps: all-small-caps; letter-spacing: .08em; font-size: 1.12rem;
+  color: var(--ink-2); line-height: 3.1rem;
+}
+.menu-btn:hover, .theme-btn:hover, .burger:hover, .menu.open > .menu-btn { color: var(--accent); }
+.menu.cur > .menu-btn { color: var(--ink); box-shadow: inset 0 -1px 0 var(--ink); }
+.drop {
+  display: none; position: absolute; left: -1rem; top: 100%; z-index: 40; min-width: 13rem;
+  list-style: none; margin: 0; padding: .45rem 0; background: var(--bg); border: 1px solid var(--rule);
+}
+.menu.open > .drop { display: block; }
+.drop a { display: block; padding: .15rem 1rem; text-decoration: none; font-size: 1.02rem; color: var(--ink-2); white-space: nowrap; }
+.drop a:hover, .drop a:focus-visible { color: var(--accent); }
+.drop a.cur { color: var(--ink); }
+.drop a.cur::before { content: "›"; position: absolute; margin-left: -.7rem; color: var(--accent); }
+.theme-btn { margin-left: auto; }
+.burger { display: none; }
+
+/* ---------- article column + margin ---------- */
+main { display: block; }
+.art { max-width: 67rem; margin: 0 auto; padding: 2.6rem 1.5rem 3rem; counter-reset: sidenote-counter; }
+.art > *, .art section > * { width: var(--main); }
+.art > section { width: 100%; }
+.art .fullwidth { width: 100%; }
+section { padding-top: .6rem; }
+
+.crumbs { font-size: .86rem; color: var(--muted); letter-spacing: .01em; }
+.crumbs a { color: var(--muted); text-decoration: none; }
+.crumbs a:hover { color: var(--accent); }
+.crumbs .sep { margin: 0 .45em; color: var(--rule-2); }
+h1, h2, h3 { font-family: var(--serif); color: var(--ink); text-wrap: balance; }
+h1 { font-size: 2.3rem; font-weight: 400; line-height: 1.3; margin: .9rem 0 0; letter-spacing: .01em; }
+.subtitle { font-family: "et-book", var(--note); font-style: italic; font-size: 1.45rem; line-height: 1.3; color: var(--ink-2); margin-top: .35rem; }
+.meta { font-size: .92rem; color: var(--muted); margin-top: 1.1rem; }
+.meta a { color: var(--muted); }
+h2 { font-size: 1.42rem; font-weight: 600; line-height: 1.4; margin: 2.6rem 0 .9rem; }
+h3 { font-size: 1.12rem; font-weight: 600; line-height: 1.5; margin: 1.8rem 0 .5rem; }
+h3 .used { font-family: var(--note); font-weight: 400; font-size: .86rem; color: var(--muted); margin-left: .6em; }
+
+.epigraph { margin: 2.2rem 0 .6rem; }
+.epigraph blockquote { margin: 0; padding: 0 0 0 1.6rem; border-left: 1px solid var(--rule-2); }
+.epigraph p { font-family: var(--note); font-size: 1.12rem; line-height: 1.85; color: var(--ink-2); }
+
+.art ol, .art ul { margin: .6rem 0 0; padding-left: 1.6em; }
+.art li + li { margin-top: .45rem; }
+li::marker { font-family: "et-book-osf", var(--serif); color: var(--muted); }
+
+/* Equations: display math in the text column, scrolling sideways on narrow screens. */
+.eqs { display: block; }
+.eq + .eq { margin-top: 1.6rem; }
+.math-block { overflow-x: auto; overflow-y: hidden; margin: .4rem 0 .6rem; padding: .2rem 0; font-size: 1rem; }
+.math-block mjx-container { margin: 0 !important; }
+
+/* ---------- side notes & margin notes (floated into the right margin) ---------- */
+.sidenote, .marginnote {
+  float: right; clear: right; position: relative;
+  width: var(--side); margin-right: calc(-1 * (var(--side) + var(--gap))); margin-top: .3rem; margin-bottom: .6rem;
+  font-family: var(--note); font-size: .88rem; line-height: 1.6; color: var(--ink-2); text-align: left;
+  font-style: normal; font-weight: 400; letter-spacing: 0;
+}
+h3 .sidenote { margin-top: .2rem; }
+.sidenote-number { counter-increment: sidenote-counter; }
+.sidenote-number::after, .sidenote::before { font-family: "et-book-osf", var(--serif); position: relative; vertical-align: baseline; }
+.sidenote-number::after { content: counter(sidenote-counter); font-size: .75rem; top: -.55em; left: .08em; color: var(--ink-2); }
+.sidenote::before { content: counter(sidenote-counter) " "; font-size: .8rem; top: -.4em; }
+.note-label { font-family: var(--serif); font-weight: 600; font-size: .82rem; color: var(--muted); margin-right: .5em; }
+.marginnote .note-label { display: block; margin: 0 0 .1rem; }
+input.margin-toggle { display: none; }
+label.sidenote-number { display: inline; cursor: default; }
+label.margin-toggle:not(.sidenote-number) { display: none; }
+
+/* ---------- quiz, further reading, series ---------- */
+.quiz details { margin-top: .3rem; }
+.quiz summary { font-family: var(--note); font-size: .92rem; color: var(--muted); cursor: pointer; list-style: none; display: inline-block; }
+.quiz summary::-webkit-details-marker { display: none; }
+.quiz summary::before { content: "+ "; font-family: "et-book", var(--serif); }
+.quiz details[open] summary::before { content: "− "; }
+.quiz summary:hover { color: var(--accent); }
+.quiz details > p { margin-top: .3rem; padding-left: 1rem; border-left: 1px solid var(--rule); color: var(--ink-2); }
+
+/* Reference lists: a narrow label column (kind / year) and a hanging text column. */
+.art ul.refs { list-style: none; padding-left: 0; }
+.refs li { display: grid; grid-template-columns: 2.8rem minmax(0, 1fr); column-gap: .5rem; line-height: 1.6; }
+.refs li > :not(.kind):not(.yr) { grid-column: 2; }
+.refs .kind, .refs .yr { grid-column: 1; font-family: var(--note); font-size: .86rem; color: var(--muted); padding-top: .12rem; }
+.refs .yr { font-family: "et-book-osf", var(--serif); font-size: .95rem; padding-top: .05rem; }
+.refs .en { font-family: "et-book", var(--serif); font-style: italic; color: var(--muted); }
+.refs .gloss { font-family: var(--note); font-size: .88rem; color: var(--ink-2); margin-top: .1rem; }
+.art .refs li + li { margin-top: .75rem; }
+.art .papers li + li { margin-top: .35rem; }
+.refs.noleft li { grid-template-columns: minmax(0, 1fr); }
+.refs.noleft li > * { grid-column: 1; }
+.refs .used { font-family: var(--note); font-size: .82rem; color: var(--muted); margin-left: .5em; }
+.refs.terms .plain-t { font-weight: 600; }
+.refs.terms .en { display: inline; margin-left: .6em; }
+.timeline li { line-height: 1.7; }
+.art .timeline li + li { margin-top: .4rem; }
+
+/* ---------- blocks: lede, run-in labels, notes ---------- */
+.lede { margin-top: 1.6rem; color: var(--ink-2); }
+.run-in { font-weight: 600; color: var(--ink); }
+p.note { font-family: var(--note); font-size: .9rem; color: var(--muted); margin-top: .1rem; }
+h2 .en, h3 .en { font-family: "et-book", var(--serif); font-style: italic; font-weight: 400; color: var(--muted); margin-left: .6em; font-size: .92em; }
+h2 a, h3 a { text-decoration-color: var(--rule); }
+.quiz-h { font-family: var(--note); font-size: .88rem; color: var(--muted); margin-top: 1.4rem; }
+.quiz-h + ol.quiz { margin-top: .2rem; }
+
+/* Index pages: a table of contents instead of a card grid. */
+.art ol.toc { list-style: none; padding-left: 0; margin-top: .4rem; }
+.art ol.toc > li + li { margin-top: .85rem; }
+.toc-t { line-height: 1.55; }
+.toc-t .en { font-family: "et-book", var(--serif); font-style: italic; color: var(--muted); margin-left: .6em; font-size: .95em; }
+.toc-meta { font-family: var(--note); font-size: .82rem; color: var(--muted); margin-left: .7em; white-space: nowrap; }
+.toc-s { font-family: var(--note); font-size: .9rem; line-height: 1.65; color: var(--ink-2); margin-top: .1rem; }
+.toc-lede { font-family: var(--note); color: var(--ink-2); font-size: .95rem; }
+h2.toc-h, h3.toc-h { margin-bottom: .3rem; }
+
+/* Tables: booktabs rules (top, under the header, bottom), no vertical lines, no fills. */
+.table-wrap { overflow-x: auto; margin: 1rem 0; }
+table.booktabs { border-collapse: collapse; width: 100%; font-size: .9rem; line-height: 1.6; border-top: 1.5px solid var(--ink); border-bottom: 1.5px solid var(--ink); }
+table.booktabs th { text-align: left; font-weight: 600; padding: .45rem .7rem .35rem 0; border-bottom: 1px solid var(--ink); white-space: nowrap; vertical-align: bottom; }
+table.booktabs td { padding: .45rem .9rem .45rem 0; vertical-align: top; border-top: 1px solid var(--rule); }
+table.booktabs tbody tr:first-child td { border-top: 0; }
+table.rank td { white-space: nowrap; font-variant-numeric: tabular-nums; }
+table.rank td:nth-child(2) { white-space: normal; }
+table.kv { border-collapse: collapse; margin: .6rem 0; font-size: .95rem; }
+table.kv th { text-align: left; font-weight: 400; color: var(--muted); padding: .25rem 1.2rem .25rem 0; vertical-align: top; min-width: 5em; max-width: 12em; font-family: var(--note); }
+table.kv td { padding: .25rem 0; vertical-align: top; }
+
+/* Long articles: the table of contents sits at the top of the margin. */
+/* It sits in a full-width section, so it floats into the margin without a negative offset. */
+details.mtoc {
+  float: right; clear: right; width: var(--side); margin-right: 0; margin-bottom: 1rem;
+  font-family: var(--note); font-size: .86rem; line-height: 1.55; color: var(--ink-2);
+}
+details.mtoc summary { font-family: var(--serif); font-weight: 600; font-size: .82rem; color: var(--muted); list-style: none; cursor: default; }
+details.mtoc summary::-webkit-details-marker { display: none; }
+.art details.mtoc ol { list-style: none; padding: 0; margin: .3rem 0 0; }
+.art details.mtoc li + li { margin-top: .25rem; }
+details.mtoc a { text-decoration: none; }
+details.mtoc a:hover { text-decoration: underline; }
+
+/* Tools: search and filters with underlined inputs. */
+.tool { margin-top: 1rem; }
+.filters { display: flex; flex-wrap: wrap; gap: .6rem 1.6rem; align-items: baseline; font-family: var(--note); font-size: .92rem; color: var(--muted); }
+.filters label { display: inline-flex; gap: .5rem; align-items: baseline; }
+.filters input, .filters select {
+  font: inherit; color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid var(--rule-2); border-radius: 0;
+  padding: .15rem .1rem; min-width: 7rem;
+}
+.filters input[type="search"] { min-width: 14rem; }
+.filters select { max-width: 16rem; }
+.filters input:focus, .filters select:focus { outline: none; border-bottom-color: var(--accent); }
+.filters select option { background: var(--bg); color: var(--ink); }
+.filters .count { margin-left: auto; font-family: var(--mono); font-size: .8rem; }
+table.gl td.en { font-family: "et-book", var(--serif); width: 20%; }
+table.gl .abbr { color: var(--muted); }
+table.gl td.zh { white-space: nowrap; }
+table.gl td.def { color: var(--ink-2); min-width: 20rem; }
+table.gl td.c { font-size: .85rem; min-width: 9rem; padding-right: 0; }
+table.gl tr:target td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+table.db td.y { font-family: "et-book-osf", var(--serif); white-space: nowrap; }
+table.db td.t { min-width: 16rem; }
+table.db td.t small { display: block; color: var(--muted); font-size: .8rem; line-height: 1.45; margin-top: .15rem; }
+table.db td.tags { min-width: 7rem; font-family: var(--note); font-size: .8rem; color: var(--muted); }
+table.db td.tags span { display: block; }
+table.db .tier.milestone { color: var(--ink); font-weight: 600; }
+table.db td.s { min-width: 18rem; color: var(--ink-2); }
+table.db td.n { min-width: 12rem; font-size: .82rem; color: var(--ink-2); }
+
+/* Figures: the pipeline diagram and the timeline of classic papers, drawn in ink with one accent for interaction. */
+figure { margin: 1.4rem 0; }
+svg a { text-decoration: none; }
+.diagram-wrap, .lanes-wrap { position: relative; overflow-x: auto; }
+svg.diagram { width: 100%; min-width: 760px; height: auto; display: block; font-family: var(--note); }
+svg.diagram .dnode rect { fill: var(--bg); stroke: var(--ink-2); stroke-width: 1; }
+svg.diagram .dnode rect.data { stroke-dasharray: 4 3; }
+svg.diagram .dnode:hover rect, svg.diagram .dnode:focus rect { stroke: var(--accent); stroke-width: 1.5; }
+svg.diagram .dnode:focus { outline: none; }
+svg.diagram text { fill: var(--ink); }
+svg.diagram text.k { font-family: var(--mono); font-size: 10px; fill: var(--muted); }
+svg.diagram text.t { font-family: var(--serif); font-size: 13px; font-weight: 600; }
+svg.diagram text.s { font-size: 11px; fill: var(--ink-2); }
+svg.diagram .dedge { fill: none; stroke: var(--ink-2); stroke-width: 1; }
+svg.diagram .dedge.fb { stroke-dasharray: 4 3; }
+svg.diagram .dhead { fill: var(--ink-2); }
+svg.diagram .dloop { fill: none; stroke: var(--rule-2); stroke-dasharray: 2 3; }
+svg.diagram .dlabel { font-size: 12px; fill: var(--muted); }
+svg.diagram .dnote { font-size: 11px; fill: var(--muted); }
+svg.diagram a.dnode:hover .dnote { fill: var(--accent); }
+svg.lanes { width: 100%; min-width: 720px; height: auto; display: block; font-family: var(--note); }
+svg.lanes .grid { stroke: var(--rule); stroke-width: 1; }
+svg.lanes .axis { font-family: "et-book-osf", var(--serif); font-size: 12px; fill: var(--muted); }
+svg.lanes .lane-l { font-size: 12px; fill: var(--ink-2); }
+svg.lanes .brk { stroke: var(--muted); fill: none; }
+svg.lanes .hit { fill: transparent; }
+svg .dot { fill: var(--ink); }
+svg .dot.hollow { fill: var(--bg); stroke: var(--ink-2); stroke-width: 1.2; }
+svg.lanes a.m:hover .dot, svg.lanes a.m:focus .dot { fill: var(--accent); stroke: var(--accent); }
+svg.lanes a.m:focus { outline: none; }
+.vtip { position: absolute; z-index: 20; max-width: 20rem; padding: .45rem .7rem; background: var(--bg); border: 1px solid var(--rule-2); font-family: var(--note); font-size: .82rem; line-height: 1.5; pointer-events: none; }
+.vtip b { display: block; font-family: "et-book", var(--serif); font-weight: 400; font-size: .92rem; }
+.vtip small { display: block; color: var(--muted); }
+.vtip span { color: var(--accent); }
+figcaption { font-family: var(--note); font-size: .85rem; color: var(--muted); margin-top: .4rem; }
+figcaption svg { vertical-align: -1px; }
+
+.series { display: grid; grid-template-columns: 1fr auto 1fr; gap: 1rem; align-items: end; margin-top: 3.2rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: .98rem; }
+.series small { display: block; font-family: var(--note); font-size: .8rem; color: var(--muted); }
+.series .up { text-align: center; font-size: .88rem; }
+.series .up a { color: var(--muted); }
+.series .next { text-align: right; }
+
+.site-foot { max-width: 67rem; margin: 0 auto; padding: 1.2rem 1.5rem 2.5rem; font-size: .82rem; color: var(--muted); }
+.site-foot a { color: var(--muted); text-decoration: none; }
+
+/* ---------- hover preview ---------- */
+.xtip {
+  position: absolute; z-index: 50; max-width: min(22rem, calc(100vw - 16px)); padding: .55rem .8rem .6rem;
+  background: var(--bg); border: 1px solid var(--rule-2); color: var(--ink);
+  font-family: var(--note); font-size: .88rem; line-height: 1.6; pointer-events: none;
+}
+.xt-m { font-size: .76rem; color: var(--muted); }
+.xt-t { font-family: var(--serif); font-weight: 600; font-size: .95rem; line-height: 1.45; margin-top: .1rem; }
+.xt-e { font-family: "et-book", var(--serif); font-style: italic; color: var(--ink-2); line-height: 1.4; }
+.xt-s { margin-top: .35rem; color: var(--ink-2); }
+
+/* ---------- narrow screens: one column; notes fold behind their number or ⊕ ---------- */
+@media (max-width: 760px) {
+  body { font-size: 1.0625rem; line-height: 1.8; }
+  .bar-in { gap: 1rem; padding: 0 1rem; flex-wrap: wrap; }
+  .site-nav { order: 5; flex-basis: 100%; display: none; }
+  .topbar.nav-open .site-nav { display: block; }
+  .menus { flex-direction: column; gap: 0; padding-bottom: .6rem; }
+  .menu-btn { line-height: 2.4rem; width: 100%; text-align: left; }
+  .menu-btn::after { content: " +"; }
+  .menu.open > .menu-btn::after { content: " −"; }
+  .menu.cur > .menu-btn { box-shadow: none; }
+  .drop { position: static; border: 0; padding: 0 0 .4rem .9rem; min-width: 0; }
+  .drop a { padding: .2rem 0; white-space: normal; }
+  .burger { display: inline; }
+  .theme-btn { margin-left: auto; }
+  .art { padding: 1.6rem 1rem 2.4rem; }
+  .art > *, .art section > * { width: 100%; }
+  h1 { font-size: 1.85rem; }
+  .subtitle { font-size: 1.22rem; }
+  .epigraph blockquote { padding-left: 1rem; }
+  .epigraph p { font-size: 1.05rem; }
+  label.margin-toggle:not(.sidenote-number) { display: inline; cursor: pointer; color: var(--muted); font-family: "et-book", var(--serif); padding: 0 .15em; }
+  label.sidenote-number { cursor: pointer; }
+  .sidenote, .marginnote { display: none; }
+  .margin-toggle:checked + .sidenote, .margin-toggle:checked + .marginnote {
+    display: block; float: left; clear: both; width: 100%; margin: .6rem 0; padding-left: .8rem; border-left: 1px solid var(--rule-2);
+  }
+  .series { grid-template-columns: 1fr 1fr; }
+  .series .up { display: none; }
+  details.mtoc { float: none; width: 100%; margin: 0 0 1.2rem; padding-left: .8rem; border-left: 1px solid var(--rule-2); }
+  details.mtoc summary { cursor: pointer; }
+  details.mtoc summary::after { content: " +"; }
+  details.mtoc[open] summary::after { content: " −"; }
+  .filters { flex-direction: column; align-items: stretch; gap: .5rem; }
+  .filters label { justify-content: space-between; }
+  .filters input[type="search"], .filters input, .filters select { min-width: 0; flex: 1; }
+  .filters .count { margin-left: 0; }
+  .toc-meta { display: block; margin-left: 0; }
+  table.kv, table.kv tbody, table.kv tr, table.kv th, table.kv td { display: block; max-width: none; }
+  table.kv th { padding: .5rem 0 0; }
+}
+@media print {
+  .topbar, .site-foot, .series { display: none; }
+}
+
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<header class="topbar" id="topbar"></header>
+<main id="main"><article class="art"></article></main>
+<footer class="site-foot" id="site-foot"></footer>
+<script type="application/json" id="data">{"site": {"brand": "3D 临场研究图谱", "root": "../../", "path": "basics/classics/t-dynamic-human.html", "nav": [{"key": "overview", "label": "Overview", "items": [["Introduction", "index.html"], ["Methodology", "overview/methodology.html"], ["How to use", "overview/how-to-use.html"]]}, {"key": "basics", "label": "Basics", "items": [["Routes", "basics/routes/index.html"], ["Foundations", "basics/foundations/index.html"], ["Advanced topics", "basics/advanced/index.html"], ["Classics", "basics/classics/index.html"], ["Glossary", "basics/glossary.html"]]}, {"key": "works", "label": "Works", "items": [["Papers", "works/papers/index.html"], ["Walkthrough", "works/walkthrough/index.html"], ["Field map", "works/field-map.html"], ["Sub areas", "works/areas/index.html"]]}, {"key": "future", "label": "Future", "items": [["Directions", "future/index.html"], ["Trends & Challenges", "future/trends.html"]]}], "navCur": "basics", "navItem": "basics/classics/index.html", "crumbs": [["Basics", ""], ["Classics", "basics/classics/index.html"]], "date": "2026-09-28"}, "xref": {"adv-a-3dgs-ext": {"u": "basics/advanced/a-3dgs-ext.html", "t": "3D Gaussian Splatting 的扩展", "e": "Extensions of 3D Gaussian Splatting", "m": "Advanced topics", "s": "3DGS（Kerbl et al., SIGGRAPH 2023）把场景表示为数百万个带不透明度和 SH 颜色的各向异性 3D 高斯。"}, "adv-a-diff-render": {"u": "basics/advanced/a-diff-render.html", "t": "可微渲染与逆渲染", "e": "Differentiable & inverse rendering", "m": "Advanced topics", "s": "渲染器 R 把场景参数 θ（几何、材质、光照、相机）映射成图像。"}, "adv-a-dynamic-4d": {"u": "basics/advanced/a-dynamic-4d.html", "t": "动态 NeRF、4D 高斯与流式重建", "e": "Dynamic NeRF, 4D Gaussians & streaming reconstruction", "m": "Advanced topics", "s": "动态场景的新视角合成要同时控制两个变量：看的视点和看的时刻。"}, "adv-a-ff-3dgs": {"u": "basics/advanced/a-ff-3dgs.html", "t": "前馈 3DGS 与大重建模型", "e": "Feed-forward 3DGS & large reconstruction models", "m": "Advanced topics", "s": "3DGS（见 n-3dgs）渲染极快，但每个场景都要从 SfM 点出发优化几分钟到几十分钟，没法用在每帧都在变的临场通话中。"}, "adv-a-generalizable-ibr": {"u": "basics/advanced/a-generalizable-ibr.html", "t": "可泛化 NeRF 与学习式 IBR", "e": "Generalizable NeRF & learned IBR", "m": "Advanced topics", "s": "逐场景的 NeRF 需要几十上百张图和数小时的优化；传统 IBR（如 ULR，见 i-blending）速度快，但依赖稠密的视角或准确的代理几何。"}, "adv-a-human-capture": {"u": "basics/advanced/a-human-capture.html", "t": "人体表演捕捉与数字人", "e": "Human performance capture & avatars", "m": "Advanced topics", "s": "三维临场要传递的核心是人：面部表情、目光、手势、头发和衣服。"}, "adv-a-nerf-fast": {"u": "basics/advanced/a-nerf-fast.html", "t": "NeRF 的加速与抗锯齿", "e": "Fast & anti-aliased NeRFs", "m": "Advanced topics", "s": "原版 NeRF 把整个场景存进一个 8 层、每层 256 通道的 MLP。"}, "adv-a-telepresence-sys": {"u": "basics/advanced/a-telepresence-sys.html", "t": "三维临场系统设计", "e": "3D telepresence system design", "m": "Advanced topics", "s": "三维临场（3D telepresence）要把远端参与者的外观和几何实时“搬”过来，并按本地观看者双眼的位置正确显示，使观看者获得立体视差、运动视差和目光接触。"}, "adv-a-temporal-video": {"u": "basics/advanced/a-temporal-video.html", "t": "视频时间一致性方法", "e": "Temporal consistency methods for video", "m": "Advanced topics", "s": "很多视频处理都是逐帧做的：逐帧估计深度、逐帧做新视角合成、逐帧风格化。"}, "concept-d-flow": {"u": "basics/foundations/d-flow.html", "t": "光流、场景流与图像 warping", "e": "Optical flow, scene flow & image warping", "m": "Foundations · M3 深度估计与三维重建", "s": "光流是相邻两帧之间每个像素的二维位移，场景流是与之对应的三维运动。", "n": "光流、场景流与图像 warping"}, "concept-d-mono": {"u": "basics/foundations/d-mono.html", "t": "单目与视频深度估计", "e": "Monocular & video depth estimation", "m": "Foundations · M3 深度估计与三维重建", "s": "从单张图像或单路视频预测深度，依靠的是从海量数据中学到的先验，而不是几何三角化。", "n": "单目与视频深度估计"}, "concept-d-stereo": {"u": "basics/foundations/d-stereo.html", "t": "双目立体匹配：从 SGM 到 RAFT-Stereo", "e": "Stereo matching: from SGM to RAFT-Stereo", "m": "Foundations · M3 深度估计与三维重建", "s": "在校正后的左右图同一行上找对应像素得到视差 d，再用 Z=fb/d 换算成深度。", "n": "双目立体匹配"}, "concept-f-linalg": {"u": "basics/foundations/f-linalg.html", "t": "线性代数、齐次坐标与刚体变换", "e": "Linear algebra, homogeneous coordinates & rigid transforms", "m": "Foundations · M1 数学与图像基础", "s": "把一个像素从一台相机“搬”到另一台相机，本质上是一串矩阵乘法加一次透视除法：齐次坐标让平移和透视投影都能写成矩阵运算，SE(3) 位姿 [R|t] 描述相机的位置和朝向，SVD 和最小二乘则是从带噪数据里解出这些矩阵的通用工具。", "n": "线性代数、齐次坐标与刚体变换"}, "concept-f-optim": {"u": "basics/foundations/f-optim.html", "t": "优化、鲁棒估计与梯度下降", "e": "Optimization, robust estimation & gradient descent", "m": "Foundations · M1 数学与图像基础", "s": "相机标定、光束法平差、立体匹配、网络训练，乃至 Quark 的网络结构本身，做的都是同一件事：定义一个误差，然后沿着让误差变小的方向迭代。", "n": "优化、鲁棒估计与梯度下降"}, "concept-f-prob": {"u": "basics/foundations/f-prob.html", "t": "概率、加权平均与递归滤波", "e": "Probability, weighted averaging & recursive filtering", "m": "Foundations · M1 数学与图像基础", "s": "多视角、多帧得到的深度都带有噪声，要把它们合成一个更可靠的估计，最好的办法是按置信度（方差的倒数）加权平均；把同样的想法用在时间轴上，就得到指数滑动平均（EMA）和卡尔曼滤波。", "n": "概率、加权平均与递归滤波"}, "concept-g-epipolar": {"u": "basics/foundations/g-epipolar.html", "t": "对极几何、三角化与单应", "e": "Epipolar geometry, triangulation & homography", "m": "Foundations · M2 相机与多视几何", "s": "两台相机看同一个点时，该点在第二张图中只可能出现在一条极线上（x'ᵀF x = 0）；有了对应点就能三角化出 3D 位置；空间中的一个平面在两张图之间诱导的映射是一个 3×3 单应。", "n": "对极几何、三角化与单应"}, "concept-g-pinhole": {"u": "basics/foundations/g-pinhole.html", "t": "针孔相机模型：内参、外参、投影与反投影", "e": "Pinhole camera: intrinsics, extrinsics, projection & unprojection", "m": "Foundations · M2 相机与多视几何", "s": "针孔模型先用外参 [R|t] 把世界点变到相机坐标系，再用内参 K 投到像素；反过来，只有像素时只能确定一条射线，像素加上深度才能唯一确定一个 3D 点。", "n": "针孔相机模型"}, "concept-g-rig": {"u": "basics/foundations/g-rig.html", "t": "多相机阵列：标定、同步与卷帘快门", "e": "Multi-camera rigs: calibration, synchronization & rolling shutter", "m": "Foundations · M2 相机与多视几何", "s": "多相机阵列需要让所有相机在三方面对齐：几何上（内外参）、颜色上（曝光、白平衡、响应曲线）、时间上（同一时刻曝光）。", "n": "多相机阵列"}, "concept-i-blending": {"u": "basics/foundations/i-blending.html", "t": "视角相关纹理映射与混合权重（ULR）", "e": "View-dependent texture mapping & blending weights (ULR)", "m": "Foundations · M5 基于图像的渲染（IBR）", "s": "当多个输入相机都看到目标像素对应的表面点时，混合权重决定每个相机贡献多少。", "n": "视角相关纹理映射与混合权重（ULR）"}, "concept-l-attention": {"u": "basics/foundations/l-attention.html", "t": "注意力机制与 Transformer", "e": "Attention & Transformers", "m": "Foundations · M6 深度学习基础（3D 视觉视角）", "s": "注意力用 query 与一组 key 的缩放点积经 softmax 得到权重，再对 value 做加权平均。", "n": "注意力机制与 Transformer"}, "concept-l-cnn": {"u": "basics/foundations/l-cnn.html", "t": "卷积网络、残差块与 U-Net", "e": "CNNs, residual blocks & U-Net", "m": "Foundations · M6 深度学习基础（3D 视觉视角）", "s": "卷积用共享的小核在图像上滑动，提取局部特征；残差连接让深层网络容易训练；U-Net 用编码器下采样、解码器上采样和同尺度跳连，同时获得大感受野和像素级精度。", "n": "卷积网络、残差块与 U-Net"}, "concept-l-encoding": {"u": "basics/foundations/l-encoding.html", "t": "位置编码、傅里叶特征与射线编码", "e": "Positional encoding, Fourier features & ray encodings", "m": "Foundations · M6 深度学习基础（3D 视觉视角）", "s": "神经网络对低维坐标输入天生偏爱平滑函数，这叫频谱偏置。", "n": "位置编码、傅里叶特征与射线编码"}, "concept-l-loss": {"u": "basics/foundations/l-loss.html", "t": "损失函数与训练实践", "e": "Losses & training practice", "m": "Foundations · M6 深度学习基础（3D 视觉视角）", "s": "损失函数决定网络眼中什么是“好图像”：L2 偏向均值（结果偏糊），L1 偏向中位数，SSIM 关注局部结构，LPIPS 用深度特征度量感知差异。", "n": "损失函数与训练实践"}, "concept-n-3dgs": {"u": "basics/foundations/n-3dgs.html", "t": "3D Gaussian Splatting（3D 高斯溅射）", "e": "3D Gaussian Splatting", "m": "Foundations · M7 神经渲染核心", "s": "3DGS 用数百万个带颜色、不透明度和各向异性协方差的 3D 高斯表示场景。", "n": "3D Gaussian Splatting（3D 高斯溅射）"}, "concept-n-dynamic": {"u": "basics/foundations/n-dynamic.html", "t": "动态场景与 4D 表示", "e": "Dynamic scenes & 4D representations", "m": "Foundations · M7 神经渲染核心", "s": "动态场景方法首先要回答“时间怎么表示”。", "n": "动态场景与 4D 表示"}, "concept-n-generalizable": {"u": "basics/foundations/n-generalizable.html", "t": "可泛化 / 前馈式新视角合成", "e": "Generalizable / feed-forward novel view synthesis", "m": "Foundations · M7 神经渲染核心", "s": "可泛化（前馈式）新视角合成先在大量场景上训练一个网络，推理时只做一次前向：输入几张已标定的邻近视图，直接输出新视角图像，或者输出一个可以渲染的中间表示，全程不做逐场景优化。", "n": "可泛化 / 前馈式新视角合成"}, "concept-n-nerf": {"u": "basics/foundations/n-nerf.html", "t": "神经辐射场（NeRF）", "e": "Neural Radiance Fields", "m": "Foundations · M7 神经渲染核心", "s": "NeRF 用一个 MLP 把三维点和观察方向映射成体密度和颜色，再用可微的体渲染沿射线积分成像素，针对每个场景用几十到上百张照片做梯度下降来拟合。", "n": "神经辐射场（NeRF）"}, "concept-r-alpha": {"u": "basics/foundations/r-alpha.html", "t": "Alpha 合成与 over 算子", "e": "Alpha compositing & the over operator", "m": "Foundations · M4 图形学与渲染基础", "s": "alpha 表示一个像素被前景覆盖的比例。", "n": "Alpha 合成与 over 算子"}, "concept-r-appearance": {"u": "basics/foundations/r-appearance.html", "t": "反射模型、视角相关外观与光照", "e": "Reflectance, view-dependent appearance & lighting", "m": "Foundations · M4 图形学与渲染基础", "s": "表面颜色等于入射光乘以材质的反射分布（BRDF），再在半球上积分。", "n": "反射模型、视角相关外观与光照"}, "concept-r-raster": {"u": "basics/foundations/r-raster.html", "t": "光栅化、z-buffer 与点溅射（splatting）", "e": "Rasterization, z-buffer & point splatting", "m": "Foundations · M4 图形学与渲染基础", "s": "光栅化以图元为中心：把三角形或点投到屏幕上，再用 z-buffer 为每个像素保留最近的那个图元。", "n": "光栅化、z-buffer 与点溅射（splatting）"}, "concept-r-reps": {"u": "basics/foundations/r-reps.html", "t": "三维表示总览：点、网格、体素、隐式场、高斯", "e": "3D representations: points, meshes, voxels, implicit fields, Gaussians", "m": "Foundations · M4 图形学与渲染基础", "s": "点、网格、体素、隐式场、高斯和分层图像，在存储、渲染、编辑和时间一致性上各有取舍。", "n": "三维表示总览"}, "concept-r-volume": {"u": "basics/foundations/r-volume.html", "t": "体渲染方程与离散化", "e": "The volume rendering equation & its discretization", "m": "Foundations · M4 图形学与渲染基础", "s": "体渲染把场景看成一团既发光又吸收的介质。", "n": "体渲染方程与离散化"}, "concept-v-codec": {"u": "basics/foundations/v-codec.html", "t": "视频编码、传输与延迟预算", "e": "Video coding, transport & latency budgets", "m": "Foundations · M8 视频、时间一致性、评测与系统", "s": "远程临场要在约百毫秒内把多路彩色和深度视频送到对端并渲染出来。", "n": "视频编码、传输与延迟预算"}, "concept-v-metrics": {"u": "basics/foundations/v-metrics.html", "t": "图像与视频质量指标", "e": "Image & video quality metrics", "m": "Foundations · M8 视频、时间一致性、评测与系统", "s": "单帧指标（PSNR、SSIM、LPIPS、FLIP）回答“这一帧像不像真值”；时间与视角指标（warping error、tOF、TCC、STED、SDT/SDV、EPI）回答“误差随时间、随视点是否稳定”。", "n": "图像与视频质量指标"}, "concept-v-temporal": {"u": "basics/foundations/v-temporal.html", "t": "时间一致性、闪烁与时域滤波", "e": "Temporal consistency, flicker & temporal filtering", "m": "Foundations · M8 视频、时间一致性、评测与系统", "s": "逐帧独立预测时，每帧误差互不相关，这些误差会直接表现为闪烁。", "n": "时间一致性、闪烁与时域滤波"}, "theme-t-generative-ff": {"u": "basics/classics/t-generative-ff.html", "t": "生成式先验、前馈重建与评测基础（2014–2025）", "e": "", "m": "Classics", "s": "本主题收录 25 篇论文。范围：DDPM, DDIM, LDM, ControlNet, SVD, DreamFusion, Zero-1-to-3, MVDream, CAT3D, LRM, pixelSpl…"}, "theme-t-neural-rendering": {"u": "basics/classics/t-neural-rendering.html", "t": "神经渲染与新视角合成（2016–2025）", "e": "", "m": "Classics", "s": "本主题收录 26 篇论文。范围：DeepStereo, Stereo Magnification, LLFF, DeepView, Immersive LF Video, SRN, NPBG, FVS/SVS…"}}, "page": {"id": "theme-t-dynamic-human", "head": {"title": "动态场景、4D 与人体（2019–2025）", "sub": "Classics", "meta": ["25 篇论文"], "epigraph": "", "prereqs": [], "lede": "", "minutes": 38}, "body": [{"b": "sec", "h": null, "id": "list"}, {"b": "p", "t": "本主题收录 25 篇论文，按年份排列。范围：D-NeRF, Nerfies, HyperNeRF, NSFF, DyNeRF (N3DV), K-Planes, HexPlane, 4DGS, Dynamic 3D Gaussians, Spacetime Gaussians, 4K4D, 3DGStream, Neural Body, HumanNeRF, GPS-Gaussian, Animatable Gaussians, GaussianAvatars"}, {"b": "slot", "name": "classics-chart"}, {"b": "refs", "items": [{"left": "2019", "u": "#classic-64", "t": "PIFu: Pixel-Aligned Implicit Function for High-Resolution Clothed Human Digitization", "tag": ""}, {"left": "2021", "u": "#classic-87", "t": "D-NeRF: Neural Radiance Fields for Dynamic Scenes", "tag": "必读"}, {"left": "2021", "u": "#classic-89", "t": "Nerfies: Deformable Neural Radiance Fields", "tag": ""}, {"left": "2021", "u": "#classic-91", "t": "Neural Scene Flow Fields for Space-Time View Synthesis of Dynamic Scenes", "tag": "必读"}, {"left": "2021", "u": "#classic-93", "t": "Neural Body: Implicit Neural Representations with Structured Latent Codes for Novel View Synthesis of Dynamic Humans", "tag": "必读"}, {"left": "2021", "u": "#classic-98", "t": "HyperNeRF: A Higher-Dimensional Representation for Topologically Varying Neural Radiance Fields", "tag": ""}, {"left": "2022", "u": "#classic-107", "t": "HumanNeRF: Free-viewpoint Rendering of Moving People from Monocular Video", "tag": ""}, {"left": "2022", "u": "#classic-109", "t": "Neural 3D Video Synthesis from Multi-view Video", "tag": "必读"}, {"left": "2022", "u": "#classic-110", "t": "Monocular Dynamic View Synthesis: A Reality Check", "tag": ""}, {"left": "2023", "u": "#classic-118", "t": "K-Planes: Explicit Radiance Fields in Space, Time, and Appearance", "tag": "必读"}, {"left": "2023", "u": "#classic-119", "t": "HexPlane: A Fast Representation for Dynamic Scenes", "tag": ""}, {"left": "2023", "u": "#classic-120", "t": "DynIBaR: Neural Dynamic Image-Based Rendering", "tag": ""}, {"left": "2023", "u": "#classic-121", "t": "HumanRF: High-Fidelity Neural Radiance Fields for Humans in Motion", "tag": ""}, {"left": "2024", "u": "#classic-125", "t": "4D Gaussian Splatting for Real-Time Dynamic Scene Rendering", "tag": "必读"}, {"left": "2024", "u": "#classic-128", "t": "Deformable 3D Gaussians for High-Fidelity Monocular Dynamic Scene Reconstruction", "tag": ""}, {"left": "2024", "u": "#classic-129", "t": "Dynamic 3D Gaussians: Tracking by Persistent Dynamic View Synthesis", "tag": "必读"}, {"left": "2024", "u": "#classic-134", "t": "Real-time Photorealistic Dynamic Scene Representation and Rendering with 4D Gaussian Splatting", "tag": ""}, {"left": "2024", "u": "#classic-137", "t": "Spacetime Gaussian Feature Splatting for Real-Time Dynamic View Synthesis", "tag": ""}, {"left": "2024", "u": "#classic-139", "t": "GaussianAvatars: Photorealistic Head Avatars with Rigged 3D Gaussians", "tag": ""}, {"left": "2024", "u": "#classic-140", "t": "Animatable Gaussians: Learning Pose-dependent Gaussian Maps for High-fidelity Human Avatar Modeling", "tag": ""}, {"left": "2024", "u": "#classic-141", "t": "GPS-Gaussian: Generalizable Pixel-wise 3D Gaussian Splatting for Real-time Human Novel View Synthesis", "tag": "必读"}, {"left": "2024", "u": "#classic-142", "t": "3DGStream: On-the-Fly Training of 3D Gaussians for Efficient Streaming of Photo-Realistic Free-Viewpoint Videos", "tag": "必读"}, {"left": "2024", "u": "#classic-143", "t": "Relightable Gaussian Codec Avatars", "tag": ""}, {"left": "2024", "u": "#classic-144", "t": "4K4D: Real-Time 4D View Synthesis at 4K Resolution", "tag": "必读"}, {"left": "2025", "u": "#classic-151", "t": "Instant Gaussian Stream: Fast and Generalizable Streaming of Dynamic Scene Reconstruction via Gaussian Splatting", "tag": ""}], "cls": "papers"}, {"b": "sec", "h": "论文", "id": "papers"}, {"b": "h3", "t": "PIFu: Pixel-Aligned Implicit Function for High-Resolution Clothed Human Digitization", "id": "classic-64", "url": "https://arxiv.org/abs/1905.05172", "sn": {"label": "与重点论文的联系", "t": "两篇锚点都不直接使用 PIFu，但它是理解“跨视角聚合”的最简单模型。Quark Sec. 2.2 专门梳理了这条设计谱系：mean（pixelNeRF）和 variance（IBRNet）这类统计量简单、与顺序无关，但表达力有限；DeepView 用重复 max-pool；Quark 自己用 One-to-many attention，让 LDM 特征作为唯一 query，对 M 个视角的 Δ 做 cross-attention（pipeline 第 3 阶段）。PIFu 的平均池化就是这条谱系的起点。Ha 的 baseline GPS-Gaussian 也是像素对齐思想，每个前景像素回归一个 Gaussian。读懂“投影—采样—聚合”，Quark 的 back-projection（Bp）和 Ha 的逐视角 forward-splat 就容易理解了。"}}, {"b": "note", "t": "2019 · Shunsuke Saito, Zeng Huang, Ryota Natsume, Shigeo Morishima, Angjoo Kanazawa, Hao Li (USC ICT、早稻田大学、UC Berkeley、Pinscreen) · ICCV 2019 · 引用 1.4k（Semantic Scholar） · 难度：入门"}, {"b": "p", "t": "PIFu 提出“像素对齐隐式函数”：把任意 3D 点投影回输入图像，在投影位置双线性采样 CNN 特征，再连同这个点的深度一起送进 MLP，判断它在表面内还是外。以前的做法把整张图压成一个全局向量；像素对齐的局部特征既保留了高分辨率细节，又能表达任意拓扑（长发、裙摆），还能自然扩展到多视角。后来 pixelNeRF、IBRNet、ENeRF、GPS-Gaussian 等可泛化方法获取特征的方式，都与这种“投影—采样—聚合”一脉相承。直接后续是 PIFuHD（单图高分辨率人体数字化）；像素对齐隐式函数也被 Function4D 等稀疏视角实时人体捕捉系统借用。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-g-pinhole"}, {"k": "concept-l-cnn"}, {"k": "concept-n-generalizable"}, {"k": "concept-r-reps"}, {"k": "adv-a-human-capture"}]}}, {"b": "p", "t": "(1) 表示：\\( f(F(x), z(X)) = s \\)。X 是 3D 点，x=π(X) 是它的 2D 投影，F(x) 是全卷积编码器（stacked hourglass）在 x 处双线性采样得到的特征，z(X) 是相机坐标系下的深度，s∈[0,1] 是占据概率。表面取 0.5 等值面，用 Marching Cubes 抽取。论文假设弱透视相机。(2) Tex-PIFu：用同样的像素对齐结构回归表面点的 RGB，能推断背面等不可见区域的纹理。(3) 多视角扩展：把 f 拆成 f = f2∘f1。f1 对每个视角 i 编码 (F_i(π_i(X)), z_i(X))，得到 Φ_i；对所有视角取平均 Φ̄ = mean({Φ_i})，再由 f2 输出占据。这样结果与视角数目和顺序都无关。(4) 训练数据由 442 个 RenderPeople 高质量扫描模型渲染而成（每个模型绕竖直轴转 360°，共约 15.9 万张 512×512 图像）；在 RenderPeople（49 人）和 BUFF（5 人）上定量评测，并在 DeepFashion 真实照片上做定性展示。与体素表示相比更省内存。", "label": "主要贡献"}, {"b": "h3", "t": "D-NeRF: Neural Radiance Fields for Dynamic Scenes", "id": "classic-87", "url": "https://arxiv.org/abs/2011.13961", "sn": {"label": "与重点论文的联系", "t": "Quark Sec. 2.3（Single-view Methods）把 D-NeRF 与 NSFF、Nerfies、HyperNeRF 归为“利用随时间变化的多个视角”的单目方法，明确不做比较，并认为多相机方法目前质量“显著更高”。D-NeRF 因此是理解两篇锚点定位的反面参照。D-NeRF 类方法要为每个场景离线优化（D-NeRF 在单张 GTX 1080 上约 2 天，Nerfies 全高清模型需 8 张 V100 约一周），并把整段视频压进同一个规范空间；Quark 和 Ha 则面向同步多相机阵列，逐帧前馈推理，既不需要规范空间，也不需要逐场景训练。反过来，规范空间天然提供了跨帧记忆，而这正是 Ha 缺少的；后来的流式方法（3DGStream、IGS）就是在这两者之间寻找折中。"}}, {"b": "note", "t": "2021 · Albert Pumarola, Enric Corona, Gerard Pons-Moll, Francesc Moreno-Noguer (IRI CSIC-UPC、MPI Informatics) · CVPR 2021 · 引用 2.1k（Semantic Scholar） · 难度：入门 · 必读"}, {"b": "p", "t": "D-NeRF 是最早把 NeRF 推广到动态场景的工作之一，在 arXiv 上与 Nerfies、NR-NeRF 几乎同时出现。它与这些同期工作一起确立了动态神经渲染的基本范式“规范空间（canonical space）+ 变形场（deformation field）”：一个网络把 t 时刻的点映射回 t=0 的规范位置，另一个静态 NeRF 在规范位置查询颜色和密度。论文发布的 8 个合成动态场景（D-NeRF dataset）至今仍是 HexPlane、4DGS、Deformable 3DGS 等方法的标准单目测试集。此后 HyperNeRF、4DGS（Wu et al.）、Deformable 3DGS 等变形场方法都沿用了这一结构。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-n-dynamic"}, {"k": "concept-n-nerf"}, {"k": "concept-r-volume"}, {"k": "concept-d-flow"}, {"k": "adv-a-dynamic-4d"}]}}, {"b": "p", "t": "(1) 两个 8 层 ReLU MLP。变形网络 Ψt(x,t) = Δx，并约定 Ψt(x,0)=0，即以第一帧为规范空间；规范网络 Ψx(x+Δx, d) = (c, σ)。(2) 渲染时，射线上每个采样点先加上 Δx 再查询 Ψx，之后照常做体渲染。两个网络只靠光度 MSE 联合训练，不需要对应点，也不需要几何真值。(3) 训练技巧：按时间戳给输入排序，做课程学习，逐步加入更晚时刻的图像。(4) 数据集含 8 个路径追踪场景（Hell Warrior、Mutant、Hook、Bouncing Balls、Lego、T-Rex、Stand Up、Jumping Jacks），每个场景 100–200 张 800×800 图像，每个时刻只有一个视角。(5) 对照组 T-NeRF 直接把 t 作为第 6 维输入。在 Hell Warrior 上，NeRF 为 13.52 dB，T-NeRF 为 23.19 dB，D-NeRF 为 25.02 dB；在 Lego 上 D-NeRF（21.64）反而不如 T-NeRF（23.82），但 Deformable 3DGS 后来指出该数据集 Lego 场景的训练集与测试集铲斗角度不一致，所以这组 Lego 数字本身不可靠，不宜直接当作变形场失败的证据。训练用 400×400 分辨率、800k 次迭代，单张 GTX 1080 约 2 天。", "label": "主要贡献"}, {"b": "h3", "t": "Nerfies: Deformable Neural Radiance Fields", "id": "classic-89", "url": "https://arxiv.org/abs/2011.12948", "sn": {"label": "与重点论文的联系", "t": "Quark Sec. 2.3 把 Nerfies 和 HyperNeRF 一起列为不做比较的“单目 + 多时刻”路线。对读锚点来说，它有两点价值。第一，“逐场景优化 + 潜码”的代价（8 张 V100 训练一周）直观说明了 Quark 和 Ha 为什么坚持前馈推理。第二，“局部应接近刚体运动”这一思路在 Dynamic 3D Gaussians 的局部刚性损失中也能看到（后者把约束施加在相邻高斯之间，论文并未声称源自 Nerfies）。Ha 则完全不建模运动，只用颜色差分掩码 M（λ_t=0.7、β=0.6）在静态区域对深度做递归滤波来获得时间稳定性。两者分别代表“显式运动模型”和“不建模运动的时域滤波”两种思路。"}}, {"b": "note", "t": "2021 · Keunhong Park, Utkarsh Sinha, Jonathan T. Barron, Sofien Bouaziz, Dan B Goldman, Steven M. Seitz, Ricardo Martin-Brualla (华盛顿大学、Google Research) · ICCV 2021 · 引用 1.5k（Semantic Scholar） · 难度：进阶"}, {"b": "p", "t": "Nerfies 在论文中自称是第一个能用手机随手拍的自拍照片或视频，重建出可自由视点渲染的可变形 NeRF 的方法。与同期 D-NeRF 的纯平移变形不同，它用稠密 SE(3) 场表示变形，并提出两个后来被广泛沿用的优化技巧：一是借鉴几何处理与物理仿真的弹性正则（elastic regularization），二是对位置编码频带做由粗到细的退火（coarse-to-fine annealing），后者也被位姿优化等其他方向借用。它还认真设计了评测协议：用两台同步手机组成的验证 rig，拍摄同一时刻的另一个视角作为真值。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-n-dynamic"}, {"k": "concept-n-nerf"}, {"k": "concept-l-encoding"}, {"k": "concept-f-optim"}, {"k": "concept-f-linalg"}, {"k": "adv-a-dynamic-4d"}]}}, {"b": "p", "t": "(1) 每帧有一个 8 维形变潜码 ω_i 和一个 8 维外观潜码 ψ_i。变形场 W:(x, ω_i) → SE(3) 把观测空间的点变换到规范 NeRF 中。(2) 弹性正则：对变形的 Jacobian J_T 做 SVD 分解 J_T = UΣVᵀ，惩罚奇异值对数偏离 0 的程度 \\( \\|\\log\\Sigma\\|_F^2 \\)，即局部偏离刚体变换的程度；外面再套一层 Geman–McClure 鲁棒函数（c=0.03），允许表情等处的局部拉伸。(3) 由粗到细：第 j 个频带的权重为 w_j(α)=(1−cos(π·clamp(α−j,0,1)))/2，α 在 80K 次迭代内从 0 线性增加到 m=6。这样模型先拟合头部整体转动，再拟合微笑等细节；只用 4 个或 8 个固定频带都只能捕捉其中之一。(4) 背景正则：约束静态背景点不移动。(5) 训练代价：全高清模型在 8 张 V100 上约需一周，半分辨率模型约需 16 小时。", "label": "主要贡献"}, {"b": "h3", "t": "Neural Scene Flow Fields for Space-Time View Synthesis of Dynamic Scenes", "id": "classic-91", "url": "https://arxiv.org/abs/2011.13084", "sn": {"label": "与重点论文的联系", "t": "Quark Sec. 2.3 引用了 NSFF，把它归为单目多时刻方法并排除在比较之外。NSFF 与 Ha 的关系更实质。Ha 的时间一致性全部来自对输入的时域处理：先用颜色差分掩码 M_n^t 判断哪里是动态区域，对静态区域的深度做递归平均，再把上一帧目标视角的深度 𝒟^{t−1} 作为额外输入送进 TSDF。这可以看作 NSFF 静态/动态分解的简化版，只判断动或静，不估计场景流。Ha 的附录没有说明目标相机移动时 𝒟^{t−1} 如何重投影，而 NSFF 的“按场景流 warp 后再渲染”正是完整做法的模板。NSFF“沿运动 warp 后与相邻帧比对”的思想，也是基于光流的 warping error 这类时间一致性指标的基础；深读笔记指出 Ha 没有使用这类指标，而是用 TCC、STED 等。"}}, {"b": "note", "t": "2021 · Zhengqi Li, Simon Niklaus, Noah Snavely, Oliver Wang (Cornell Tech、Adobe Research) · CVPR 2021 · 引用 1.1k（Semantic Scholar） · 难度：进阶 · 必读"}, {"b": "p", "t": "NSFF 走了与 D-NeRF 相反的路：不设规范空间，而是让时变辐射场在每个时刻直接预测前向和后向的 3D 场景流，相当于把 2D 光流提升到 3D。它的核心监督是时间光度一致性：沿场景流把采样点 warp 到相邻时刻，再做体渲染，结果应与当前帧一致。论文系统处理了运动造成的去遮挡（disocclusion）歧义，并引入静态/动态分解以及单目深度、光流等数据驱动先验，论文称自己是首个能对单目相机拍摄的动态场景同时做新视角和新时刻合成的方法，并在含细结构和视角相关效果的真实视频上展示了结果。它是 DynIBaR、DyCheck 等后续工作的直接基线。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-n-dynamic"}, {"k": "concept-d-flow"}, {"k": "concept-v-temporal"}, {"k": "concept-n-nerf"}, {"k": "concept-d-mono"}, {"k": "adv-a-dynamic-4d"}, {"k": "adv-a-temporal-video"}]}}, {"b": "p", "t": "(1) 动态模型 \\( (c_i,\\sigma_i,\\mathcal{F}_i,\\mathcal{W}_i)=F^{dy}_{\\Theta}(x,d,i) \\)。其中 F_i=(f_{i→i+1}, f_{i→i−1}) 是前后向 3D 场景流，W_i 是去遮挡权重；假设相邻两帧之间做线性运动。(2) 时间光度一致性：沿射线把每个采样点按 f_{i→j} 平移到时刻 j，查询 (c_j, σ_j) 并体渲染得到 Ĉ_{j→i}，与观测 C_i 求 MSE；在去遮挡区域用 W_i 降低权重。(3) 正则项：场景流循环一致和平滑约束，以及 L_data = L_geo + β_z·L_z，即用预训练光流约束 3D 位移的投影，用单视角深度约束几何；这两类数据先验有噪声，只用于初始化，训练中权重线性衰减到 0。(4) 另训一个静态 NeRF，再用无监督的 3D 混合权重 v 线性混合静态与动态两部分的 RGBσ。(5) 在 Nvidia Dynamic Scenes 数据集上（12 台同步相机，通过轮换相机模拟单目）Full PSNR 为 28.19，NeRF 为 24.90，Yoon et al. 为 21.78。代价是每个场景用 2 张 V100 训练约 2 天，渲染一帧 512×288 约需 6 秒。", "label": "主要贡献"}, {"b": "h3", "t": "Neural Body: Implicit Neural Representations with Structured Latent Codes for Novel View Synthesis of Dynamic Humans", "id": "classic-93", "url": "https://arxiv.org/abs/2012.15838", "sn": {"label": "与重点论文的联系", "t": "Quark Sec. 2.3 引用了 Neural Body（列在“显式先验，通常是人头或全身”一类中），把使用人体显式先验的方法划为另一类问题，明确不做比较，因为 Quark 面向通用场景，不假设人体模板。Ha 同样面向“静态环境中的动态演员”，也不用 SMPL。对照 Neural Body 能看清锚点的取舍：人体先验让 4 个视角就足够，但遇到手持物体、宽松衣物、多人交互或需要重建背景时就会失效；Quark（8 路输入）和 Ha（K=4 路加深度）则用更多相机和通用的几何/IBR 管线换来场景通用性。GPS-Gaussian、Tele-Aloha 等 telepresence 方法介于两者之间：用人体数据训练先验，但不绑定参数化模型。"}}, {"b": "note", "t": "2021 · Sida Peng, Yuanqing Zhang, Yinghao Xu, Qianqian Wang, Qing Shuai, Hujun Bao, Xiaowei Zhou (浙江大学、香港中文大学、康奈尔大学) · CVPR 2021（Best Paper Candidate） · 引用 891（Semantic Scholar） · 难度：进阶 · 必读"}, {"b": "p", "t": "Neural Body 是极稀疏视角（4 台相机）人体新视角合成的奠基工作，这个问题本身是病态的。它的关键思想是把不同帧的观测绑到同一组潜码上，这组潜码锚定在 SMPL 网格顶点上，于是不同帧、不同姿态下的观测可以自然融合，网格同时提供几何引导。论文还发布了 ZJU-MoCap 数据集（21 台同步相机），此后成为 HumanNeRF 等大量人体 NeRF/高斯方法的标准基准。它是“参数化人体先验 + 神经场”这条主流路线的早期代表作。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-n-dynamic"}, {"k": "concept-n-nerf"}, {"k": "concept-g-rig"}, {"k": "concept-r-reps"}, {"k": "adv-a-human-capture"}]}}, {"b": "p", "t": "(1) 在 SMPL 的 6890 个顶点上各定义一个 16 维潜码 Z={z_1,…,z_6890}，所有帧共享；每一帧按从多视角图像估计出的 SMPL 姿态 S_t 移动潜码的位置。(2) 用 SparseConvNet 把稀疏的顶点潜码扩散成连续的潜码体积，任意 3D 点通过插值取码。(3) 以潜码为条件的 MLP 回归密度和颜色，用体渲染训练。(4) ZJU-MoCap 用 21 台同步相机拍摄，序列长 60–300 帧；训练只用 4 个均匀分布的视角。(5) 平均 PSNR 为 28.10，明显高于 Neural Volumes 的 21.39、Neural Textures 的 23.77 和 NHR 的 23.90。在 Twirl 序列第一帧上测试，训练帧数从 1 帧增加到 300 帧时，PSNR 从 25.64 升到 30.66，说明跨帧融合确实有用；但继续增加到 600、1200 帧时略降到 30.59、29.97。四视角、300 帧的视频在 4 张 2080 Ti 上训练约 14 小时。", "label": "主要贡献"}, {"b": "h3", "t": "HyperNeRF: A Higher-Dimensional Representation for Topologically Varying Neural Radiance Fields", "id": "classic-98", "url": "https://arxiv.org/abs/2106.13228", "sn": {"label": "与重点论文的联系", "t": "Quark Sec. 2.3 同样把 HyperNeRF 列为不做比较的单目多时刻方法。对锚点读者来说，重点是它提出的“拓扑变化”问题本身。Quark 每帧重新生成 LDM，Ha 每帧重新做 forward-splat 和 TSDF，两者都是逐帧重建，天然不受拓扑变化困扰。反过来，任何想给 Quark 或 Ha 加上跨帧持久表示的方案（例如 3DGStream 那样逐帧变换高斯）都要面对 HyperNeRF 指出的难题：新出现或消失的物体无法靠连续变形得到。3DGStream 为此专门设计了“自适应新增高斯”这一阶段。"}}, {"b": "note", "t": "2021 · Keunhong Park, Utkarsh Sinha, Peter Hedman, Jonathan T. Barron, Sofien Bouaziz, Dan B Goldman, Ricardo Martin-Brualla, Steven M. Seitz（华盛顿大学、Google Research、Facebook Reality Labs） · SIGGRAPH Asia 2021 (ACM TOG 40(6)) · 引用 353（Semantic Scholar） · 难度：专家"}, {"b": "p", "t": "HyperNeRF 指出了变形场方法的根本局限：变形场是连续映射，无法表达拓扑变化，例如张嘴、切开的柠檬、被捏扁的玩具。受水平集方法启发，它把规范 NeRF 提升到一个“超空间”，即 3 个空间维再加若干环境维 w；每张输入图对应超空间中的一个切片，拓扑变化就变成了切片位置的连续移动。“增加维度来绕开不连续”这个思路影响了后续许多动态表示。它发布的 HyperNeRF 数据集（vrig/interp）也成为 4DGS、Deformable 3DGS 常用的真实单目基准。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-n-dynamic"}, {"k": "concept-n-nerf"}, {"k": "concept-r-reps"}, {"k": "adv-a-dynamic-4d"}]}}, {"b": "p", "t": "(1) 映射 (x, ω_i) → (x′, w)：一个 MLP 给出变形后的空间坐标 x′；另一个 MLP，即可变形切片面（Deformable Slicing Surface）H(x, ω_i)，给出环境坐标 w。两者拼接成 (x′, w)，与视角方向和外观潜码一起送入模板 NeRF。(2) 与轴对齐的切片平面不同，可变形切片面允许不同空间位置引用超空间的不同部分，让不同形状之间共享信息，环境面也更简单。(3) 所有实验统一使用 W=2 个环境维。(4) 与 Nerfies 相比，LPIPS 在“时刻插值”任务上降低 4.1%，在固定时刻的新视角合成上降低 8.6%。(5) 在 4 块 TPU v4 上训练 250k 次迭代，约需 8 小时。", "label": "主要贡献"}, {"b": "h3", "t": "HumanNeRF: Free-viewpoint Rendering of Moving People from Monocular Video", "id": "classic-107", "url": "https://arxiv.org/abs/2201.04127", "sn": {"label": "与重点论文的联系", "t": "HumanNeRF 与锚点的关系较远。Quark Sec. 2.3 把“显式人体先验”和“单目多时刻”都视为不同的问题，而 HumanNeRF 两者兼有。它的价值在于标出锚点的适用边界。两篇锚点都要求同步、已标定的多相机阵列（Quark 8 路，Ha K=4 路加深度），换来的是不需要人体模板，也不需要为每个人单独训练；HumanNeRF 则用约 72 小时的逐人优化，换来只需一台相机。telepresence 系统如果想大幅减少相机数量，往往就要借助人体先验，HumanNeRF 代表的是其中“逐人优化”的一类。"}}, {"b": "note", "t": "2022 · Chung-Yi Weng, Brian Curless, Pratul P. Srinivasan, Jonathan T. Barron, Ira Kemelmacher-Shlizerman (华盛顿大学、Google Research) · CVPR 2022 (Oral) · 引用 667（Semantic Scholar） · 难度：进阶"}, {"b": "p", "t": "HumanNeRF 把自由视点人体渲染推进到只需一段单目视频，甚至是 YouTube 上的视频。它在规范 T-pose 下优化一个体积表示，再用一个运动场把它 backward-warp 到每一帧；运动场由骨骼刚性运动和非刚性运动两部分组成。这篇论文展示了强人体先验能把单目视频的信息整合成 360° 可看的数字人，之后常被单目人体 NeRF 和高斯方法用作基线。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-n-dynamic"}, {"k": "concept-n-nerf"}, {"k": "concept-f-linalg"}, {"k": "concept-f-optim"}, {"k": "adv-a-human-capture"}]}}, {"b": "p", "t": "(1) 运动场 = 骨骼运动 T_skel + 非刚性残差 T_NR。T_skel 是逆线性混合蒙皮，K=24 根骨骼的混合权重体积由 CNN 从一个常数潜码生成；T_NR 是 MLP。(2) 位姿修正：对 SPIN 等方法估计的身体姿态做残差优化，减轻位姿误差造成的模糊。(3) 延迟优化：训练前期关闭非刚性运动，在 ZJU-MoCap 上从第 10K 次迭代到第 50K 次迭代逐步开启，防止非刚性分支抢走本该由骨骼运动解释的部分而导致过拟合。(4) 损失为 MSE 加 LPIPS。(5) ZJU-MoCap 上只用 camera 1 作输入，其余 22 台相机用于评测；以 377 号为例，LPIPS*（LPIPS×10³）为 24.06，而 Neural Body 为 40.95。训练 400K 次迭代，在 4 张 2080 Ti 上约 72 小时。", "label": "主要贡献"}, {"b": "h3", "t": "Neural 3D Video Synthesis from Multi-view Video", "id": "classic-109", "url": "https://arxiv.org/abs/2103.02597", "sn": {"label": "与重点论文的联系", "t": "两篇锚点的主要动态评测都用这个数据集。Quark（表 1）沿用本文协议：裁到 300 帧，每 10 帧评一次，以第 0 号相机为目标。在 1024×768 下 Quark 为 31.57 / 0.942 / 0.127，ENeRF 为 29.86。Ha 把 DyNeRF 作为主数据集：1352×1014，K=4，测 Sear Steak 和 Flame Steak 前 100 帧，共 9 个测试视角；PSNR 31.17，ENeRF 29.51。Ha 用同一厨房的另外 3 个场景训练，深读笔记指出这带来了域内优势。Ha 的深度来自在“人工挑选的图像对”上运行 RAFT-Stereo。Ha 强调在线处理，正是针对本文“每个场景训练一周”的离线代价。另外，Ha 的作者之一 Changil Kim 也是本文作者。"}}, {"b": "note", "t": "2022 · Tianye Li, Mira Slavcheva, Michael Zollhöfer, Simon Green, Christoph Lassner, Changil Kim, Tanner Schmidt, Steven Lovegrove, Michael Goesele, Richard Newcombe, Zhaoyang Lv (Meta Reality Labs Research、南加州大学等) · CVPR 2022 (Oral) · 引用 516（Semantic Scholar） · 难度：入门 · 必读"}, {"b": "p", "t": "DyNeRF 是多视角动态场景神经渲染的奠基论文。它用“时间条件 NeRF + 每帧一个紧凑潜码”表示 10 秒、30 FPS 的多视角视频，并发布了 Neural 3D Video 数据集（又称 N3DV、DyNeRF 或 Plenoptic Video）：18–21 台 GoPro，2.7K 分辨率，厨房场景里有火焰、透明杯子、切肉等难点。此后 K-Planes、HexPlane、4DGS、Spacetime Gaussians、3DGStream、IGS 以及两篇锚点都把它作为主要的动态评测集。评测协议“裁到 300 帧、以第 0 号相机为测试视角、每 10 帧评一次”也被后续工作沿用。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-n-dynamic"}, {"k": "concept-n-nerf"}, {"k": "concept-g-rig"}, {"k": "concept-v-metrics"}, {"k": "concept-l-loss"}, {"k": "adv-a-dynamic-4d"}]}}, {"b": "p", "t": "(1) 表示为 F(x, d, z_t) → (c, σ)。z_t ∈ R^1024 是可学习的逐帧潜码，从零均值、小方差的高斯分布初始化，学习率是网络参数的 10 倍；MLP 结构沿用 NeRF，只把前 8 层宽度从 256 改为 512。对潜码插值可以渲染中间时刻。(2) 分层训练：先只在相隔 K=30 帧的关键帧上训练，再用它初始化中间帧，然后在全序列上精调。(3) 射线重要性采样：按像素颜色与其全局中位数的差（ISG），或与相邻帧的差（IST），给射线加权，让训练集中在动态区域。ISG 恢复细节快但会抖，IST 平滑但偏糊，组合策略 IS⋆ 兼顾两者。(4) 紧凑：18 路、10 秒的视频只需 28 MB；若逐帧训练 NeRF，估计需要约 15,000 GPU 小时和 1 GB 存储。(5) flame salmon 上 PSNR 为 29.58（NeRF-T 28.45，LLFF 23.24，Neural Volumes 22.80），但训练需要 8 张 V100 约一周，约合 1344 GPU 小时。", "label": "主要贡献"}, {"b": "h3", "t": "Monocular Dynamic View Synthesis: A Reality Check", "id": "classic-110", "url": "https://arxiv.org/abs/2210.13445", "sn": {"label": "与重点论文的联系", "t": "两篇锚点都没有引用这篇论文，但它有助于理解为什么两者都选择同步多相机阵列：真正的单目动态重建远比论文数字显示的难。它也提醒读者审视锚点自己的评测。Ha 的测试视角全部是从阵列中留出的相机（DyNeRF 9 个，ENeRF-Outdoor 3 个，D3DMV 4 个），只测视角内插，不测外推；Quark 在 N3DV 上以第 0 号相机为目标。深读笔记指出 Ha 的训练集与测试集拍摄于同一个厨房。这与 DyCheck 批评的问题性质不同（DyCheck 针对的是“单目”输入中暗藏的多视角信号），但道理相通：评测协议中任何额外的信息来源都会让数字偏乐观。共视掩码的思路也可以用来单独评估 Quark 和 Ha 在遮挡区域的补洞质量。"}}, {"b": "note", "t": "2022 · Hang Gao, Ruilong Li, Shubham Tulsiani, Bryan Russell, Angjoo Kanazawa (UC Berkeley、CMU、Adobe Research) · NeurIPS 2022 · 引用 230（Semantic Scholar） · 难度：进阶"}, {"b": "p", "t": "这是一篇“拆台”式的评测论文。它指出 D-NeRF、Nerfies、HyperNeRF、NSFF 等单目动态方法的实验协议实际上泄漏了多视角信号：要么相机在多台相机之间“瞬移”（teleport），要么场景几乎不动。论文提出有效多视角因子（EMF）来量化这种泄漏，并给出只在共视区域计算的掩码指标和对应点精度指标，迫使整个领域重新审视“单目”结论。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-v-metrics"}, {"k": "concept-n-dynamic"}, {"k": "concept-d-mono"}, {"k": "concept-g-rig"}, {"k": "adv-a-dynamic-4d"}]}}, {"b": "p", "t": "(1) 定义两个 EMF：完整 EMF Ω 是相机运动幅度与场景运动幅度之比；角度 EMF ω 是相机绕注视点的角速度，更容易计算。数值越大，序列中的多视角线索越多。(2) 用这两个指标检查发现，现有数据集的 EMF 都很大，实际上处于“有效多视角”区间。(3) 新指标：只在训练帧中可见的像素上计算 PSNR/SSIM/LPIPS（共视掩码指标，如 mPSNR），以及关键点转移正确率 PCK-T。(4) 新的 iPhone 数据集：14 段序列，每段 8–15 秒，用手持 iPhone 拍摄训练视频；其中 7 段另配两台大基线的静止相机用于多视角评测，7 段只有单视角，并附带 LiDAR 深度。(5) 在现有数据集上去掉瞬移后，最先进方法的 mPSNR 下降 1–2 dB、PCK-T 下降约 5%；在新数据集的复杂运动上再下降 4–5 dB，PCK-T 下降约 30%。", "label": "主要贡献"}, {"b": "h3", "t": "K-Planes: Explicit Radiance Fields in Space, Time, and Appearance", "id": "classic-118", "url": "https://arxiv.org/abs/2301.10241", "sn": {"label": "与重点论文的联系", "t": "Quark Sec. 2.1 把 K-Planes 列为“加速体渲染”的代表之一，同时指出这类方法仍要离线逐场景重建，只有 ENeRF 能让“重建 + 渲染”合计达到交互速度。Ha Sec. 2 把 K-Planes、HexPlane、DyNeRF、HyperReel、4K4D 归为“扩展到 4D 的体渲染方法”，理由同样是逐场景训练代价高、不适合在线使用。读 K-Planes 能看清锚点放弃了什么：K-Planes 通过时间平滑先验和静/动分离，较自然地获得时间平滑性（代价是离线逐场景训练）；Ha 则要用差分掩码和 TSDF 回灌手工补回这种一致性；Quark 完全没有这一机制，其局限一节也承认逐帧重建会闪烁。"}}, {"b": "note", "t": "2023 · Sara Fridovich-Keil, Giacomo Meanti, Frederik Rahbæk Warburg, Benjamin Recht, Angjoo Kanazawa (UC Berkeley、意大利理工学院 IIT、丹麦技术大学) · CVPR 2023 · 引用 1.0k（Semantic Scholar） · 难度：进阶 · 必读"}, {"b": "p", "t": "K-Planes 给出了一种简洁、可解释的 d 维辐射场分解：用 C(d,2) 个二维特征平面表示 d 维场。d=3 时就是静态的三平面，d=4 时是动态的六平面。它说明 4D 体积不必存成 4D 网格，六个平面相乘就能表达；而且空间平面与时空平面分开，天然就把场景分成了静态和动态两部分。K-Planes 与同期的 HexPlane 把动态 NeRF 的训练从“8 张卡一周”降到“单卡两小时”，此后成为 4DGS（Wu et al.）、4K4D 等方法中时空特征编码的常用组件。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-n-dynamic"}, {"k": "concept-r-reps"}, {"k": "concept-n-nerf"}, {"k": "concept-f-optim"}, {"k": "concept-v-temporal"}, {"k": "adv-a-dynamic-4d"}, {"k": "adv-a-nerf-fast"}]}}, {"b": "p", "t": "(1) 4D 点 q=(x,y,z,t) 投影到 xy、xz、yz、xt、yt、zt 六个平面上，分别双线性插值得到 f(q)_c，再逐元素相乘（Hadamard 积）：\\( f(q)=\\prod_{c} f(q)_c \\)。乘法能“选中”特定空间区域，因此线性解码器也够用，加法则做不到。(2) 空间平面是多尺度的，例如 64、128、256、512。(3) 先验：空间平面上加全变分；时间维上用一维拉普拉斯平滑 \\( \\|P^{t-1}-2P^{t}+P^{t+1}\\|_2^2 \\) 惩罚“加速度”；时空平面初始化为 1（乘法单位元），并加 ℓ1 正则 ‖1−P_c‖₁，使静态内容不占用时间平面。(4) 两种解码器：学习颜色基的纯显式线性解码器，或者使用小 MLP 的混合版本；全部用纯 PyTorch 实现。(5) 4D 体积只需 200 MB，同分辨率的完整 4D 网格需要 300 GB 以上，压缩约 1000 倍。DyNeRF 数据上（6 个场景平均，含 coffee martini），混合版 PSNR 31.63，单卡训练 1.8 小时；表中 DyNeRF 的 29.58 只是 flame salmon 单个场景的结果，训练约 1344 GPU 小时，两者并非完全同口径。", "label": "主要贡献"}, {"b": "h3", "t": "HexPlane: A Fast Representation for Dynamic Scenes", "id": "classic-119", "url": "https://arxiv.org/abs/2301.09632", "sn": {"label": "与重点论文的联系", "t": "Ha Sec. 2 直接引用 HexPlane，作为“体渲染扩展到 4D、需要逐场景训练、不适合在线”的代表。HexPlane 在附录中自己说明，评测 DyNeRF 数据时排除了未同步的 coffee martini 场景。这与 Ha 局限一节的说法相呼应：Ha 需要严格同步、已标定的相机，ENeRF-Outdoor 就因为同步和颜色标定问题，只能在 480×270 分辨率下计算指标。同步误差对任何多相机方法都是硬伤。另外，HexPlane 的渲染只有约 0.2–0.56 FPS（数据来自 4DGS 和 4DGS-Yang 的对比表），远低于 Quark 1080p/30fps 或 Ha 约 39 ms/帧（不含立体深度估计）的实时水平。"}}, {"b": "note", "t": "2023 · Ang Cao, Justin Johnson (密歇根大学) · CVPR 2023 · 引用 823（Semantic Scholar） · 难度：进阶"}, {"b": "p", "t": "HexPlane 与 K-Planes 同期、独立地提出用六个特征平面显式表示动态场景，并把 TensoRF 的向量-矩阵低秩分解推广到时空。它用极简的结构证明，动态场景不一定需要变形场：直接分解 4D 体积，在 DyNeRF 上只用约百分之一的训练时间就能达到同等质量。4DGS（Wu et al.）受 HexPlane 启发，采用 K-Planes 式的多分辨率六平面模块作为高斯变形场的特征编码器。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-n-dynamic"}, {"k": "concept-r-reps"}, {"k": "concept-n-nerf"}, {"k": "concept-f-linalg"}, {"k": "concept-g-rig"}, {"k": "adv-a-dynamic-4d"}, {"k": "adv-a-nerf-fast"}]}}, {"b": "p", "t": "(1) 六个平面分成三对，每对由一个空间平面和一个与之正交的时空平面组成：XY–ZT、XZ–YT、YZ–XT。每对特征逐元素相乘，三对的结果拼接起来，再乘以矩阵 V^{RF} 得到最终特征：\\( [P^{XY}\\odot P^{ZT};\\,P^{XZ}\\odot P^{YT};\\,P^{YZ}\\odot P^{XT}]\\,V^{RF} \\)。(2) 一次查询只需 6 次双线性插值和一次向量-矩阵乘法，内存为 O(N²R + NTR + RF)，其中 N 是空间分辨率，T 是时间分辨率，R 是秩，F 是特征维数。(3) 后接一个小 MLP 回归颜色，用体渲染和光度损失训练；沿用 DyNeRF 的分层训练和重要性采样，空间网格 512，时间网格 300。(4) flame salmon 上训练 650k 次迭代，PSNR 29.47、LPIPS 0.078，用时 12 GPU 小时，而 DyNeRF 需要 1344 小时，加速 112 倍；只训练 100k 次迭代的版本 PSNR 29.26，用时 2 小时，加速 672 倍。(5) 在全部公开场景（排除未同步的 coffee martini）上平均 PSNR 为 31.71。", "label": "主要贡献"}, {"b": "h3", "t": "DynIBaR: Neural Dynamic Image-Based Rendering", "id": "classic-120", "url": "https://arxiv.org/abs/2211.11082", "sn": {"label": "与重点论文的联系", "t": "DynIBaR 与两篇锚点有同一个核心判断：优先用 IBR。Quark 在 LDM 的每层每个像素上用 M 维 blend weights 对全分辨率输入图像做凸组合；Ha 用 U-Net 预测 K 张前向渲染图的融合权重。三者都是借用输入像素，而不是由网络生成颜色。区别在于聚合的维度：DynIBaR 在时间上聚合，从邻近帧取，靠运动轨迹找对应；两篇锚点在空间上聚合，从同一时刻的不同相机取，靠几何找对应。IBR 的弱点也相同：Quark 的局限一节承认 blend weights 无法表示输入中不存在的视角相关效果，DynIBaR 则依赖运动估计的准确性。对照 Quark Sec. 2.2 梳理的跨视角聚合谱系（mean/variance、max-pool、attention）：DynIBaR 沿用 IBRNet，跨视角用加权平均池化这类统计量融合，ray transformer 则是沿射线（而非跨视角）工作；Quark 在跨视角这一步用的是 One-to-many attention。"}}, {"b": "note", "t": "2023 · Zhengqi Li, Qianqian Wang, Forrester Cole, Richard Tucker, Noah Snavely (Google Research、Cornell Tech) · CVPR 2023（Best Paper Honorable Mention） · 引用 292（Semantic Scholar） · 难度：专家"}, {"b": "p", "t": "DynIBaR 把图像基渲染（IBR）的思想带进了动态场景。它不再把整段视频编码进 MLP 的权重，而是像 IBRNet 那样，在渲染时从时间上相邻的源帧中聚合特征；不同之处在于，动态点不满足极线约束，所以聚合位置要按场景运动修正。这样一来，时间长、运动复杂、相机轨迹不受控的手机视频也能合成出清晰的新视角。它是动态 NeRF 与 IBR 融合的代表作，获 CVPR 2023 最佳论文荣誉提名，也说明直接借用输入像素比把外观记进网络更能保住细节。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-i-blending"}, {"k": "concept-n-generalizable"}, {"k": "concept-d-flow"}, {"k": "concept-n-dynamic"}, {"k": "concept-l-attention"}, {"k": "adv-a-generalizable-ibr"}, {"k": "adv-a-dynamic-4d"}]}}, {"b": "p", "t": "(1) 运动轨迹场：MLP G_MT(γ(x), γ(i)) 输出 L=6 个运动基的系数 φ^l_i(x)，另有一组全局可学习的时间基 h^l，先用 DCT 基初始化再微调。轨迹为 \\( \\Gamma_{x,i}(j)=\\sum_{l} h^l_j\\,\\varphi^l_i(x) \\)，查询一次 MLP 就能得到 x 在任意邻近帧 j 中的对应位置。(2) 按对应位置把点投影到时间半径 r=3 以内的源帧上取特征：跨视角先用共享 MLP 加加权平均池化（IBRNet 式）融合成每个采样点的一个特征，再由带时间嵌入的 ray transformer 沿射线处理，输出颜色和密度，最后体渲染。(3) 跨时间渲染一致性损失：用运动轨迹把时刻 i 的场景搬到时刻 j 渲染，再与观测比较。(4) 基于 IBR 的贝叶斯运动分割，把场景分为静态模型和动态模型。(5) Nvidia 数据集上 PSNR 30.86、LPIPS 0.027，NSFF 为 28.90 / 0.062；UCSD 数据集上 PSNR 36.47。代价是一段 10 秒视频要在 8 张 A100 上优化约 2 天，渲染一帧 768×432 约需 20 秒。", "label": "主要贡献"}, {"b": "h3", "t": "HumanRF: High-Fidelity Neural Radiance Fields for Humans in Motion", "id": "classic-121", "url": "https://arxiv.org/abs/2305.06356", "sn": {"label": "与重点论文的联系", "t": "HumanRF 代表 telepresence 的“离线上限”路线：160 台相机，每段序列约一天计算，得到压缩后的高保真人体 4D 表示。Quark（8 路）和 Ha（K=4 路）代表“在线下限”路线：相机少，逐帧前馈，不训练。二者在分辨率上的差距很能说明问题：Quark 输出 1080p，但内部 LDM 最高只有 288×512（Quark+ 为 432×768），再上采样到输出分辨率；Ha 在 1352×1014 下评测；HumanRF 则可以在 12MP 全分辨率上训练。HumanRF 的时间分段思想，也对应 IGS 每隔 w=5 帧设一个关键帧的做法：长序列都要在“共享表示”和“局部刷新”之间取折中。Quark 和 Ha 每帧完全刷新，处在另一个极端，代价是闪烁。"}}, {"b": "note", "t": "2023 · Mustafa Işık, Martin Rünz, Markos Georgopoulos, Taras Khakhulin, Jonathan Starck, Lourdes Agapito, Matthias Nießner (Synthesia、UCL、慕尼黑工业大学) · SIGGRAPH 2023 (ACM TOG 42(4)) · 引用 241（Semantic Scholar） · 难度：专家"}, {"b": "p", "t": "HumanRF 把多视角人体 4D 重建推向“制作级”分辨率。它发布了 ActorsHQ 数据集（160 台 12MP 相机），并提出一种适合长序列、高分辨率的 4D 表示：时空矩阵-向量分解加哈希网格，再把时间轴自适应地切成若干段分别建模。它是高保真人体体积视频（volumetric video）的重要数据与方法基准，也展示了分辨率提高后在标定、同步和存储上出现的新问题。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-n-dynamic"}, {"k": "concept-r-reps"}, {"k": "concept-g-rig"}, {"k": "concept-v-codec"}, {"k": "adv-a-human-capture"}, {"k": "adv-a-dynamic-4d"}]}}, {"b": "p", "t": "(1) 把 4D 特征网格分解为四个 3D 哈希网格与四个 1D 稠密网格之积的和：\\( T_{xyzt}=T_{xyz}\\odot T_t+T_{xyt}\\odot T_z+T_{xzt}\\odot T_y+T_{yzt}\\odot T_x \\)。(2) 自适应时间分段：切分时让各段的并集占据体积大致相同，因此运动剧烈处段短、运动平缓处段长。训练时只需把少数几段放进显存，可以处理任意长的序列。(3) 实验表明，400 帧只用一段，或者每帧一个 3D 哈希网格，效果都差；段长在 3–100 帧之间时最好，自适应分段接近最优段长的效果。(4) ActorsHQ：8 名演员、16 段序列，共 39,765 帧；160 台 12MP Ximea 相机以 25 fps 拍摄，420 颗 LED 与快门同步，快门 650 µs；提供逐帧网格重建。(5) 在单张 RTX 3090 上每秒 8–12 次迭代，1000 帧的序列约需一天。", "label": "主要贡献"}, {"b": "h3", "t": "4D Gaussian Splatting for Real-Time Dynamic Scene Rendering", "id": "classic-125", "url": "https://arxiv.org/abs/2310.08528", "sn": {"label": "与重点论文的联系", "t": "Ha 与本文有两处直接交集。一是 Ha Sec. 2 把本文列为需要逐场景优化、不适合在线使用的动态 3DGS；二是 Ha Fig. 12 在 ENeRF-Outdoor 上把本文与 4K4D、MVSplat 做了定性比较（深读笔记指出这里只有定性结果，没有定量数字）。本文 N3DV 的评测分辨率 1352×1014 也与 Ha 的 DyNeRF 设定相同。数字上，本文在 N3DV 上达到 31.15 dB、30 FPS，但需要 40 分钟逐场景训练；Quark 在 N3DV 上 31.57 dB，完全不需要训练（1024×768，协议和分辨率不同，不能直接比较）。Ha 用的也是原版 3DGS 光栅器，但它的高斯由深度逐帧解析放置，不做优化；本文的高斯则由可训练的变形场驱动。同一个光栅器，对应两种获取高斯的方式。"}}, {"b": "note", "t": "2024 · Guanjun Wu, Taoran Yi, Jiemin Fang, Lingxi Xie, Xiaopeng Zhang, Wei Wei, Wenyu Liu, Qi Tian, Xinggang Wang (华中科技大学、华为) · CVPR 2024 · 引用 1.6k（Semantic Scholar） · 难度：进阶 · 必读"}, {"b": "p", "t": "这是本主题中引用最多的动态高斯方法。它把 D-NeRF 式的“规范空间 + 变形场”搬到了 3DGS 上：只存一套规范 3D 高斯，用 HexPlane 式的多分辨率时空平面编码加一个小型多头 MLP，预测每个高斯在时刻 t 的位置、旋转和尺度偏移，然后用原版光栅器渲染。“规范高斯 + 平面编码变形场”这个模板结构简单、存储小，单目和多视角都能用，成为大量后续工作的默认基线。Ha 在 ENeRF-Outdoor 上也拿它做了定性对比。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-n-3dgs"}, {"k": "concept-n-dynamic"}, {"k": "concept-r-reps"}, {"k": "concept-r-raster"}, {"k": "adv-a-dynamic-4d"}, {"k": "adv-a-3dgs-ext"}]}}, {"b": "p", "t": "(1) 高斯变形场网络 F 由时空结构编码器 H 和多头解码器 D={φ_x, φ_r, φ_s} 组成。H 用 6 个多分辨率平面 R_l(i,j)（以 HexPlane 方式分解 4D 神经体素），为每个高斯中心在时刻 t 取特征；D 的三个头分别输出 Δx、Δr、Δs，得到变形后的高斯 G′ = G + ΔG。(2) 只维护一套规范高斯，存储不会随帧数线性增长。(3) D-NeRF 合成数据集上，PSNR 34.05，800×800 下 82 FPS（RTX 3090），训练 8 分钟，模型 18 MB。(4) N3DV（1352×1014）上，PSNR 31.15，30 FPS，训练 40 分钟，模型 90 MB；HyperNeRF vrig 上 25.2 dB，34 FPS。(5) 消融显示只预测位置不够：人体关节运动会拉伸、扭转表面，需要同时调整高斯的尺度和旋转。", "label": "主要贡献"}, {"b": "h3", "t": "Deformable 3D Gaussians for High-Fidelity Monocular Dynamic Scene Reconstruction", "id": "classic-128", "url": "https://arxiv.org/abs/2309.13101", "sn": {"label": "与重点论文的联系", "t": "Ha Sec. 2 引用了本文，与 Dynamic 3D Gaussians、4DGS、Spacetime Gaussians、3DGStream 等并列，作为“3DGS 扩展到动态场景、但需要逐场景优化”的代表。它与 Ha 的对照很清楚：两者都把高斯送进同一个原版光栅器，但本文的高斯靠梯度下降和变形 MLP 得到，Ha 的高斯则由输入深度逐像素解析放置（各向同性、完全不透明、投影后恰好覆盖 1 个像素），完全跳过优化。AST 在时间输入上加噪来平滑时间插值，Ha 用差分掩码做递归滤波，两者都是为了时间平滑而引入的低通机制，可以对照着理解。"}}, {"b": "note", "t": "2024 · Ziyi Yang, Xinyu Gao, Wen Zhou, Shaohui Jiao, Yuqing Zhang, Xiaogang Jin (浙江大学、字节跳动) · CVPR 2024 · 引用 1.0k（Semantic Scholar） · 难度：进阶"}, {"b": "p", "t": "这是与 4DGS（Wu et al.）同期、结构最简单的“规范高斯 + 变形 MLP”方案：直接用一个 MLP，以位置编码后的 (x, t) 为输入，预测每个高斯的 Δx、Δr、Δs。它结构极简、效果好、代码容易修改，SC-GS 等后续单目动态高斯工作常以它为基线或起点，是入门动态高斯最直接的读物。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-n-3dgs"}, {"k": "concept-n-dynamic"}, {"k": "concept-l-encoding"}, {"k": "concept-f-optim"}, {"k": "adv-a-dynamic-4d"}, {"k": "adv-a-3dgs-ext"}]}}, {"b": "p", "t": "(1) 变形网络为 \\( (\\delta x,\\delta r,\\delta s)=F_\\theta(\\gamma(\\mathrm{sg}(x)),\\gamma(t)) \\)，其中 γ 是位置编码，sg 表示对规范位置停止梯度。变形后的高斯 G(x+δx, r+δr, s+δs, σ) 送入 3DGS 的 tile 光栅器。(2) 预热：前 3k 次迭代只训练静态 3D 高斯，不优化变形场；总共训练 40k 次迭代。(3) 退火平滑训练（AST）：给时间输入加上幅度线性衰减的高斯噪声，减轻真实数据中位姿不准造成的时间插值抖动，而且没有额外开销。(4) 在 D-NeRF 合成数据上明显优于此前方法，在 HyperNeRF 和 NeRF-DS 真实数据上也有竞争力；论文还指出 D-NeRF 数据集 Lego 场景的训练集与测试集不一致，改用验证集评测。渲染速度取决于高斯数量，少于约 25 万个时可在 RTX 3090 上超过 30 FPS。", "label": "主要贡献"}, {"b": "h3", "t": "Dynamic 3D Gaussians: Tracking by Persistent Dynamic View Synthesis", "id": "classic-129", "url": "https://arxiv.org/abs/2308.09713", "sn": {"label": "与重点论文的联系", "t": "Ha Sec. 2 引用了本文，把它与其他动态 3DGS 一起归为“需要昂贵的逐场景优化”。但本文恰好提供了 Ha 和 Quark 都缺少的东西：跨帧持久的 3D 表示。Quark 每帧生成 LDM 后立即丢弃，局限一节承认会闪烁；Ha 不跟踪任何点，只靠差分掩码滤波和上一帧深度回灌维持时间一致。本文表明，只要让同一批高斯跨帧移动，就能自然得到时间一致性和稠密对应，代价是每个时刻约 50 秒的优化（原文：每时刻 2000 次迭代，150 个时刻合计约 2 小时）。后来的 3DGStream（约 12 秒/帧）和 IGS（约 2.7 秒/帧）就在压缩这个开销。它的高斯靠优化得到，恰好与 Ha 附录 A.3 那种“逐帧解析放置、不做优化”的像素级高斯相对。"}}, {"b": "note", "t": "2024 · Jonathon Luiten, Georgios Kopanas, Bastian Leibe, Deva Ramanan (CMU、RWTH Aachen、Inria) · 3DV 2024 · 引用 1.0k（Semantic Scholar） · 难度：进阶 · 必读"}, {"b": "p", "t": "这是 3DGS 出现后最早的动态扩展之一，也是物理意味最强的一个。同一组高斯的颜色、不透明度和尺寸在各时刻保持不变，只有位置和旋转随时间变化，并用局部刚性等先验约束运动。这样，“持久的动态新视角合成”就自然带出了稠密的 6-DoF 跟踪。它逐时刻在线优化，每一帧都用上一帧的结果初始化，是 3DGStream 等流式高斯方法的重要前身之一。它也把“表示跨帧持久，就能同时得到时间一致性和对应关系”这一观点带进了 4D 重建。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-n-3dgs"}, {"k": "concept-n-dynamic"}, {"k": "concept-v-temporal"}, {"k": "concept-f-linalg"}, {"k": "concept-f-optim"}, {"k": "adv-a-dynamic-4d"}, {"k": "adv-a-3dgs-ext"}]}}, {"b": "p", "t": "(1) 每个高斯有随时刻变化的中心 (x_t,y_t,z_t) 和旋转四元数，而尺度、颜色、不透明度和背景 logit 在所有时刻共享。(2) 在线重建：一次只重建一个时刻，用上一时刻的结果初始化；第一帧用于初始化，之后除运动参数外的属性全部冻结。(3) 局部刚性损失：对每个高斯 i 的 k=20 个近邻 j，要求 \\( (\\mu_{j,t-1}-\\mu_{i,t-1}) \\approx R_{i,t-1}R_{i,t}^{-1}(\\mu_{j,t}-\\mu_{i,t}) \\)，即 j 相对于 i 的位移服从 i 自身坐标系的刚体变换。权重 w_ij=exp(−λ_w‖μ_{j,0}−μ_{i,0}‖²)，λ_w=2000，对应标准差约 2.2 cm。另有局部旋转相似损失和长期局部等距损失。(4) 在 CMU Panoptic Studio 上（27 台训练相机、4 台测试相机、150 个时刻），PSNR 28.7，渲染 850 FPS。第一帧用 Panoptic 的深度相机点云初始化并优化 1 万次迭代（约 4 分钟），之后每个时刻 2000 次迭代（约 50 秒），单张 RTX 3090 合计约 2 小时，每个场景 20–30 万个高斯。(5) 3D 跟踪平均误差 2.21 cm，2D 跟踪误差 1.57 个归一化像素，比此前最好的方法约好一个数量级。", "label": "主要贡献"}, {"b": "h3", "t": "Real-time Photorealistic Dynamic Scene Representation and Rendering with 4D Gaussian Splatting", "id": "classic-134", "url": "https://arxiv.org/abs/2310.10642", "sn": {"label": "与重点论文的联系", "t": "两篇锚点都不用这种原生 4D 表示，但对照它，可以看清 Ha 的时间策略处在谱系的哪一端。在 4D 高斯里，一个基元只在一段时间内“存在”，由 p(t) 控制，因此天然平滑地淡入淡出。Ha 的软差分掩码 \\( M=\\min(|I^t-I^{t-1}|/\\lambda_t+\\beta,\\,1) \\) 则在输入端决定每个像素在多大程度上采用新深度，是一种手工设计的一阶时间滤波。Quark 在 N3DV 上逐帧重建，没有任何时间状态。若要在 telepresence 中使用这类 4D 表示，必须拿到整段视频后离线训练，这与两篇锚点“在线、逐帧”的定位直接冲突；Ha Sec. 2 对动态 3DGS“需要逐场景优化”的批评同样适用于本文。"}}, {"b": "note", "t": "2024 · Zeyu Yang, Hongye Yang, Zijie Pan, Li Zhang (复旦大学) · ICLR 2024 · 引用 628（Semantic Scholar） · 难度：专家"}, {"b": "p", "t": "这篇论文代表与“变形场”相对的“原生 4D 基元”路线。它把时空作为一个整体，用能在 4D 中任意旋转的各向异性 4D 高斯直接拟合时空体积。渲染某一时刻时，先对 4D 高斯做条件化得到一个 3D 高斯，再乘以时间上的边缘概率。它在 N3DV 上以 114 FPS 取得了当时对比表中最好的 PSNR（32.01），把高斯的概率解释推广到了时间维，是原生 4D 表示中最常被引用的工作之一。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-n-3dgs"}, {"k": "concept-n-dynamic"}, {"k": "concept-f-prob"}, {"k": "concept-r-appearance"}, {"k": "concept-r-alpha"}, {"k": "adv-a-dynamic-4d"}, {"k": "adv-a-3dgs-ext"}]}}, {"b": "p", "t": "(1) 4D 高斯的协方差为 Σ = R S Sᵀ Rᵀ，4D 旋转由左右两个单位四元数 (q_l, q_r) 参数化。4D 旋转能表达运动：在 x–t 平面上的倾斜就是速度。(2) 渲染时刻 t 时，把 4D 高斯分解为条件分布 p(x,y,z | t) 和边缘分布 p(t)。前者仍是 3D 高斯，均值随 t 线性移动，按 3DGS 投影成 2D splat；后者是 1D 高斯，作为时间不透明度乘到 α 上。p(t) < 0.05 的高斯直接剔除。(3) 4D 球柱谐函数（spherindrical harmonics）：球谐函数乘以时间上的傅里叶级数，表示随视角和时间变化的颜色。(4) 默认训练 3 万次迭代，batch 为 4，其余超参数沿用 3DGS；N3DV 用首帧的 COLMAP 点云初始化，点的时间戳在整段时长内均匀分布。(5) Plenoptic Video（N3DV）上 PSNR 32.01、LPIPS 0.055、114 FPS；HexPlane 为 31.70（0.56 FPS，作者用官方代码测得），4DGS（Wu et al.）为 31.02（36 FPS，表注说明只是 Spinach、Beef、Steak 几个场景的结果）。", "label": "主要贡献"}, {"b": "h3", "t": "Spacetime Gaussian Feature Splatting for Real-Time Dynamic View Synthesis", "id": "classic-137", "url": "https://arxiv.org/abs/2312.16812", "sn": {"label": "与重点论文的联系", "t": "Ha Sec. 2 引用了本文，作为需要逐场景优化的动态 3DGS。在视角相关外观上，本文与两篇锚点形成三种对照。本文用神经特征加 MLP 显式建模随视角和时间变化的颜色。Quark 用输入图像的凸组合（blend weights），局限一节承认无法准确表示视角相关材质，只能靠逐视角优化权重和射线编码去近似。Ha 的 U-Net 融合权重同样只能在 K 个输入颜色之间插值。本文局限一节承认不能 on-the-fly 训练，而这正是 Quark 和 Ha 追求在线前馈、3DGStream 和 IGS 追求流式处理的动机。"}}, {"b": "note", "t": "2024 · Zhan Li, Zhang Chen, Zhong Li, Yi Xu (OPPO US Research Center、波特兰州立大学) · CVPR 2024 · 引用 468（Semantic Scholar） · 难度：进阶"}, {"b": "p", "t": "Spacetime Gaussians 在多视角动态视频（N3DV、Google Immersive、Technicolor）上，把质量、速度和存储三项同时推到新高度。每个高斯带有时间不透明度、多项式运动和多项式旋转；颜色不用球谐，而是用可以 splat 的神经特征加一个小 MLP。它的 lite 版能在 RTX 4090 上以约 60 FPS 渲染 8K 6-DoF 视频，是沉浸式视频方向最常被比较的离线 4D 高斯强基线之一。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-n-3dgs"}, {"k": "concept-n-dynamic"}, {"k": "concept-r-appearance"}, {"k": "concept-r-alpha"}, {"k": "adv-a-dynamic-4d"}, {"k": "adv-a-3dgs-ext"}]}}, {"b": "p", "t": "(1) 时间不透明度用一维时间径向基函数表示：\\( \\sigma_i(t)=\\sigma^{s}_i\\exp(-s^{\\tau}_i|t-\\mu^{\\tau}_i|^2) \\)。μ^τ 是该高斯最显著的时刻，s^τ 控制持续时长，σ^s 是与时间无关的空间不透明度；这样可以表达突然出现或消失的内容。(2) 多项式运动 \\( \\mu_i(t)=\\sum_{k=0}^{3} b_{i,k}(t-\\mu^{\\tau}_i)^k \\)（n_p=3），旋转也用多项式表示；长而复杂的运动由多个短时高斯分段拼接而成。(3) Splatted feature rendering：每个高斯存 9 维特征 [f_base, f_dir, (t−μ^τ)·f_time]，光栅化成特征图后，I = F_base + Φ(F_dir, F_time, r)，其中 Φ 是 2 层 MLP，r 是视线方向。比球谐更省存储，还能表达随视角和时间变化的外观。(4) 用训练误差和粗深度作引导，在难以收敛的区域采样新高斯。(5) N3DV 上 PSNR 32.05、LPIPS 0.044，1352×1014 下 140 FPS，300 帧总共 200 MB。作者承认该方法不能边采集边训练（on-the-fly）。", "label": "主要贡献"}, {"b": "h3", "t": "GaussianAvatars: Photorealistic Head Avatars with Rigged 3D Gaussians", "id": "classic-139", "url": "https://arxiv.org/abs/2312.02069", "sn": {"label": "与重点论文的联系", "t": "本文与锚点没有直接依赖，但它是 telepresence 中“模型驱动”路线的代表，目标与 Meta Codec Avatars 相同，只是建立在公开的 FLAME 模型之上。发送端只需跟踪 FLAME 的表情和姿态参数，接收端渲染高斯头像。与 Quark 和 Ha 逐帧从相机重建相比，它的带宽几乎可以忽略，但只覆盖头部，模型之外的内容（手、道具、背景）都表达不了。它的“三角形局部坐标系”直接对应 f-linalg 中的刚体变换 [R|t]（这里多了一个尺度 k）；Dynamic 3D Gaussians 的局部刚性损失和 Animatable Gaussians 的 LBS 也都建立在同一个概念上。"}}, {"b": "note", "t": "2024 · Shenhan Qian, Tobias Kirschstein, Liam Schoneveld, Davide Davoli, Simon Giebenhain, Matthias Nießner (慕尼黑工业大学、Woven by Toyota、Toyota Motor Europe) · CVPR 2024 (Highlight) · 引用 358（Semantic Scholar） · 难度：进阶"}, {"b": "p", "t": "GaussianAvatars 把 3D 高斯绑定到参数化人脸模型 FLAME 的三角面上，得到表情、姿态、视角都可控的照片级头部 avatar。绑定方式很简单：高斯定义在三角形的局部坐标系中，随三角形一起运动。这种做法后来被大量高斯头像、全身 avatar 以及基于网格绑定的动态高斯方法采用，也是理解“高斯跟随局部刚体运动”最直观的例子。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-n-3dgs"}, {"k": "concept-f-linalg"}, {"k": "concept-r-reps"}, {"k": "concept-n-dynamic"}, {"k": "adv-a-human-capture"}]}}, {"b": "p", "t": "(1) 为每个三角形定义局部坐标系：原点 T 取三个顶点的均值；旋转矩阵 R 的三列分别是一条边的方向、面法线以及二者的叉积；尺度 k 取该边长度与其垂线长度的均值。(2) 高斯的位置、旋转、尺度都在局部空间中定义，渲染时变换到全局：r′=Rr，μ′=kRμ+T，s′=ks。乘以 k 使小三角形上的高斯每步移动得更慢，相当于自适应步长。(3) 绑定继承：3DGS 致密化产生的新高斯继承父高斯绑定的三角形，剪枝也不会破坏绑定关系，保证每个高斯始终挂在某个三角形上。(4) 端到端联合优化 FLAME 参数（由多视角光度跟踪初始化）和高斯参数，并用位置和尺度正则防止高斯远离所绑定的三角形。(5) NeRSemble（9 名受试者，16 个视角，802×550）上，新视角合成 PSNR 31.6、LPIPS 0.065，AvatarMAV 为 29.5 / 0.152；自重演 26.0 dB；802×550 下渲染 187 FPS。", "label": "主要贡献"}, {"b": "h3", "t": "Animatable Gaussians: Learning Pose-dependent Gaussian Maps for High-fidelity Human Avatar Modeling", "id": "classic-140", "url": "https://openaccess.thecvf.com/content/CVPR2024/html/Li_Animatable_Gaussians_Learning_Pose-dependent_Gaussian_Maps_for_High-fidelity_Human_Avatar_CVPR_2024_paper.html", "sn": {"label": "与重点论文的联系", "t": "两篇锚点都不做可驱动 avatar，也不用人体模板；Quark Sec. 2.3 明确把依赖人体头部或全身先验的方法划为另一类问题，不做比较。本文的意义在于展示 telepresence 的另一条路线：先离线为每个人建好 avatar，通话时只传姿态这类低维驱动信号，由接收端生成图像。这样带宽极低，但表现不了手持物体或没见过的衣服。锚点的路线则是每帧都从多相机图像重建，什么都能表现，代价是带宽和算力开销大。设计上三者有一个共同点：本文、GPS-Gaussian 和 Ha 都把高斯组织在 2D 像素网格上，从而可以用 2D CNN 或 U-Net 来处理 3D 问题。"}}, {"b": "note", "t": "2024 · Zhe Li, Zerong Zheng, Lizhen Wang, Yebin Liu (清华大学、NNKosmos) · CVPR 2024 · 引用 280（Semantic Scholar） · 难度：专家"}, {"b": "p", "t": "Animatable Gaussians 是高保真可驱动人体 avatar 的代表作。它把 3D 高斯参数化到正面和背面两张 2D 规范高斯图上，于是可以用强大的 StyleGAN 式 2D CNN，根据姿态条件回归随姿态变化的服装细节，例如褶皱和裙摆。它说明把 3D 问题转成 2D 的图像到图像回归，能充分利用 CNN 的容量。GPS-Gaussian、Ha 的像素级高斯以及 Quark 的 LDM（同样是 2D 结构）等在 2D 网格上处理 3D 问题的设计，也体现了类似的思路。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-n-3dgs"}, {"k": "concept-l-cnn"}, {"k": "concept-f-linalg"}, {"k": "concept-n-dynamic"}, {"k": "adv-a-human-capture"}]}}, {"b": "p", "t": "(1) 先从多视角视频学一个角色专属的参数化模板：借助 SMPL 蒙皮和 SDF 体渲染拟合规范空间的 SDF，从中抽出网格，再把蒙皮权重传递过去。这样的模板能适应裙子等宽松服装。(2) 把模板正交投影到正面和背面两个视图，模板掩码内的每个像素对应一个 3D 高斯，得到两张规范高斯图。姿态条件是模板经 LBS 变形后投影得到的位置图。(3) 用 StyleUNet（一种 StyleGAN 式条件生成器）从位置图预测随姿态变化的高斯图，再经 LBS 变换到姿态空间，用可微光栅化渲染。(4) 姿态投影：对驱动姿态的位置图做 PCA，投影回训练姿态的分布范围内，提高对新姿态的泛化。(5) 实验数据包括 THuman4.0（24 个视角）、ActorsHQ（160 个视角中取 47 个全身视角）和 AvatarReX 数据（16 个视角）。THuman4.0（subject00 测试段）上 PSNR 28.07，PoseVocab 为 26.38；在 AvatarReX 数据上与 AvatarReX 相比为 30.61 对 23.25。在 RTX 3090 上以 1024×1024 渲染约 10 FPS（PyTorch）。", "label": "主要贡献"}, {"b": "h3", "t": "GPS-Gaussian: Generalizable Pixel-wise 3D Gaussian Splatting for Real-time Human Novel View Synthesis", "id": "classic-141", "url": "https://arxiv.org/abs/2312.02155", "sn": {"label": "与重点论文的联系", "t": "Ha 的核心设计几乎逐条回应了 GPS-Gaussian（Ha Sec. 3.1、附录 A.3、Fig. 4）。第一，不用网络预测高斯参数。Ha 观察到，在稠密像素网格上预测出的尺度、不透明度和旋转会收敛到近似常数，颜色又等于输入像素，所以直接把高斯解析地设为各向同性、完全不透明、像素大小。第二，不把所有视角一次性渲染，因为那样会产生 flying pixels 和 Z-fighting；Ha 改为每个视角单独渲染，再由 U-Net 融合。数字上，在 DyNeRF 上 Ha 的 PSNR 31.17、STED 68.76，重新训练的 GPS-Gaussian 只有 25.46、693.0，耗时 143.4 ms。Quark 没有引用 GPS-Gaussian（见锚点 lineage），但两者代表“前馈、实时、少量相机”下的两种做法：Quark 用 LDM 加 IBR，GPS-Gaussian 用像素对齐高斯。"}}, {"b": "note", "t": "2024 · Shunyuan Zheng, Boyao Zhou, Ruizhi Shao, Boning Liu, Shengping Zhang, Liqiang Nie, Yebin Liu (哈尔滨工业大学、清华大学、鹏城实验室) · CVPR 2024 (Highlight) · 引用 222（Semantic Scholar） · 难度：进阶 · 必读"}, {"b": "p", "t": "GPS-Gaussian 是最早面向人体、达到实时（2K 分辨率、超过 25 FPS）的前馈（feed-forward）3DGS 新视角合成方法之一。它在源视图上定义逐像素的“高斯参数图”，用立体匹配得到的深度把 2D 参数图提升到 3D，不做任何针对个人的优化。它把 3DGS 的渲染速度与可泛化网络结合起来，推动了像素对齐高斯在实时人体 NVS 和 telepresence 系统中的应用。Ha 把它与作者有重叠的 Tele-Aloha 一起列为“扩展到动态人体的前馈高斯模型”，同时把它作为重点对比和批评的 baseline。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-n-generalizable"}, {"k": "concept-n-3dgs"}, {"k": "concept-d-stereo"}, {"k": "concept-g-epipolar"}, {"k": "adv-a-ff-3dgs"}, {"k": "adv-a-human-capture"}, {"k": "adv-a-telepresence-sys"}]}}, {"b": "p", "t": "(1) 相机布置：训练数据按 8 台相机均匀围成一圈渲染，相邻两台约相隔 45°。对每个目标视角，选最近的两台源相机组成双目对并做立体校正。(2) 深度：用 RAFT-Stereo 式的迭代立体匹配估计视差，由视差得到深度 D，作为位置图 M_p。(3) 高斯参数图 G(x)={M_p, M_c, M_r, M_s, M_α}。颜色图 M_c 直接取输入像素的 RGB（假设人体以漫反射为主）；旋转（归一化四元数）、尺度（Softplus）和不透明度（Sigmoid）由网络回归。两个视角的前景像素反投影后合并成一个点集，用 3DGS 光栅器渲染。(4) 训练数据由 Twindom 的 1700 个和 THuman2.0 的 526 个人体扫描渲染而成，深度模块与高斯模块联合训练。(5) 在 RTX 3090 上（两张 1024×1024 源图），源视图相关计算 27 ms，每个新视角只需 0.8 ms；同时渲染 10 个新视角共 35 ms，ENeRF 需要 1261 ms。THuman2.0 上 PSNR 25.57，ENeRF 为 24.10，IBRNet 为 23.38。受 RTX 3090 显存限制，实时演示只接入了正面的 6 台相机。", "label": "主要贡献"}, {"b": "h3", "t": "3DGStream: On-the-Fly Training of 3D Gaussians for Efficient Streaming of Photo-Realistic Free-Viewpoint Videos", "id": "classic-142", "url": "https://arxiv.org/abs/2403.01444", "sn": {"label": "与重点论文的联系", "t": "Ha Sec. 2 在动态 3D Gaussian 方法中引用了本文，并把这类方法概括为“需要昂贵的逐场景优化”；但 Ha 没有与 3DGStream、IGS 这类流式动态高斯方法做定量比较，深读笔记和 anchor_compare 都指出了这一缺口。两者的“在线”含义不同。Ha 每帧约 39 ms（TensorRT，不含 RAFT-Stereo 深度估计），不需要逐帧训练，但每次只输出一个目标视角的图像。3DGStream 每帧约 12 秒在线训练，得到一个持久的 3D 表示，之后可以从任意视角以 215 FPS 渲染。Quark 与 Ha 更接近：每帧为每个目标视角重新生成一个 LDM，用完即丢弃。从 telepresence 的角度看，3DGStream 适合“传一次表示、在接收端渲染多个视角”，但每帧约 7.6 MB 的数据量仍然偏大，12 秒的训练延迟也远达不到实时通话；Ha 和 Quark 不维护持久表示，处理延迟低得多，但每个新视角都要重跑一次网络，而且两篇论文都没有讨论渲染放在发送端还是接收端。Quark 作者参与的后续工作 Fuse-and-Refine（原名 SplatVoxel）支持带历史记忆的动态场景在线重建，可以看作在尝试结合这两条路线。"}}, {"b": "note", "t": "2024 · Jiakai Sun, Han Jiao, Guangyuan Li, Zhanjie Zhang, Lei Zhao, Wei Xing (浙江大学) · CVPR 2024 (Highlight) · 引用 210（Semantic Scholar） · 难度：进阶 · 必读"}, {"b": "p", "t": "3DGStream 是把动态高斯从“整段视频离线训练”改为“逐帧在线训练”的代表性工作，目标是自由视点视频（FVV）的流式传输。每来一帧多视角图像，它用约 12 秒（RTX 3090）在线训练一个小型神经变换缓存，把上一帧的高斯搬到当前帧，再为新出现的物体补少量高斯。它确立了流式动态高斯“变换缓存 + 自适应新增”的两阶段范式，也是 IGS 等可泛化流式方法的直接比较对象。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-n-3dgs"}, {"k": "concept-n-dynamic"}, {"k": "concept-v-codec"}, {"k": "concept-v-temporal"}, {"k": "concept-l-encoding"}, {"k": "adv-a-dynamic-4d"}, {"k": "adv-a-telepresence-sys"}]}}, {"b": "p", "t": "(1) 初始化：用第 0 帧的多视角图像训练一个标准 3DGS。(2) 阶段 1：训练神经变换缓存（Neural Transformation Cache, NTC）。NTC 由多分辨率哈希编码和一个浅层 fully-fused MLP 组成，对每个高斯中心输出 7 维结果（3 维平移 + 4 维旋转四元数），把上一帧的高斯变换到当前帧；损失为 0.8·L1 + 0.2·D-SSIM（与 3DGS 相同）。NTC 只在第 0 帧之后以单位变换为目标预热一次（约 3000 次迭代、20 秒），预热后的参数用作所有后续帧的初始化。(3) 阶段 2：在视空间位置梯度大的高斯附近生成额外高斯（位置从 N(μ, 2Σ) 采样，尺度取原高斯的 80%，不透明度初始化为 0.1），只优化这些新高斯，再剪掉不透明度低于 0.01 的；新增高斯只参与当前帧的渲染，只有经 NTC 变换的高斯会传给下一帧。(4) 每帧阶段 1 训练 150 次迭代，阶段 2 训练 100 次。(5) N3DV 上（RTX 3090）PSNR 31.67，每帧 7.6 MB，每帧训练 0.20 分钟（约 12 秒），渲染 215 FPS；StreamRF 为 30.68、17.7 MB、0.25 分钟、8.3 FPS。局限（作者自述）：继承了 3DGS 对初始点云的依赖（COLMAP 重建不出的远景会有伪影）；为了速度限制了迭代次数，也就限制了对剧烈运动的建模能力。", "label": "主要贡献"}, {"b": "h3", "t": "Relightable Gaussian Codec Avatars", "id": "classic-143", "url": "https://arxiv.org/abs/2312.03704", "sn": {"label": "与重点论文的联系", "t": "本文和 Ha 都来自 Meta（Ha 为 KAIST 一作在 Meta Reality Labs 实习期间完成），分别代表 avatar 路线和实时捕捉-重建路线。它补上了两篇锚点都没有触及的一维：光照。Quark 的 blend weights 和 Ha 的融合权重都只是在输入像素颜色之间插值，输出的外观固定在采集时的光照下。Quark 局限一节也承认，凸组合无法准确表示视角相关材质。本文则显式建模漫反射和高光，能把人重新照亮以匹配远端环境。代价是每人需要一套 110 台相机加 460 颗 LED 的采集和离线训练，也只覆盖头部。对 telepresence 研究者来说，对照读本文和 Ha，可以看清“先建模再驱动”与“现场捕捉再合成”之间的取舍。"}}, {"b": "note", "t": "2024 · Shunsuke Saito, Gabriel Schwartz, Tomas Simon, Junxuan Li, Giljoo Nam (Meta Codec Avatars Lab) · CVPR 2024 (Oral) · 引用 163（Semantic Scholar） · 难度：专家"}, {"b": "p", "t": "这是 Meta Codec Avatars 系列进入 3D 高斯时代的代表作。它用 3D 高斯表示头部几何，能还原亚毫米级的发丝和毛孔；用“可学习的辐射传输”实现带全频率反射的实时重光照；还能由头显相机（HMC）实时驱动，并在有线连接的消费级 VR 头显上实时重光照渲染。高保真、可重光照、可驱动是 telepresence 头像需要的三种能力，这篇论文是较早在一个模型里同时实现三者并保持实时的代表作。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-r-appearance"}, {"k": "concept-n-3dgs"}, {"k": "concept-g-rig"}, {"k": "adv-a-human-capture"}, {"k": "adv-a-telepresence-sys"}]}}, {"b": "p", "t": "(1) 采集：110 台相机，分辨率 4096×2668，460 颗白光 LED，90 Hz。每人约拍 144,000 帧，采用时间复用照明：每三帧中有一帧全亮，用于人脸跟踪，其余帧用 5 颗灯的分组或随机组合照明。(2) 几何：在模板头部共享的 UV 空间中，用 2D CNN 从表情潜码 z 解码出 3D 高斯参数（VAE 式编码-解码结构）。(3) 外观：可学习的辐射传输。漫反射用考虑全局光照的球谐表示，彩色系数到 3 阶，4–8 阶为单色系数；高光用带视角相关可见性的球面高斯表示。这样在点光源和连续环境光下都能高效重光照。(4) 显式眼球模型：视线可以显式控制，也能重现眼部的全频反射。(5) 在 4 张 A100 上以 batch 16 训练 200k 次迭代；VR 演示使用 512² 的高斯图以提高帧率，并展示了由头显相机实时驱动。", "label": "主要贡献"}, {"b": "h3", "t": "4K4D: Real-Time 4D View Synthesis at 4K Resolution", "id": "classic-144", "url": "https://arxiv.org/abs/2310.11448", "sn": {"label": "与重点论文的联系", "t": "4K4D 与两篇锚点关系紧密，体现在三点。(a) Ha Fig. 12 在 ENeRF-Outdoor 上把 4K4D、4DGS（两者都是逐场景优化，使用 K=17 个输入视角）和 MVSplat 做了定性比较，声称自己更锐利，但没有给出定量数字。本文在该数据集上的 PSNR 25.82 高于 ENeRF 的 25.45（960×540）；而 Ha 在该数据集上恰恰输给了 ENeRF（24.01 对 25.79，480×270，协议不同）。(b) 本文的 c_ibr 与 Quark 的 blend weights 思路相同，都是由网络预测权重、对输入视图的像素颜色做加权混合（Quark 明确是 softmax 凸组合，本文论文中没有写明权重是否归一化）。Quark 局限一节说凸组合无法准确表示视角相关材质，本文正是用连续的 SH 项来弥补这一点。(c) 深度剥离“逐层取下一个点再按体渲染公式合成”，与 Quark 的 LDM 分层 over 合成思想相近，前者作用于点云，后者作用于目标视角对齐的层表示。"}}, {"b": "note", "t": "2024 · Zhen Xu, Sida Peng, Haotong Lin, Guangzhao He, Jiaming Sun, Yujun Shen, Hujun Bao, Xiaowei Zhou (浙江大学、Image Derivative Inc.、蚂蚁集团) · CVPR 2024 · 引用 135（Semantic Scholar） · 难度：专家 · 必读"}, {"b": "p", "t": "4K4D 把动态场景的渲染速度推到了 4K 分辨率下实时。几何用 4D 点云加 K-Planes 特征网格表示，渲染用硬件光栅化加可微深度剥离（depth peeling）；外观由两部分组成，一是从输入图像取色的 IBR 项，二是连续的球谐项。它出自 ENeRF 的同一团队（浙大 ZJU3DV），说明“点基元 + 图形管线 + IBR”可以比 ENeRF 这类可泛化体渲染快一个数量级以上（DNA-Rendering 上约 30 倍）。它也是 Ha 做定性对比时选用的逐场景优化方法之一。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-r-raster"}, {"k": "concept-i-blending"}, {"k": "concept-r-alpha"}, {"k": "concept-n-dynamic"}, {"k": "concept-r-appearance"}, {"k": "adv-a-dynamic-4d"}, {"k": "adv-a-generalizable-ibr"}, {"k": "adv-a-diff-render"}]}}, {"b": "p", "t": "(1) 几何：动态前景先分割，再用 space carving（视觉外壳）得到每帧的粗点云；静态背景用 Instant-NGP 重建来初始化。点的位置是可学习向量，半径、密度和球谐系数由 K-Planes 式的 4D 特征网格加 MLP 预测。特征网格让点天然带有正则，优化更稳定。(2) 混合外观 c = c_ibr + c_sh。c_ibr 把点投影到按视线方向选出的 N′=4 个最近输入视图上取色，\\( c_{ibr}=\\sum_{i=1}^{N'} w_i\\,c^{i}_{img} \\)；权重 w_i 由 MLP 根据点特征和 2D CNN 图像特征预测，与视角无关，因此可以在训练后预计算。由于近邻视图的选择是离散的，再加上连续的球谐项 c_sh 来补足视角变化。(3) 可微深度剥离：用自定义 shader 做 K 遍光栅化（训练时 K=15，推理时 12），每一遍取下一个更远的点；每个点在像素 u 处的不透明度为 α(u,x)=σ·max(1−‖π(x)−u‖²/r², 0)，再按体渲染公式合成。(4) 推理加速：预先算好点属性和混合权重，推理时异步传到显存，并使用 FP16。200 帧的序列在单张 RTX 4090 上训练约 24 小时。(5) DNA-Rendering 上 PSNR 31.17、203.6 FPS（RTX 3090），ENeRF 为 28.11、6.0 FPS；ENeRF-Outdoor（960×540）上 25.82、141.7 FPS，ENeRF 为 25.45、11.3 FPS；N3DV 上 32.86、110 FPS。在 RTX 4090 上，1080p 超过 400 FPS，4K 约 80 FPS。", "label": "主要贡献"}, {"b": "h3", "t": "Instant Gaussian Stream: Fast and Generalizable Streaming of Dynamic Scene Reconstruction via Gaussian Splatting", "id": "classic-151", "url": "https://arxiv.org/abs/2503.16979", "sn": {"label": "与重点论文的联系", "t": "深读笔记把 IGS 列为 Ha 比较中缺失的重要同期 baseline：两者都发表于 CVPR 2025，都在 N3DV/DyNeRF 上做多视角在线合成，也都依赖前馈网络。区别在于，Ha 每帧约 39 ms（不含深度估计），只保留上一帧滤波深度和 TSDF 深度这类轻量状态（anchor_compare 称之为“弱状态”），时间一致性靠差分掩码滤波和 TSDF 回灌维持；IGS 每帧约 2.7 秒，维护持久状态（持久高斯 + 关键帧），时间一致性来自表示本身。IGS 用预训练的光流网络提取运动线索，Ha 用 RAFT-Stereo 估计深度，两者都说明 telepresence 管线越来越依赖“预训练底层视觉模型 + 轻量融合网络”。IGS 的训练数据只有 4 个 N3DV 序列，作者在局限中也承认这限制了泛化，这与深读笔记指出的 Ha 训练集过窄是同一个问题。"}}, {"b": "note", "t": "2025 · Jinbo Yan, Rui Peng, Zhiyan Wang, Luyang Tang, Jiayu Yang, Jie Liang, Jiahao Wu, Ronggang Wang (北京大学深圳研究生院、鹏城实验室) · CVPR 2025 · 引用 45（Semantic Scholar） · 难度：专家"}, {"b": "p", "t": "IGS 自称是第一个把可泛化（前馈）网络用于流式动态场景重建的方法。它用一个在多个场景上训练好的运动网络，一次前向就预测出所有高斯从关键帧到目标帧的运动，把 3DGStream 约 12 秒/帧的开销降到约 2.7 秒/帧，并用关键帧精化抑制误差累积。它代表了 2025 年“前馈 + 流式 + 持久表示”的融合方向，处在 Quark/Ha（前馈、无持久表示）和 3DGStream（逐帧优化、有持久状态）之间。", "label": "为什么有影响力", "mn": {"label": "相关概念与专题", "links": [{"k": "concept-n-dynamic"}, {"k": "concept-n-3dgs"}, {"k": "concept-n-generalizable"}, {"k": "concept-d-flow"}, {"k": "concept-l-attention"}, {"k": "adv-a-ff-3dgs"}, {"k": "adv-a-dynamic-4d"}, {"k": "adv-a-temporal-video"}]}}, {"b": "p", "t": "(1) AGM-Net：用预训练的 GMFlow 从 V=4 个视角提取关键帧到目标帧的光流嵌入，接一个 Swin-Transformer 块微调（GMFlow 其余参数冻结），得到 2D 运动特征图（C=128，分辨率 128×128）。(2) 用最远点采样从高斯中选出 M=8192 个锚点，把锚点投影到各视角上取运动特征，经 4 层 Transformer 得到 3D 运动特征；每个高斯再从邻近锚点加权聚合特征，解码出自己的运动。(3) 关键帧引导的流式策略：每隔 w=5 帧设一个关键帧，300 帧共 60 个。关键帧做有界精化，IGS-s 精化 50 次迭代，IGS-l 精化 100 次；非关键帧由关键帧经一次推理直接得到。这样可以抑制误差累积。(4) 训练数据：在 N3DV 的 4 个训练序列上逐帧构建共 1200 个 3D 高斯场景，耗时 192 GPU 小时；每帧与前后各 5 帧配对，共 12,000 对。在 4 张 A100（40GB）上训练。(5) N3DV 测试集（cut roasted beef、sear steak，1352×1014）上，IGS-s PSNR 33.89，每帧 2.67 秒，渲染 204 FPS，每帧 7.90 MB；3DGStream 原文数字为 33.11、每帧约 12 秒（作者用官方代码复现为 32.75、16.93 秒）。跨域的 Meet Room 数据集上为 29.24，复现的 3DGStream 为 28.36。", "label": "主要贡献"}], "toc": false, "series": {"prev": {"k": "theme-t-neural-rendering"}, "next": {"k": "theme-t-generative-ff"}, "up": {"u": "basics/classics/index.html", "t": "Classics 目录"}}}, "chart": {"lanes": [{"id": "t-dynamic-human", "label": "动态场景、4D 与人体"}], "points": [{"y": 2019, "c": 1449, "m": false, "t": "PIFu: Pixel-Aligned Implicit Function for High-Resolution Clothed Human Digitization", "v": "ICCV 2019", "u": "basics/classics/t-dynamic-human.html#classic-64", "lane": "t-dynamic-human"}, {"y": 2021, "c": 2104, "m": true, "t": "D-NeRF: Neural Radiance Fields for Dynamic Scenes", "v": "CVPR 2021", "u": "basics/classics/t-dynamic-human.html#classic-87", "lane": "t-dynamic-human"}, {"y": 2021, "c": 1549, "m": false, "t": "Nerfies: Deformable Neural Radiance Fields", "v": "ICCV 2021", "u": "basics/classics/t-dynamic-human.html#classic-89", "lane": "t-dynamic-human"}, {"y": 2021, "c": 1051, "m": true, "t": "Neural Scene Flow Fields for Space-Time View Synthesis of Dynamic Scenes", "v": "CVPR 2021", "u": "basics/classics/t-dynamic-human.html#classic-91", "lane": "t-dynamic-human"}, {"y": 2021, "c": 891, "m": true, "t": "Neural Body: Implicit Neural Representations with Structured Latent Codes for Novel View Synthesis of Dynamic Humans", "v": "CVPR 2021（Best Paper Candidate）", "u": "basics/classics/t-dynamic-human.html#classic-93", "lane": "t-dynamic-human"}, {"y": 2021, "c": 353, "m": false, "t": "HyperNeRF: A Higher-Dimensional Representation for Topologically Varying Neural Radiance Fields", "v": "SIGGRAPH Asia 2021 (ACM TOG 40(6))", "u": "basics/classics/t-dynamic-human.html#classic-98", "lane": "t-dynamic-human"}, {"y": 2022, "c": 667, "m": false, "t": "HumanNeRF: Free-viewpoint Rendering of Moving People from Monocular Video", "v": "CVPR 2022 (Oral)", "u": "basics/classics/t-dynamic-human.html#classic-107", "lane": "t-dynamic-human"}, {"y": 2022, "c": 516, "m": true, "t": "Neural 3D Video Synthesis from Multi-view Video", "v": "CVPR 2022 (Oral)", "u": "basics/classics/t-dynamic-human.html#classic-109", "lane": "t-dynamic-human"}, {"y": 2022, "c": 230, "m": false, "t": "Monocular Dynamic View Synthesis: A Reality Check", "v": "NeurIPS 2022", "u": "basics/classics/t-dynamic-human.html#classic-110", "lane": "t-dynamic-human"}, {"y": 2023, "c": 1018, "m": true, "t": "K-Planes: Explicit Radiance Fields in Space, Time, and Appearance", "v": "CVPR 2023", "u": "basics/classics/t-dynamic-human.html#classic-118", "lane": "t-dynamic-human"}, {"y": 2023, "c": 823, "m": false, "t": "HexPlane: A Fast Representation for Dynamic Scenes", "v": "CVPR 2023", "u": "basics/classics/t-dynamic-human.html#classic-119", "lane": "t-dynamic-human"}, {"y": 2023, "c": 292, "m": false, "t": "DynIBaR: Neural Dynamic Image-Based Rendering", "v": "CVPR 2023（Best Paper Honorable Mention）", "u": "basics/classics/t-dynamic-human.html#classic-120", "lane": "t-dynamic-human"}, {"y": 2023, "c": 241, "m": false, "t": "HumanRF: High-Fidelity Neural Radiance Fields for Humans in Motion", "v": "SIGGRAPH 2023 (ACM TOG 42(4))", "u": "basics/classics/t-dynamic-human.html#classic-121", "lane": "t-dynamic-human"}, {"y": 2024, "c": 1630, "m": true, "t": "4D Gaussian Splatting for Real-Time Dynamic Scene Rendering", "v": "CVPR 2024", "u": "basics/classics/t-dynamic-human.html#classic-125", "lane": "t-dynamic-human"}, {"y": 2024, "c": 1020, "m": false, "t": "Deformable 3D Gaussians for High-Fidelity Monocular Dynamic Scene Reconstruction", "v": "CVPR 2024", "u": "basics/classics/t-dynamic-human.html#classic-128", "lane": "t-dynamic-human"}, {"y": 2024, "c": 1001, "m": true, "t": "Dynamic 3D Gaussians: Tracking by Persistent Dynamic View Synthesis", "v": "3DV 2024", "u": "basics/classics/t-dynamic-human.html#classic-129", "lane": "t-dynamic-human"}, {"y": 2024, "c": 628, "m": false, "t": "Real-time Photorealistic Dynamic Scene Representation and Rendering with 4D Gaussian Splatting", "v": "ICLR 2024", "u": "basics/classics/t-dynamic-human.html#classic-134", "lane": "t-dynamic-human"}, {"y": 2024, "c": 468, "m": false, "t": "Spacetime Gaussian Feature Splatting for Real-Time Dynamic View Synthesis", "v": "CVPR 2024", "u": "basics/classics/t-dynamic-human.html#classic-137", "lane": "t-dynamic-human"}, {"y": 2024, "c": 358, "m": false, "t": "GaussianAvatars: Photorealistic Head Avatars with Rigged 3D Gaussians", "v": "CVPR 2024 (Highlight)", "u": "basics/classics/t-dynamic-human.html#classic-139", "lane": "t-dynamic-human"}, {"y": 2024, "c": 280, "m": false, "t": "Animatable Gaussians: Learning Pose-dependent Gaussian Maps for High-fidelity Human Avatar Modeling", "v": "CVPR 2024", "u": "basics/classics/t-dynamic-human.html#classic-140", "lane": "t-dynamic-human"}, {"y": 2024, "c": 222, "m": true, "t": "GPS-Gaussian: Generalizable Pixel-wise 3D Gaussian Splatting for Real-time Human Novel View Synthesis", "v": "CVPR 2024 (Highlight)", "u": "basics/classics/t-dynamic-human.html#classic-141", "lane": "t-dynamic-human"}, {"y": 2024, "c": 210, "m": true, "t": "3DGStream: On-the-Fly Training of 3D Gaussians for Efficient Streaming of Photo-Realistic Free-Viewpoint Videos", "v": "CVPR 2024 (Highlight)", "u": "basics/classics/t-dynamic-human.html#classic-142", "lane": "t-dynamic-human"}, {"y": 2024, "c": 163, "m": false, "t": "Relightable Gaussian Codec Avatars", "v": "CVPR 2024 (Oral)", "u": "basics/classics/t-dynamic-human.html#classic-143", "lane": "t-dynamic-human"}, {"y": 2024, "c": 135, "m": true, "t": "4K4D: Real-Time 4D View Synthesis at 4K Resolution", "v": "CVPR 2024", "u": "basics/classics/t-dynamic-human.html#classic-144", "lane": "t-dynamic-human"}, {"y": 2025, "c": 45, "m": false, "t": "Instant Gaussian Stream: Fast and Generalizable Streaming of Dynamic Scene Reconstruction via Gaussian Splatting", "v": "CVPR 2025", "u": "basics/classics/t-dynamic-human.html#classic-151", "lane": "t-dynamic-human"}]}}</script>
+<script>
+(function () {
+  "use strict";
+  // ================= lib: DOM, text and math helpers shared by every page =================
+  // A page script defines rich(text) (inline cross-links); paras() and eqList() call it.
+  var DATA;
+  try { DATA = JSON.parse(document.getElementById("data").textContent); } catch (e) { DATA = {}; }
+  var meta = DATA.meta || {};
+
+  // ---------- DOM helpers: all text goes through textContent; external links are https-only ----------
+  function safeUrl(u) { if (typeof u !== "string") return null; var s = u.trim(); return /^https:\/\/[^\s"'<>]+$/i.test(s) ? s : null; }
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "class") n.className = v;
+      else if (k === "text") n.textContent = String(v);
+      else if (k === "href") { var u = safeUrl(v); if (u) { n.setAttribute("href", u); n.setAttribute("target", "_blank"); n.setAttribute("rel", "noopener noreferrer"); } }
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c === null || c === undefined || c === false) return; n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return n;
+  }
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function sv(tag, attrs, kids) {
+    var n = document.createElementNS(SVGNS, tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "text") n.textContent = String(v);
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c) n.appendChild(c); });
+    return n;
+  }
+  function arr(x) { return Array.isArray(x) ? x : []; }
+  function str(x) { return typeof x === "string" ? x : (x === null || x === undefined ? "" : String(x)); }
+  function paras(text) { return str(text).split(/\n\s*\n/).map(function (t) { return t.trim(); }).filter(Boolean).map(function (t) { return el("p", null, rich(t)); }); }
+  function link(title, url) { return safeUrl(url) ? el("a", { href: url, text: title }) : el("span", { text: title }); }
+  function ul(items, map) { return el("ul", { class: "plain" }, arr(items).map(function (x) { return el("li", null, [map ? map(x) : str(x)]); })); }
+  function fmtCit(n) { n = Number(n); if (!(n >= 0)) return "—"; if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k"; return String(n); }
+
+  // ---------- math (MathJax, typeset lazily) ----------
+  var mathReady = false, mathQueue = [];
+  function mathUsable() { return !!(window.MathJax && typeof window.MathJax.typesetPromise === "function"); }
+  function flushMath() { mathReady = true; var q = mathQueue.slice(); mathQueue = []; q.forEach(typeset); }
+  window.__atlasMathReady = flushMath;
+  // MathJax may finish loading before this script runs (cached/async), so also poll for it.
+  var mathPoll = setInterval(function () { if (mathUsable()) { clearInterval(mathPoll); flushMath(); } }, 200);
+  setTimeout(function () { clearInterval(mathPoll); }, 30000);
+  function typeset(node) {
+    if (!node) return;
+    if (!mathReady && mathUsable()) mathReady = true;
+    if (!mathReady || !mathUsable()) { mathQueue.push(node); return; }
+    try { window.MathJax.typesetPromise([node]).catch(function () { /* leave raw TeX visible */ }); } catch (e) { /* leave raw TeX visible */ }
+  }
+  function eqList(eqs) {
+    eqs = arr(eqs).filter(function (q) { return q && str(q.tex).trim(); });
+    if (!eqs.length) return null;
+    return el("div", { class: "eqs" }, eqs.map(function (q) {
+      return el("div", { class: "eq" }, [el("div", { class: "math-block", text: "\\[" + str(q.tex) + "\\]" }), q.explain_zh ? el("p", null, rich(q.explain_zh)) : null]);
+    }));
+  }
+  document.addEventListener("toggle", function (e) { var t = e.target; if (t && t.tagName === "DETAILS" && t.open) typeset(t); }, true);
+
+  // ================= frame (Tufte site): links, notes, hover previews, top bar, theme =================
+  var SITE = DATA.site || {};
+  var ROOT = str(SITE.root);
+  var XREF = DATA.xref || {};
+  function hasX(key) { return Object.prototype.hasOwnProperty.call(XREF, key); }
+  // Custom page parts (search tools, diagrams, charts) register here; blocks.js calls them for {"b": "slot"} blocks.
+  var SLOTS = {};
+
+  // ---------- internal links: urls are relative to the site root; pages sit at different depths ----------
+  var SAFE_PATH = /^[A-Za-z0-9][A-Za-z0-9._\/-]*(\?[A-Za-z0-9=&._-]+)?(#[A-Za-z0-9._-]+)?$/;
+  function relHref(u) {
+    u = str(u);
+    if (/^#[A-Za-z0-9._-]+$/.test(u)) return u;
+    if (!SAFE_PATH.test(u)) return null;
+    var cut = u.indexOf("#"), path = cut < 0 ? u : u.slice(0, cut);
+    if (path === SITE.path) return cut < 0 ? "#" : u.slice(cut);
+    return ROOT + u;
+  }
+  function pageLink(u, text, cls) {
+    var h = relHref(u);
+    if (!h) return el("span", { class: cls || null, text: text });
+    var a = el("a", { class: cls || null, text: text });
+    a.setAttribute("href", h);
+    return a;
+  }
+  // A link to a known entry (concept, topic, paper, step...). data-xref drives the hover preview.
+  function xlink(key, text, cls) {
+    if (!hasX(key)) return text ? document.createTextNode(text) : null;
+    var x = XREF[key], a = pageLink(x.u, text || x.n || x.t, cls);
+    a.setAttribute("data-xref", key);
+    return a;
+  }
+
+  // Concept / topic ids mentioned in prose ("见 g-pinhole") become links labelled with the entry's short name.
+  var ID_RE = /(a-[a-z0-9]+(?:-[a-z0-9]+)*|[fgdrilnv]-[a-z0-9]+)/g;
+  var CJK = /[　-〿㐀-鿿＀-￯]/;
+  function rich(text) {
+    var s = str(text), out = [], last = 0, m;
+    ID_RE.lastIndex = 0;
+    while ((m = ID_RE.exec(s)) !== null) {
+      var id = m[1], prev = m.index > 0 ? s.charAt(m.index - 1) : "", next = s.charAt(m.index + id.length);
+      var key = hasX("concept-" + id) ? "concept-" + id : (hasX("adv-" + id) ? "adv-" + id : null);
+      if (!key || /[A-Za-z0-9_\-]/.test(prev) || /[A-Za-z0-9_]/.test(next)) continue;
+      // The prose spaces ids off from Chinese text; a Chinese label needs no such space.
+      var before = s.slice(last, m.index);
+      if (/ $/.test(before) && CJK.test(before.charAt(before.length - 2))) before = before.slice(0, -1);
+      if (before) out.push(document.createTextNode(before));
+      out.push(xlink(key, null, "xref"));
+      last = m.index + id.length;
+      if (s.charAt(last) === " " && CJK.test(s.charAt(last + 1))) last++;
+    }
+    if (last < s.length) out.push(document.createTextNode(s.slice(last)));
+    return out;
+  }
+  function lines(text) { return str(text).split(/\n+/).map(function (t) { return t.trim(); }).filter(Boolean).map(function (t) { return el("p", null, rich(t)); }); }
+
+  // ---------- side notes (numbered) and margin notes (unnumbered); on phones they fold behind a toggle ----------
+  var noteSeq = 0;
+  function sidenote(kids) {
+    var id = "sn-" + (++noteSeq);
+    return el("span", { class: "note-wrap" }, [
+      el("label", { for: id, class: "margin-toggle sidenote-number", "aria-label": "旁注" }),
+      el("input", { type: "checkbox", id: id, class: "margin-toggle" }),
+      el("span", { class: "sidenote" }, kids)
+    ]);
+  }
+  function marginnote(kids) {
+    var id = "mn-" + (++noteSeq);
+    return el("span", { class: "note-wrap" }, [
+      el("label", { for: id, class: "margin-toggle", "aria-label": "边注", text: "⊕" }),
+      el("input", { type: "checkbox", id: id, class: "margin-toggle" }),
+      el("span", { class: "marginnote" }, kids)
+    ]);
+  }
+  function noteLabel(text) { return el("span", { class: "note-label", text: text }); }
+
+  // ---------- article scaffolding ----------
+  var main = document.getElementById("main");
+  var art = main.querySelector("article");
+  function section(id, title, kids) {
+    var s = el("section", { id: id }, [title ? el("h2", { text: title }) : null].concat(kids));
+    art.appendChild(s);
+    return s;
+  }
+  function articleHead(o) {
+    var crumbs = el("nav", { class: "crumbs", "aria-label": "位置" });
+    arr(SITE.crumbs).forEach(function (c, i) {
+      if (i) crumbs.appendChild(el("span", { class: "sep", text: "›", "aria-hidden": "true" }));
+      crumbs.appendChild(c[1] ? pageLink(c[1], c[0]) : el("span", { text: c[0] }));
+    });
+    art.appendChild(el("header", { class: "art-head" }, [
+      crumbs,
+      el("h1", { text: o.title }),
+      o.subtitle ? el("p", { class: "subtitle", text: o.subtitle }) : null,
+      o.meta ? el("p", { class: "meta" }, o.meta) : null
+    ]));
+    if (o.epigraph) art.appendChild(el("div", { class: "epigraph" }, [el("blockquote", null, [el("p", null, rich(o.epigraph))])]));
+  }
+  // Previous / next in the series, each with its hover preview.
+  function seriesNav(prevKey, nextKey, indexUrl, indexLabel) {
+    var nav = el("nav", { class: "series", "aria-label": "同系列" });
+    nav.appendChild(el("div", { class: "prev" }, prevKey && hasX(prevKey) ? [el("small", { text: "上一篇" }), xlink(prevKey)] : []));
+    nav.appendChild(el("div", { class: "up" }, indexUrl ? [pageLink(indexUrl, indexLabel)] : []));
+    nav.appendChild(el("div", { class: "next" }, nextKey && hasX(nextKey) ? [el("small", { text: "下一篇" }), xlink(nextKey)] : []));
+    art.appendChild(nav);
+  }
+
+  // ---------- hover preview for internal links: mouse (after 300 ms) or keyboard focus; never on touch ----------
+  var tip = null, tipTimer = 0, tipFor = null;
+  function hideTip() {
+    clearTimeout(tipTimer);
+    if (tip) tip.hidden = true;
+    if (tipFor) { tipFor.removeAttribute("aria-describedby"); tipFor = null; }
+  }
+  function showTip(a) {
+    var key = a.getAttribute("data-xref");
+    if (!hasX(key)) return;
+    var x = XREF[key];
+    if (!tip) { tip = el("div", { class: "xtip", id: "xtip", role: "tooltip" }); document.body.appendChild(tip); }
+    tip.textContent = "";
+    if (x.m) tip.appendChild(el("div", { class: "xt-m", text: x.m }));
+    tip.appendChild(el("div", { class: "xt-t", text: x.t }));
+    if (x.e) tip.appendChild(el("div", { class: "xt-e", text: x.e }));
+    if (x.s) tip.appendChild(el("p", { class: "xt-s", text: x.s }));
+    tip.hidden = false;
+    var r = a.getClientRects()[0] || a.getBoundingClientRect(), vw = document.documentElement.clientWidth;
+    var w = tip.offsetWidth, h = tip.offsetHeight;
+    var left = Math.max(8, Math.min(r.left, vw - w - 8));
+    var top = r.bottom + 6;
+    if (top + h > window.innerHeight - 8 && r.top - h - 6 > 8) top = r.top - h - 6;
+    tip.style.left = Math.round(left + window.pageXOffset) + "px";
+    tip.style.top = Math.round(top + window.pageYOffset) + "px";
+    a.setAttribute("aria-describedby", "xtip");
+    tipFor = a;
+  }
+  function xrefTarget(e) { return e.target && e.target.closest ? e.target.closest("a[data-xref]") : null; }
+  document.addEventListener("pointerover", function (e) {
+    var a = xrefTarget(e);
+    if (!a || e.pointerType !== "mouse" || a === tipFor) return;
+    clearTimeout(tipTimer);
+    tipTimer = setTimeout(function () { showTip(a); }, 300);
+  });
+  document.addEventListener("pointerout", function (e) {
+    var a = xrefTarget(e);
+    if (!a || (e.relatedTarget && a.contains(e.relatedTarget))) return;
+    hideTip();
+  });
+  document.addEventListener("focusin", function (e) {
+    var a = xrefTarget(e);
+    if (a && a.matches(":focus-visible")) showTip(a);
+  });
+  document.addEventListener("focusout", function (e) { if (xrefTarget(e)) hideTip(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") hideTip(); });
+  window.addEventListener("scroll", function () { if (tipFor && !tipFor.matches(":focus-visible")) hideTip(); }, { passive: true });
+
+  // ---------- top bar: four menus with dropdowns (hover or click on desktop, a folding list on phones) ----------
+  var wide = window.matchMedia("(min-width: 761px)");
+  function setOpen(li, open) {
+    var btn = li.querySelector(".menu-btn");
+    if (open) Array.prototype.forEach.call(li.parentNode.children, function (o) { if (o !== li) setOpen(o, false); });
+    li.classList.toggle("open", open);
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (!open) li._hover = false;
+  }
+  function buildTopbar() {
+    var bar = document.getElementById("topbar");
+    var menus = el("ul", { class: "menus", id: "menus" });
+    arr(SITE.nav).forEach(function (m) {
+      var id = "menu-" + m.key;
+      var btn = el("button", { type: "button", class: "menu-btn", "aria-expanded": "false", "aria-controls": id, text: m.label });
+      var list = el("ul", { class: "drop", id: id }, arr(m.items).map(function (it) {
+        var a = pageLink(it[1], it[0]);
+        if (it[1] === SITE.navItem) a.classList.add("cur");
+        if (it[1] === SITE.path) a.setAttribute("aria-current", "page");
+        return el("li", null, [a]);
+      }));
+      var li = el("li", { class: "menu" + (m.key === SITE.navCur ? " cur" : "") }, [btn, list]);
+      btn.addEventListener("click", function () {
+        // A click on a menu the mouse already opened keeps it open instead of closing it again.
+        if (li._hover) { li._hover = false; return; }
+        setOpen(li, !li.classList.contains("open"));
+      });
+      btn.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowDown") { e.preventDefault(); setOpen(li, true); var f = list.querySelector("a"); if (f) f.focus(); }
+      });
+      li.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse" && wide.matches) { setOpen(li, true); li._hover = true; } });
+      li.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse" && wide.matches) setOpen(li, false); });
+      li.addEventListener("focusout", function (e) { if (wide.matches && !li.contains(e.relatedTarget)) setOpen(li, false); });
+      li.addEventListener("keydown", function (e) { if (e.key === "Escape" && li.classList.contains("open")) { setOpen(li, false); btn.focus(); } });
+      menus.appendChild(li);
+    });
+    var burger = el("button", { type: "button", class: "burger", "aria-expanded": "false", "aria-controls": "menus", text: "Menu" });
+    burger.addEventListener("click", function () {
+      var open = !bar.classList.contains("nav-open");
+      bar.classList.toggle("nav-open", open);
+      burger.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    var themeBtn = el("button", { type: "button", class: "theme-btn" });
+    function darkNow() {
+      var t = document.documentElement.getAttribute("data-theme");
+      return t ? t === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+    function paintThemeBtn() {
+      var dark = darkNow();
+      themeBtn.textContent = dark ? "Light" : "Dark";
+      themeBtn.setAttribute("aria-label", dark ? "切换到浅色" : "切换到深色");
+    }
+    themeBtn.addEventListener("click", function () {
+      var next = darkNow() ? "light" : "dark";
+      var system = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      // Choosing what the system already shows drops the override, so the page follows the system again.
+      if (next === system) document.documentElement.removeAttribute("data-theme");
+      else document.documentElement.setAttribute("data-theme", next);
+      try { if (next === system) localStorage.removeItem("atlas-theme"); else localStorage.setItem("atlas-theme", next); } catch (e) { /* storage unavailable */ }
+      paintThemeBtn();
+    });
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintThemeBtn);
+    paintThemeBtn();
+    bar.appendChild(el("div", { class: "bar-in" }, [pageLink("index.html", SITE.brand || "", "brand"), el("nav", { class: "site-nav", "aria-label": "站点导航" }, [menus]), themeBtn, burger]));
+    document.addEventListener("click", function (e) {
+      if (!bar.contains(e.target)) Array.prototype.forEach.call(menus.children, function (li) { setOpen(li, false); });
+    });
+  }
+
+  function finishPage() {
+    buildTopbar();
+    var foot = document.getElementById("site-foot");
+    if (foot) foot.appendChild(el("p", null, [pageLink("index.html", SITE.brand || ""), SITE.date ? " · 内容截至 " + SITE.date : ""]));
+    typeset(main);
+    // Deep links (#id): the page is rendered by script, so jump once it exists and again after fonts settle.
+    var h = window.location.hash ? window.location.hash.slice(1) : "";
+    if (h && /^[A-Za-z0-9._~-]+$/.test(h) && document.getElementById(h)) {
+      var moved = false;
+      ["wheel", "touchstart", "keydown", "mousedown"].forEach(function (ev) { window.addEventListener(ev, function () { moved = true; }, { once: true, passive: true }); });
+      var settle = function () { var t = document.getElementById(h); if (t && !moved) t.scrollIntoView({ block: "start" }); };
+      settle();
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { window.requestAnimationFrame(settle); });
+      [400, 1200, 2500].forEach(function (ms) { setTimeout(settle, ms); });
+    }
+  }
+
+  // ================= slot: classic papers on a timeline, one lane per theme =================
+  // DATA.chart = {lanes: [{id, label}], points: [{y: year, c: citations, m: must-read, t: title, v: venue, u: url, lane}]}
+  SLOTS["classics-chart"] = function () {
+    var C = DATA.chart || {}, lanes = arr(C.lanes), pts = arr(C.points);
+    if (!pts.length) return null;
+    var W = 940, left = lanes.length > 1 ? 170 : 16, right = 16, top = 26, split = 2010;
+    var x0 = left, x1 = W - right, xBreak = x0 + (x1 - x0) * 0.34;
+    var minYear = pts.reduce(function (m, p) { return p.y ? Math.min(m, p.y) : m; }, 2009);
+    var y0 = Math.floor((minYear - 1) / 5) * 5;
+    function xs(y) { y = Math.max(y0, Math.min(2025.6, y)); return y < split ? x0 + 6 + (y - y0) / (split - y0) * (xBreak - x0 - 18) : xBreak + (y - split + 0.5) / (2025.6 - split + 0.5) * (x1 - xBreak); }
+    function rr(c) { var n = Math.max(1, Number(c) || 1); return Math.max(3.5, Math.min(8, 1.8 * Math.log10(n) - 0.6)); }
+    var y = top, rows = [];
+    lanes.forEach(function (ln) {
+      var byYear = {};
+      pts.forEach(function (p) { if (p.lane === ln.id) (byYear[p.y] = byYear[p.y] || []).push(p); });
+      var maxStack = 1;
+      Object.keys(byYear).forEach(function (k) { maxStack = Math.max(maxStack, Math.ceil(byYear[k].length / 2)); });
+      var h = Math.max(44, maxStack * 22 + 14);
+      rows.push({ ln: ln, y: y, h: h, byYear: byYear });
+      y += h;
+    });
+    var Ht = y + 30;
+    var svg = sv("svg", { class: "lanes", viewBox: "0 0 " + W + " " + Ht, role: "img", "aria-label": "经典论文时间分布" + (lanes.length > 1 ? "（按主题分泳道）" : "") });
+    function tick(yr) {
+      svg.appendChild(sv("line", { class: "grid", x1: xs(yr), x2: xs(yr), y1: top - 6, y2: Ht - 26 }));
+      svg.appendChild(sv("text", { class: "axis", x: xs(yr), y: Ht - 10, "text-anchor": "middle", text: String(yr) }));
+    }
+    [y0, y0 + 10, y0 + 20].filter(function (yr) { return yr < split - 4; }).forEach(tick);
+    for (var yr = 2010; yr <= 2025; yr += 3) tick(yr);
+    svg.appendChild(sv("path", { class: "brk", d: "M" + (xBreak - 6) + "," + (Ht - 30) + " l4,-8 M" + (xBreak - 1) + "," + (Ht - 30) + " l4,-8" }));
+    svg.appendChild(sv("text", { class: "axis", x: (x0 + xBreak) / 2, y: top - 12, "text-anchor": "middle", text: y0 + "–2009（压缩比例）" }));
+    svg.appendChild(sv("text", { class: "axis", x: (xBreak + x1) / 2, y: top - 12, "text-anchor": "middle", text: "2010–2025" }));
+    var tip = el("div", { class: "vtip", hidden: "" });
+    rows.forEach(function (r, li) {
+      if (li > 0) svg.appendChild(sv("line", { class: "grid", x1: 0, x2: W, y1: r.y, y2: r.y }));
+      if (lanes.length > 1) svg.appendChild(sv("text", { class: "lane-l", x: 4, y: r.y + r.h / 2 + 4, text: r.ln.label }));
+      Object.keys(r.byYear).forEach(function (k) {
+        var list = r.byYear[k].slice().sort(function (a, b) { return (b.c || 0) - (a.c || 0); });
+        var nrow = Math.ceil(list.length / 2);
+        list.forEach(function (p, j) {
+          var col = list.length > 1 ? (j % 2 === 0 ? -1 : 1) : 0, row = Math.floor(j / 2);
+          var cx = xs(Number(k)) + col * 6, cy = r.y + r.h / 2 + (row - (nrow - 1) / 2) * 22;
+          var a = sv("a", { class: "m", "aria-label": p.t + "，" + p.y + "，引用 " + fmtCit(p.c) }, [
+            sv("circle", { class: "hit", cx: cx, cy: cy, r: rr(p.c) + 5 }),
+            sv("circle", { class: "dot" + (p.m ? "" : " hollow"), cx: cx, cy: cy, r: rr(p.c) })
+          ]);
+          var h = relHref(p.u);
+          if (h) a.setAttribute("href", h);
+          function show() {
+            tip.textContent = "";
+            tip.appendChild(el("b", { text: p.t }));
+            tip.appendChild(el("small", { text: [p.y, p.v, "引用 " + fmtCit(p.c)].filter(Boolean).join(" · ") }));
+            if (p.m) tip.appendChild(el("span", { text: "必读" }));
+            tip.hidden = false;
+            var wrap = tip.parentElement, wr = wrap.getBoundingClientRect(), sr = svg.getBoundingClientRect(), scale = sr.width / W;
+            var px = sr.left - wr.left + wrap.scrollLeft + cx * scale, py = sr.top - wr.top + cy * scale;
+            tip.style.left = Math.max(4, Math.min(px + 12, wrap.scrollWidth - tip.offsetWidth - 4)) + "px";
+            tip.style.top = (py + 14) + "px";
+          }
+          a.addEventListener("mouseenter", show);
+          a.addEventListener("focus", show);
+          a.addEventListener("mouseleave", function () { tip.hidden = true; });
+          a.addEventListener("blur", function () { tip.hidden = true; });
+          svg.appendChild(a);
+        });
+      });
+    });
+    function lgDot(hollow) {
+      var s = sv("svg", { width: "12", height: "12", viewBox: "0 0 12 12", "aria-hidden": "true" });
+      s.appendChild(sv("circle", { class: "dot" + (hollow ? " hollow" : ""), cx: 6, cy: 6, r: 4 }));
+      return s;
+    }
+    return el("figure", { class: "fullwidth chart-fig" }, [
+      el("div", { class: "lanes-wrap" }, [svg, tip]),
+      el("figcaption", null, [lgDot(false), " 必读　", lgDot(true), " 其他　点的大小与引用数的对数成正比；悬停看详情，点击跳到条目。"])
+    ]);
+  };
+
+  // ================= article: a page composed as blocks in routes.py =================
+  (function () {
+    var PG = DATA.page || {};
+    var H = PG.head || {};
+    if (PG.id) art.id = PG.id;
+
+    // A link dict from routes.py: {k} an entry with hover preview, {u, t} a page of this site, {url, t} an external page.
+    function part(x) {
+      if (x === null || x === undefined) return null;
+      if (typeof x === "string") return x;
+      if (x.k) return xlink(x.k, x.t || null);
+      if (x.u) return pageLink(x.u, x.t || x.u);
+      if (x.url) return link(x.t || x.url, x.url);
+      return x.t ? str(x.t) : null;
+    }
+    function noteNodes(n) {
+      var kids = [noteLabel(n.label)];
+      if (n.t) kids = kids.concat(rich(n.t));
+      arr(n.links).forEach(function (l, i) { if (i) kids.push(el("br")); kids.push(part(l)); });
+      return kids;
+    }
+    function runIn(label) { return el("b", { class: "run-in", text: label + "：" }); }
+    function multiline(text) {
+      var out = [];
+      str(text).split("\n").forEach(function (line, i) { if (i) out.push(el("br")); out = out.concat(rich(line)); });
+      return out;
+    }
+
+    // ---------- head ----------
+    var meta = [];
+    if (arr(H.prereqs).length) {
+      meta.push(marginnote([noteLabel("阅读前需要")].concat(arr(H.prereqs).map(function (p, i) {
+        var a = part(p);
+        return i ? el("span", null, ["；", a]) : a;
+      }))));
+    }
+    var sep = false;
+    arr(H.meta).concat(H.minutes > 1 ? ["约 " + H.minutes + " 分钟"] : []).forEach(function (x) {
+      var n = part(x);
+      if (!n || (typeof n === "string" && !n.trim())) return;
+      if (sep) meta.push(" · ");
+      meta.push(n);
+      sep = !(typeof x === "string" && /：$/.test(x));
+    });
+    articleHead({ title: H.title, subtitle: H.sub, meta: meta.length ? meta : null, epigraph: H.epigraph });
+    if (str(H.lede).trim()) art.appendChild(el("div", { class: "lede" }, paras(H.lede)));
+
+    // ---------- blocks ----------
+    function heading(tag, b) {
+      var title = b.url && safeUrl(b.url) ? link(b.t, b.url) : (b.k ? part({ k: b.k, t: b.t }) : str(b.t));
+      var h = el(tag, { id: b.id || null }, [title]);
+      if (b.sn) h.appendChild(sidenote(noteNodes(b.sn)));
+      if (b.en) h.appendChild(el("span", { class: "en", text: b.en }));
+      if (b.tag) h.appendChild(el("span", { class: "used", text: b.tag }));
+      return h;
+    }
+    function withNotes(nodes, b) {
+      if (nodes.length && b.mn) nodes[0].insertBefore(marginnote(noteNodes(b.mn)), nodes[0].firstChild);
+      if (nodes.length && b.label) nodes[0].insertBefore(runIn(b.label), nodes[0].firstChild);
+      return nodes;
+    }
+    function listItem(x) {
+      if (typeof x === "string") return el("li", null, rich(x));
+      return el("li", null, (x.label ? [runIn(x.label)] : []).concat(rich(x.t)));
+    }
+    function refsList(items, cls) {
+      var left = items.some(function (x) { return x.left; });
+      return el("ul", { class: "refs " + (cls || "") + (left ? "" : " noleft") }, items.map(function (x) {
+        var body = [x.k || x.u || x.url ? part(x) : el("span", { class: "plain-t", text: x.t })];
+        if (x.tag) body.push(el("span", { class: "used", text: x.tag }));
+        if (x.sub) body.push(el("div", { class: "en", text: x.sub }));
+        if (str(x.gloss).trim()) body.push(el("div", { class: "gloss" }, multiline(x.gloss)));
+        var kids = left ? [el("span", { class: /^\d{4}$/.test(str(x.left)) ? "yr" : "kind", text: str(x.left) })] : [];
+        return el("li", { id: x.id || null }, kids.concat([el("div", null, body)]));
+      }));
+    }
+    var TY = { book: "教材", course: "课程", paper: "论文", tutorial: "教程", code: "代码", video: "视频", blog: "文章" };
+    function tocGroups(groups, level) {
+      var out = [];
+      arr(groups).forEach(function (g) {
+        if (g.h) out.push(el(level, { class: "toc-h" }, [g.k || g.u ? part({ k: g.k, u: g.u, t: g.h }) : g.h]));
+        if (str(g.lede).trim()) out.push(el("p", { class: "toc-lede" }, rich(g.lede)));
+        out.push(el("ol", { class: "toc" }, arr(g.items).map(function (it) {
+          return el("li", null, [
+            el("div", { class: "toc-t" }, [part({ k: it.k, u: it.u, t: it.t }), it.en ? el("span", { class: "en", text: it.en }) : null,
+              it.meta ? el("span", { class: "toc-meta", text: it.meta }) : null]),
+            str(it.s).trim() ? el("p", { class: "toc-s", text: it.s }) : null
+          ]);
+        })));
+      });
+      return out;
+    }
+    function cell(tag, c) { return el(tag, null, c && typeof c === "object" ? [part(c)] : rich(c)); }
+
+    var box = null;
+    function cur() { if (!box) { box = el("section"); art.appendChild(box); } return box; }
+    function render(b) {
+      switch (b.b) {
+        case "p": return withNotes(paras(b.t), b);
+        case "lines": return withNotes(lines(b.t), b);
+        case "h3": return [heading("h3", b)];
+        case "note": return [el("p", { class: "note", text: b.t })];
+        case "ul": case "ol": return [el(b.b, null, arr(b.items).map(listItem))];
+        case "eqs": return [eqList(b.eqs)];
+        case "qa": return [el("p", { class: "quiz-h", text: "自测" }), el("ol", { class: "quiz" }, arr(b.items).map(function (q) {
+          return el("li", null, [el("p", null, rich(q.q)), el("details", null, [el("summary", { text: "答案" }), el("p", null, rich(q.a))])]);
+        }))];
+        case "res": return [refsList(arr(b.items).map(function (r) {
+          return { left: TY[r.type] || r.type || "", url: r.url, t: r.title, gloss: r.note_zh };
+        }))];
+        case "refs": return [refsList(arr(b.items), b.cls)];
+        case "toc": return tocGroups(b.groups, cur().querySelector("h2") ? "h3" : "h2");
+        case "table": return [el("div", { class: "table-wrap" + (b.wide ? " fullwidth" : "") }, [el("table", { class: "booktabs" + (b.cls ? " " + b.cls : "") }, [
+          el("thead", null, [el("tr", null, arr(b.head).map(function (h) { return el("th", { text: h }); }))]),
+          el("tbody", null, arr(b.rows).map(function (r) { return el("tr", null, arr(r).map(function (c) { return cell("td", c); })); }))
+        ])])];
+        case "timeline": return [el("ul", { class: "refs timeline" }, arr(b.items).map(function (x) {
+          return el("li", null, [el("span", { class: "yr", text: str(x[0]) }), el("div", null, rich(x[1]))]);
+        }))];
+        case "kv": return [el("table", { class: "kv" }, [el("tbody", null, arr(b.items).map(function (x) {
+          return el("tr", null, [el("th", { text: x[0] }), el("td", null, rich(x[1]))]);
+        }))])];
+        case "mtoc": return [marginToc(b.items)];
+        case "slot": return typeof SLOTS[b.name] === "function" ? [SLOTS[b.name](b)] : [];
+        default: return [];
+      }
+    }
+    // Long articles: a table of contents at the top of the margin (a folding list on phones).
+    function marginToc(items) {
+      var d = el("details", { class: "mtoc" }, [el("summary", { text: "本文目录" }), el("ol", null, arr(items).map(function (x) { return el("li", null, [part(x)]); }))]);
+      var wide = window.matchMedia("(min-width: 761px)");
+      d.open = wide.matches;
+      return d;
+    }
+    arr(PG.body).forEach(function (b) {
+      if (b.b === "sec") {
+        box = el("section", { id: b.id || null });
+        if (b.h) box.appendChild(heading("h2", { t: b.h, sn: b.sn }));
+        art.appendChild(box);
+        return;
+      }
+      render(b).forEach(function (n) { if (n) cur().appendChild(n); });
+    });
+
+    var S = PG.series || {};
+    if (S.prev || S.next || S.up) {
+      var nav = el("nav", { class: "series", "aria-label": "同系列" });
+      nav.appendChild(el("div", { class: "prev" }, S.prev ? [el("small", { text: "上一篇" }), part(S.prev)] : []));
+      nav.appendChild(el("div", { class: "up" }, S.up ? [part(S.up)] : []));
+      nav.appendChild(el("div", { class: "next" }, S.next ? [el("small", { text: "下一篇" }), part(S.next)] : []));
+      art.appendChild(nav);
+    }
+  })();
+
+  finishPage();
+})();
+</script>
+</body>
+</html>

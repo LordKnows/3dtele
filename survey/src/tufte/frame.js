@@ -3,11 +3,14 @@
   var ROOT = str(SITE.root);
   var XREF = DATA.xref || {};
   function hasX(key) { return Object.prototype.hasOwnProperty.call(XREF, key); }
+  // Custom page parts (search tools, diagrams, charts) register here; blocks.js calls them for {"b": "slot"} blocks.
+  var SLOTS = {};
 
   // ---------- internal links: urls are relative to the site root; pages sit at different depths ----------
-  var SAFE_PATH = /^[A-Za-z0-9][A-Za-z0-9._\/-]*(#[A-Za-z0-9._-]+)?$/;
+  var SAFE_PATH = /^[A-Za-z0-9][A-Za-z0-9._\/-]*(\?[A-Za-z0-9=&._-]+)?(#[A-Za-z0-9._-]+)?$/;
   function relHref(u) {
     u = str(u);
+    if (/^#[A-Za-z0-9._-]+$/.test(u)) return u;
     if (!SAFE_PATH.test(u)) return null;
     var cut = u.indexOf("#"), path = cut < 0 ? u : u.slice(0, cut);
     if (path === SITE.path) return cut < 0 ? "#" : u.slice(cut);

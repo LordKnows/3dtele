@@ -1,0 +1,865 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>产业、产品与标准（2023–2026）：3D远程呈现的商业化版图 · 3D 临场研究图谱</title>
+<meta name="description" content="2023–2026年，3D远程呈现在产业侧从“实验室演示”走到了“可采购产品”，但并不是沿着一条路线推进的。">
+<meta name="color-scheme" content="light dark">
+
+<script>
+  // Apply a saved light/dark choice before first paint; without one the page follows the system setting.
+  try { var t = localStorage.getItem("atlas-theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) { /* storage unavailable */ }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Serif+SC:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/lxgwwenkai-regular.css">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]] },
+    options: { skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code", "input", "select", "button"] },
+    svg: { fontCache: "global" },
+    startup: {
+      typeset: false,
+      ready: function () {
+        window.MathJax.startup.defaultReady();
+        if (typeof window.__atlasMathReady === "function") window.__atlasMathReady();
+      }
+    }
+  };
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js"></script>
+<style>
+/* Tufte-style layout for Chinese long-form pages, after tufte-css (MIT, (c) 2014 Dave Liepmann; see LICENSE-tufte-css).
+   ET Book: MIT, (c) 2015 Dmitry Krasny, Bonnie Scranton, Edward Tufte (fonts/et-book/LICENSE).
+   ../../ is the page's path to the site root. */
+
+/* ---------- fonts: ET Book for Latin (self-hosted), Noto Serif SC for Chinese text, LXGW WenKai for notes ---------- */
+/* ET Book leaves curly quotes, dashes and ellipses to the Chinese font so they keep full width in Chinese prose,
+   and single guillemets (› ‹), which it lacks. */
+@font-face { font-family: "et-book"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-roman-line-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book"; font-weight: 400; font-style: italic; font-display: swap;
+  src: url("../../fonts/et-book/et-book-display-italic-old-style-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book"; font-weight: 700; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-bold-line-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+/* Notes pair Latin italic with upright Kai (the "italic ↔ 楷体" rule): the italic cut is registered as an upright
+   family so the browser never slants the Chinese glyphs. */
+@font-face { font-family: "et-book-note"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-display-italic-old-style-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book-osf"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-roman-old-style-figures.woff") format("woff"); }
+
+:root {
+  --bg: #fffff8;
+  --ink: #111111;
+  --ink-2: #3c3c36;
+  --muted: #74746a;
+  --rule: #d8d6c8;
+  --rule-2: #b9b6a4;
+  --accent: #a8322d;
+  --serif: "et-book", "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", Palatino, Georgia, serif;
+  --note: "et-book-note", "LXGW WenKai", "Kaiti SC", "STKaiti", "KaiTi", "et-book", serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --side: clamp(12rem, 21vw, 17rem);
+  --gap: 2.75rem;
+  --main: calc(100% - var(--side) - var(--gap));
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161614; --ink: #e2e0d6; --ink-2: #c3c1b6; --muted: #979589; --rule: #34332e; --rule-2: #4d4b44; --accent: #e8836f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161614; --ink: #e2e0d6; --ink-2: #c3c1b6; --muted: #979589; --rule: #34332e; --rule-2: #4d4b44; --accent: #e8836f;
+  color-scheme: dark;
+}
+
+/* ---------- base ---------- */
+* { box-sizing: border-box; }
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--serif); font-size: 1.15625rem; line-height: 1.85;
+  font-kerning: normal; font-variant-numeric: lining-nums;
+  /* Space between Chinese and Latin text where the source has none; squeeze adjacent CJK punctuation
+     (text-spacing-trim applies the fonts' halt / chws features). Browsers without them keep the source spacing. */
+  text-autospace: normal; text-spacing-trim: normal;
+  overflow-wrap: break-word;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+[hidden] { display: none !important; }
+a { color: inherit; text-decoration-line: underline; text-decoration-thickness: 1px; text-underline-offset: .18em; text-decoration-color: var(--rule-2); }
+a:hover { color: var(--accent); text-decoration-color: currentColor; }
+a:focus-visible, button:focus-visible, summary:focus-visible, label:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.skip { position: absolute; left: -999px; top: 0; }
+.skip:focus { left: 1rem; top: .5rem; background: var(--bg); padding: .2rem .5rem; z-index: 60; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+p { margin: 0; }
+p + p { margin-top: .9em; }
+
+/* ---------- top bar ---------- */
+.topbar { border-bottom: 1px solid var(--rule); }
+.bar-in { max-width: 67rem; margin: 0 auto; padding: 0 1.5rem; display: flex; align-items: center; gap: 2.2rem; min-height: 3.1rem; }
+.brand { font-size: 1rem; text-decoration: none; letter-spacing: .02em; white-space: nowrap; }
+.site-nav { flex: 1; }
+.menus { list-style: none; margin: 0; padding: 0; display: flex; gap: 1.6rem; }
+.menu { position: relative; }
+.menu-btn, .theme-btn, .burger {
+  font-family: "et-book", var(--serif); font-variant-caps: all-small-caps; letter-spacing: .08em; font-size: 1.12rem;
+  color: var(--ink-2); line-height: 3.1rem;
+}
+.menu-btn:hover, .theme-btn:hover, .burger:hover, .menu.open > .menu-btn { color: var(--accent); }
+.menu.cur > .menu-btn { color: var(--ink); box-shadow: inset 0 -1px 0 var(--ink); }
+.drop {
+  display: none; position: absolute; left: -1rem; top: 100%; z-index: 40; min-width: 13rem;
+  list-style: none; margin: 0; padding: .45rem 0; background: var(--bg); border: 1px solid var(--rule);
+}
+.menu.open > .drop { display: block; }
+.drop a { display: block; padding: .15rem 1rem; text-decoration: none; font-size: 1.02rem; color: var(--ink-2); white-space: nowrap; }
+.drop a:hover, .drop a:focus-visible { color: var(--accent); }
+.drop a.cur { color: var(--ink); }
+.drop a.cur::before { content: "›"; position: absolute; margin-left: -.7rem; color: var(--accent); }
+.theme-btn { margin-left: auto; }
+.burger { display: none; }
+
+/* ---------- article column + margin ---------- */
+main { display: block; }
+.art { max-width: 67rem; margin: 0 auto; padding: 2.6rem 1.5rem 3rem; counter-reset: sidenote-counter; }
+.art > *, .art section > * { width: var(--main); }
+.art > section { width: 100%; }
+.art .fullwidth { width: 100%; }
+section { padding-top: .6rem; }
+
+.crumbs { font-size: .86rem; color: var(--muted); letter-spacing: .01em; }
+.crumbs a { color: var(--muted); text-decoration: none; }
+.crumbs a:hover { color: var(--accent); }
+.crumbs .sep { margin: 0 .45em; color: var(--rule-2); }
+h1, h2, h3 { font-family: var(--serif); color: var(--ink); text-wrap: balance; }
+h1 { font-size: 2.3rem; font-weight: 400; line-height: 1.3; margin: .9rem 0 0; letter-spacing: .01em; }
+.subtitle { font-family: "et-book", var(--note); font-style: italic; font-size: 1.45rem; line-height: 1.3; color: var(--ink-2); margin-top: .35rem; }
+.meta { font-size: .92rem; color: var(--muted); margin-top: 1.1rem; }
+.meta a { color: var(--muted); }
+h2 { font-size: 1.42rem; font-weight: 600; line-height: 1.4; margin: 2.6rem 0 .9rem; }
+h3 { font-size: 1.12rem; font-weight: 600; line-height: 1.5; margin: 1.8rem 0 .5rem; }
+h3 .used { font-family: var(--note); font-weight: 400; font-size: .86rem; color: var(--muted); margin-left: .6em; }
+
+.epigraph { margin: 2.2rem 0 .6rem; }
+.epigraph blockquote { margin: 0; padding: 0 0 0 1.6rem; border-left: 1px solid var(--rule-2); }
+.epigraph p { font-family: var(--note); font-size: 1.12rem; line-height: 1.85; color: var(--ink-2); }
+
+.art ol, .art ul { margin: .6rem 0 0; padding-left: 1.6em; }
+.art li + li { margin-top: .45rem; }
+li::marker { font-family: "et-book-osf", var(--serif); color: var(--muted); }
+
+/* Equations: display math in the text column, scrolling sideways on narrow screens. */
+.eqs { display: block; }
+.eq + .eq { margin-top: 1.6rem; }
+.math-block { overflow-x: auto; overflow-y: hidden; margin: .4rem 0 .6rem; padding: .2rem 0; font-size: 1rem; }
+.math-block mjx-container { margin: 0 !important; }
+
+/* ---------- side notes & margin notes (floated into the right margin) ---------- */
+.sidenote, .marginnote {
+  float: right; clear: right; position: relative;
+  width: var(--side); margin-right: calc(-1 * (var(--side) + var(--gap))); margin-top: .3rem; margin-bottom: .6rem;
+  font-family: var(--note); font-size: .88rem; line-height: 1.6; color: var(--ink-2); text-align: left;
+  font-style: normal; font-weight: 400; letter-spacing: 0;
+}
+h3 .sidenote { margin-top: .2rem; }
+.sidenote-number { counter-increment: sidenote-counter; }
+.sidenote-number::after, .sidenote::before { font-family: "et-book-osf", var(--serif); position: relative; vertical-align: baseline; }
+.sidenote-number::after { content: counter(sidenote-counter); font-size: .75rem; top: -.55em; left: .08em; color: var(--ink-2); }
+.sidenote::before { content: counter(sidenote-counter) " "; font-size: .8rem; top: -.4em; }
+.note-label { font-family: var(--serif); font-weight: 600; font-size: .82rem; color: var(--muted); margin-right: .5em; }
+.marginnote .note-label { display: block; margin: 0 0 .1rem; }
+input.margin-toggle { display: none; }
+label.sidenote-number { display: inline; cursor: default; }
+label.margin-toggle:not(.sidenote-number) { display: none; }
+
+/* ---------- quiz, further reading, series ---------- */
+.quiz details { margin-top: .3rem; }
+.quiz summary { font-family: var(--note); font-size: .92rem; color: var(--muted); cursor: pointer; list-style: none; display: inline-block; }
+.quiz summary::-webkit-details-marker { display: none; }
+.quiz summary::before { content: "+ "; font-family: "et-book", var(--serif); }
+.quiz details[open] summary::before { content: "− "; }
+.quiz summary:hover { color: var(--accent); }
+.quiz details > p { margin-top: .3rem; padding-left: 1rem; border-left: 1px solid var(--rule); color: var(--ink-2); }
+
+/* Reference lists: a narrow label column (kind / year) and a hanging text column. */
+.art ul.refs { list-style: none; padding-left: 0; }
+.refs li { display: grid; grid-template-columns: 2.8rem minmax(0, 1fr); column-gap: .5rem; line-height: 1.6; }
+.refs li > :not(.kind):not(.yr) { grid-column: 2; }
+.refs .kind, .refs .yr { grid-column: 1; font-family: var(--note); font-size: .86rem; color: var(--muted); padding-top: .12rem; }
+.refs .yr { font-family: "et-book-osf", var(--serif); font-size: .95rem; padding-top: .05rem; }
+.refs .en { font-family: "et-book", var(--serif); font-style: italic; color: var(--muted); }
+.refs .gloss { font-family: var(--note); font-size: .88rem; color: var(--ink-2); margin-top: .1rem; }
+.art .refs li + li { margin-top: .75rem; }
+.art .papers li + li { margin-top: .35rem; }
+.refs.noleft li { grid-template-columns: minmax(0, 1fr); }
+.refs.noleft li > * { grid-column: 1; }
+.refs .used { font-family: var(--note); font-size: .82rem; color: var(--muted); margin-left: .5em; }
+.refs.terms .plain-t { font-weight: 600; }
+.refs.terms .en { display: inline; margin-left: .6em; }
+.timeline li { line-height: 1.7; }
+.art .timeline li + li { margin-top: .4rem; }
+
+/* ---------- blocks: lede, run-in labels, notes ---------- */
+.lede { margin-top: 1.6rem; color: var(--ink-2); }
+.run-in { font-weight: 600; color: var(--ink); }
+p.note { font-family: var(--note); font-size: .9rem; color: var(--muted); margin-top: .1rem; }
+h2 .en, h3 .en { font-family: "et-book", var(--serif); font-style: italic; font-weight: 400; color: var(--muted); margin-left: .6em; font-size: .92em; }
+h2 a, h3 a { text-decoration-color: var(--rule); }
+.quiz-h { font-family: var(--note); font-size: .88rem; color: var(--muted); margin-top: 1.4rem; }
+.quiz-h + ol.quiz { margin-top: .2rem; }
+
+/* Index pages: a table of contents instead of a card grid. */
+.art ol.toc { list-style: none; padding-left: 0; margin-top: .4rem; }
+.art ol.toc > li + li { margin-top: .85rem; }
+.toc-t { line-height: 1.55; }
+.toc-t .en { font-family: "et-book", var(--serif); font-style: italic; color: var(--muted); margin-left: .6em; font-size: .95em; }
+.toc-meta { font-family: var(--note); font-size: .82rem; color: var(--muted); margin-left: .7em; white-space: nowrap; }
+.toc-s { font-family: var(--note); font-size: .9rem; line-height: 1.65; color: var(--ink-2); margin-top: .1rem; }
+.toc-lede { font-family: var(--note); color: var(--ink-2); font-size: .95rem; }
+h2.toc-h, h3.toc-h { margin-bottom: .3rem; }
+
+/* Tables: booktabs rules (top, under the header, bottom), no vertical lines, no fills. */
+.table-wrap { overflow-x: auto; margin: 1rem 0; }
+table.booktabs { border-collapse: collapse; width: 100%; font-size: .9rem; line-height: 1.6; border-top: 1.5px solid var(--ink); border-bottom: 1.5px solid var(--ink); }
+table.booktabs th { text-align: left; font-weight: 600; padding: .45rem .7rem .35rem 0; border-bottom: 1px solid var(--ink); white-space: nowrap; vertical-align: bottom; }
+table.booktabs td { padding: .45rem .9rem .45rem 0; vertical-align: top; border-top: 1px solid var(--rule); }
+table.booktabs tbody tr:first-child td { border-top: 0; }
+table.rank td { white-space: nowrap; font-variant-numeric: tabular-nums; }
+table.rank td:nth-child(2) { white-space: normal; }
+table.kv { border-collapse: collapse; margin: .6rem 0; font-size: .95rem; }
+table.kv th { text-align: left; font-weight: 400; color: var(--muted); padding: .25rem 1.2rem .25rem 0; vertical-align: top; min-width: 5em; max-width: 12em; font-family: var(--note); }
+table.kv td { padding: .25rem 0; vertical-align: top; }
+
+/* Long articles: the table of contents sits at the top of the margin. */
+/* It sits in a full-width section, so it floats into the margin without a negative offset. */
+details.mtoc {
+  float: right; clear: right; width: var(--side); margin-right: 0; margin-bottom: 1rem;
+  font-family: var(--note); font-size: .86rem; line-height: 1.55; color: var(--ink-2);
+}
+details.mtoc summary { font-family: var(--serif); font-weight: 600; font-size: .82rem; color: var(--muted); list-style: none; cursor: default; }
+details.mtoc summary::-webkit-details-marker { display: none; }
+.art details.mtoc ol { list-style: none; padding: 0; margin: .3rem 0 0; }
+.art details.mtoc li + li { margin-top: .25rem; }
+details.mtoc a { text-decoration: none; }
+details.mtoc a:hover { text-decoration: underline; }
+
+/* Tools: search and filters with underlined inputs. */
+.tool { margin-top: 1rem; }
+.filters { display: flex; flex-wrap: wrap; gap: .6rem 1.6rem; align-items: baseline; font-family: var(--note); font-size: .92rem; color: var(--muted); }
+.filters label { display: inline-flex; gap: .5rem; align-items: baseline; }
+.filters input, .filters select {
+  font: inherit; color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid var(--rule-2); border-radius: 0;
+  padding: .15rem .1rem; min-width: 7rem;
+}
+.filters input[type="search"] { min-width: 14rem; }
+.filters select { max-width: 16rem; }
+.filters input:focus, .filters select:focus { outline: none; border-bottom-color: var(--accent); }
+.filters select option { background: var(--bg); color: var(--ink); }
+.filters .count { margin-left: auto; font-family: var(--mono); font-size: .8rem; }
+table.gl td.en { font-family: "et-book", var(--serif); width: 20%; }
+table.gl .abbr { color: var(--muted); }
+table.gl td.zh { white-space: nowrap; }
+table.gl td.def { color: var(--ink-2); min-width: 20rem; }
+table.gl td.c { font-size: .85rem; min-width: 9rem; padding-right: 0; }
+table.gl tr:target td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+table.db td.y { font-family: "et-book-osf", var(--serif); white-space: nowrap; }
+table.db td.t { min-width: 16rem; }
+table.db td.t small { display: block; color: var(--muted); font-size: .8rem; line-height: 1.45; margin-top: .15rem; }
+table.db td.tags { min-width: 7rem; font-family: var(--note); font-size: .8rem; color: var(--muted); }
+table.db td.tags span { display: block; }
+table.db .tier.milestone { color: var(--ink); font-weight: 600; }
+table.db td.s { min-width: 18rem; color: var(--ink-2); }
+table.db td.n { min-width: 12rem; font-size: .82rem; color: var(--ink-2); }
+
+/* Figures: the pipeline diagram and the timeline of classic papers, drawn in ink with one accent for interaction. */
+figure { margin: 1.4rem 0; }
+svg a { text-decoration: none; }
+.diagram-wrap, .lanes-wrap { position: relative; overflow-x: auto; }
+svg.diagram { width: 100%; min-width: 760px; height: auto; display: block; font-family: var(--note); }
+svg.diagram .dnode rect { fill: var(--bg); stroke: var(--ink-2); stroke-width: 1; }
+svg.diagram .dnode rect.data { stroke-dasharray: 4 3; }
+svg.diagram .dnode:hover rect, svg.diagram .dnode:focus rect { stroke: var(--accent); stroke-width: 1.5; }
+svg.diagram .dnode:focus { outline: none; }
+svg.diagram text { fill: var(--ink); }
+svg.diagram text.k { font-family: var(--mono); font-size: 10px; fill: var(--muted); }
+svg.diagram text.t { font-family: var(--serif); font-size: 13px; font-weight: 600; }
+svg.diagram text.s { font-size: 11px; fill: var(--ink-2); }
+svg.diagram .dedge { fill: none; stroke: var(--ink-2); stroke-width: 1; }
+svg.diagram .dedge.fb { stroke-dasharray: 4 3; }
+svg.diagram .dhead { fill: var(--ink-2); }
+svg.diagram .dloop { fill: none; stroke: var(--rule-2); stroke-dasharray: 2 3; }
+svg.diagram .dlabel { font-size: 12px; fill: var(--muted); }
+svg.diagram .dnote { font-size: 11px; fill: var(--muted); }
+svg.diagram a.dnode:hover .dnote { fill: var(--accent); }
+svg.lanes { width: 100%; min-width: 720px; height: auto; display: block; font-family: var(--note); }
+svg.lanes .grid { stroke: var(--rule); stroke-width: 1; }
+svg.lanes .axis { font-family: "et-book-osf", var(--serif); font-size: 12px; fill: var(--muted); }
+svg.lanes .lane-l { font-size: 12px; fill: var(--ink-2); }
+svg.lanes .brk { stroke: var(--muted); fill: none; }
+svg.lanes .hit { fill: transparent; }
+svg .dot { fill: var(--ink); }
+svg .dot.hollow { fill: var(--bg); stroke: var(--ink-2); stroke-width: 1.2; }
+svg.lanes a.m:hover .dot, svg.lanes a.m:focus .dot { fill: var(--accent); stroke: var(--accent); }
+svg.lanes a.m:focus { outline: none; }
+.vtip { position: absolute; z-index: 20; max-width: 20rem; padding: .45rem .7rem; background: var(--bg); border: 1px solid var(--rule-2); font-family: var(--note); font-size: .82rem; line-height: 1.5; pointer-events: none; }
+.vtip b { display: block; font-family: "et-book", var(--serif); font-weight: 400; font-size: .92rem; }
+.vtip small { display: block; color: var(--muted); }
+.vtip span { color: var(--accent); }
+figcaption { font-family: var(--note); font-size: .85rem; color: var(--muted); margin-top: .4rem; }
+figcaption svg { vertical-align: -1px; }
+
+.series { display: grid; grid-template-columns: 1fr auto 1fr; gap: 1rem; align-items: end; margin-top: 3.2rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: .98rem; }
+.series small { display: block; font-family: var(--note); font-size: .8rem; color: var(--muted); }
+.series .up { text-align: center; font-size: .88rem; }
+.series .up a { color: var(--muted); }
+.series .next { text-align: right; }
+
+.site-foot { max-width: 67rem; margin: 0 auto; padding: 1.2rem 1.5rem 2.5rem; font-size: .82rem; color: var(--muted); }
+.site-foot a { color: var(--muted); text-decoration: none; }
+
+/* ---------- hover preview ---------- */
+.xtip {
+  position: absolute; z-index: 50; max-width: min(22rem, calc(100vw - 16px)); padding: .55rem .8rem .6rem;
+  background: var(--bg); border: 1px solid var(--rule-2); color: var(--ink);
+  font-family: var(--note); font-size: .88rem; line-height: 1.6; pointer-events: none;
+}
+.xt-m { font-size: .76rem; color: var(--muted); }
+.xt-t { font-family: var(--serif); font-weight: 600; font-size: .95rem; line-height: 1.45; margin-top: .1rem; }
+.xt-e { font-family: "et-book", var(--serif); font-style: italic; color: var(--ink-2); line-height: 1.4; }
+.xt-s { margin-top: .35rem; color: var(--ink-2); }
+
+/* ---------- narrow screens: one column; notes fold behind their number or ⊕ ---------- */
+@media (max-width: 760px) {
+  body { font-size: 1.0625rem; line-height: 1.8; }
+  .bar-in { gap: 1rem; padding: 0 1rem; flex-wrap: wrap; }
+  .site-nav { order: 5; flex-basis: 100%; display: none; }
+  .topbar.nav-open .site-nav { display: block; }
+  .menus { flex-direction: column; gap: 0; padding-bottom: .6rem; }
+  .menu-btn { line-height: 2.4rem; width: 100%; text-align: left; }
+  .menu-btn::after { content: " +"; }
+  .menu.open > .menu-btn::after { content: " −"; }
+  .menu.cur > .menu-btn { box-shadow: none; }
+  .drop { position: static; border: 0; padding: 0 0 .4rem .9rem; min-width: 0; }
+  .drop a { padding: .2rem 0; white-space: normal; }
+  .burger { display: inline; }
+  .theme-btn { margin-left: auto; }
+  .art { padding: 1.6rem 1rem 2.4rem; }
+  .art > *, .art section > * { width: 100%; }
+  h1 { font-size: 1.85rem; }
+  .subtitle { font-size: 1.22rem; }
+  .epigraph blockquote { padding-left: 1rem; }
+  .epigraph p { font-size: 1.05rem; }
+  label.margin-toggle:not(.sidenote-number) { display: inline; cursor: pointer; color: var(--muted); font-family: "et-book", var(--serif); padding: 0 .15em; }
+  label.sidenote-number { cursor: pointer; }
+  .sidenote, .marginnote { display: none; }
+  .margin-toggle:checked + .sidenote, .margin-toggle:checked + .marginnote {
+    display: block; float: left; clear: both; width: 100%; margin: .6rem 0; padding-left: .8rem; border-left: 1px solid var(--rule-2);
+  }
+  .series { grid-template-columns: 1fr 1fr; }
+  .series .up { display: none; }
+  details.mtoc { float: none; width: 100%; margin: 0 0 1.2rem; padding-left: .8rem; border-left: 1px solid var(--rule-2); }
+  details.mtoc summary { cursor: pointer; }
+  details.mtoc summary::after { content: " +"; }
+  details.mtoc[open] summary::after { content: " −"; }
+  .filters { flex-direction: column; align-items: stretch; gap: .5rem; }
+  .filters label { justify-content: space-between; }
+  .filters input[type="search"], .filters input, .filters select { min-width: 0; flex: 1; }
+  .filters .count { margin-left: 0; }
+  .toc-meta { display: block; margin-left: 0; }
+  table.kv, table.kv tbody, table.kv tr, table.kv th, table.kv td { display: block; max-width: none; }
+  table.kv th { padding: .5rem 0 0; }
+}
+@media print {
+  .topbar, .site-foot, .series { display: none; }
+}
+
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<header class="topbar" id="topbar"></header>
+<main id="main"><article class="art"></article></main>
+<footer class="site-foot" id="site-foot"></footer>
+<script type="application/json" id="data">{"site": {"brand": "3D 临场研究图谱", "root": "../../", "path": "works/areas/industry.html", "nav": [{"key": "overview", "label": "Overview", "items": [["Introduction", "index.html"], ["Methodology", "overview/methodology.html"], ["How to use", "overview/how-to-use.html"]]}, {"key": "basics", "label": "Basics", "items": [["Routes", "basics/routes/index.html"], ["Foundations", "basics/foundations/index.html"], ["Advanced topics", "basics/advanced/index.html"], ["Classics", "basics/classics/index.html"], ["Glossary", "basics/glossary.html"]]}, {"key": "works", "label": "Works", "items": [["Papers", "works/papers/index.html"], ["Walkthrough", "works/walkthrough/index.html"], ["Field map", "works/field-map.html"], ["Sub areas", "works/areas/index.html"]]}, {"key": "future", "label": "Future", "items": [["Directions", "future/index.html"], ["Trends & Challenges", "future/trends.html"]]}], "navCur": "works", "navItem": "works/areas/index.html", "crumbs": [["Works", ""], ["Sub areas", "works/areas/index.html"]], "date": "2026-09-28"}, "xref": {"area-eval": {"u": "works/areas/eval.html", "t": "数据集、基准、指标与评测：动态新视角合成与 3D Telepresence", "e": "", "m": "Sub areas", "s": "动态新视角合成（NVS）与 3D telepresence 的评测体系大致经历了三个阶段。"}}, "page": {"id": "area-industry", "head": {"title": "产业、产品与标准（2023–2026）：3D远程呈现的商业化版图", "sub": "", "meta": ["45 篇论文 · 6 个子主题"], "epigraph": "", "prereqs": [], "lede": "", "minutes": 11}, "body": [{"b": "sec", "h": null, "id": "overview"}, {"b": "p", "t": "2023–2026年，3D远程呈现在产业侧从“实验室演示”走到了“可采购产品”，但并不是沿着一条路线推进的。截至2026年9月，可以看到三条并行的产品化路径。第一条是以Google Project Starline→Google Beam为代表的裸眼光场“3D电话亭”：发送端只发少量RGB视频流，接收端做AI体积重建和视图合成。第二条是以Apple Persona、Meta Codec Avatars/Hologram、Android XR Likeness为代表的头显/眼镜端写实化身：先建模，再用传感器或语音驱动。第三条是以Meta Hyperscape、4DViews、Gracia、4DV.ai为代表的场景/人物体积捕捉和4D Gaussian splatting（4DGS）串流。与此同时，MPEG、Khronos、IETF在2025–2026年密集推出面向体积视频、Gaussian splat和化身的标准，表示层明显在向3DGS收敛。\n\nGoogle这条路线最完整地体现了“研究→产品”的演进。Starline（TOG 2021）是第一个在用户研究中被证明优于2D视频会议的系统，但依赖头部跟踪自由立体显示、多套彩色+深度采集，以及餐厅卡座大小的专用硬件。2023年的新原型改用“少量标准相机+新AI技术”，体积缩小到平板电视大小。2024年5月宣布与HP合作量产；2025年5月更名为Google Beam，官方把核心能力定义为“AI体积视频模型”；2025年6月HP Dimension with Google Beam在InfoComm发布，售价24,999美元。按Beam官方技术页，终端集成6台高速相机、12个麦克风、65英寸8K光场屏（约3320万像素，分别向双眼投送3D视频流），显示帧率60 fps，要求每端至少50 Mbps对称带宽、时延低于100 ms，通话功耗约600 W。2026年5月的I/O上，Beam推出群组会议实验：从普通设备入会的远端参会者经AI调整后，以真实尺寸围坐在虚拟桌边。2026年9月23日，Google宣布Beam出货至美、加、英、法、德、日六国，有18家渠道伙伴，并进驻Industrious联合办公空间；Zoom宣布原生客户端“Zoom for Google Beam”将在2026年下半年上线。不过到目前为止，真正的3D仍然只限于1:1通话。\n\n头显路线上，Apple在2024年2月随Vision Pro（3,499美元起）推出Persona beta，2024年4月上线spatial Personas，最多5人可在共享空间里以3D形式出现。visionOS 26（2025年9月）把Persona升级为“体积渲染+机器学习”，头发、睫毛和侧脸都有明显改善，媒体报道其底层是Gaussian splatting；visionOS 27进一步把Gaussian splat渲染做成系统级能力。Meta的Codec Avatars在2023年9月的Lex Fridman访谈中首次公开展示，逼真程度已足以支撑自然对话，但建模需要实验室扫描。此后研究侧补上了三块关键拼图：Relightable Gaussian Codec Avatars（CVPR 2024）把表示换成3D Gaussians；URAvatar（SIGGRAPH Asia 2024）实现了手机扫描建模；SqueezeMe（SIGGRAPH 2025）在Quest 3上以72 FPS同时驱动3个全身化身。在2026年9月的Connect上，Meta发布约100克、售价1,299.99美元、2027年春发货的Meta VR Glasses，内置由面部追踪驱动的写实Hologram，可在WhatsApp和Zoom中使用；Ray-Ban Display则推出手机自拍建模、纯语音驱动的Hologram。需要注意的是，首发的Hologram是立体视频流而不是体积式，只有正面视角，Meta表示之后会演进为真正的6DoF。Google在2025年12月为Galaxy XR推出Likeness：手机扫脸建模、头显摄像头驱动，以虚拟摄像头的方式接入Meet和Zoom，空间会议能力仍在开发中。\n\n企业协作平台层明显在“退潮与再定位”。微软Mesh在2024年1月于Teams中GA，2025年12月下线，转向面向大型活动的immersive events；分析师调研显示，约400家企业中只有16.5%计划在2024年底前投资VR/AR。Meta在2026年1月停止Horizon Workrooms，VR版Horizon Worlds于2026年6月15日从Quest移除，Hyperscape的共享功能也随之取消。与此相对，UC厂商选择了低摩擦的接入方式：Cisco用Room Bar Pro的双目相机向Vision Pro输出立体空间视频（2024）；Zoom在Vision Pro上支持Persona，并在2025年推出写实AI化身；Persona、Likeness、Hologram也都以虚拟摄像头的方式兼容Zoom、Teams、Webex等应用。NVIDIA走的是“单摄像头AI升维”：Live 3D Portrait（SIGGRAPH 2023）从单张RGB图像前馈预测triplane NeRF，在消费级硬件上达到24 fps，之后以Maxine 3D的形式与Looking Glass光场显示器联合演示。\n\n体积视频产业在2025–2026年整体转向4DGS。4DViews在HOLOSYS+中加入网格与Gaussian splatting双导出（SIGGRAPH 2025），2026年又推出支持SPZ/PLY的Unity插件。Gracia在2026年3月上线4DGS串流，码率从17 Mbps（每帧1.5万个splat）到75 Mbps（每帧12万个splat）不等，在Quest 3/Pico 4 Ultra上可跑到72 FPS，2026年6月又推出Vision Pro应用。4DV.ai在2025年发布WebXR 6DoF演示，2026年与OBSBOT展示了60台4K/60fps相机组成的阵列。heise的综述指出，360°人物采集通常需要40–60台相机，便携方案可以低到约10台iPhone。体育场景中，Peripheral把所需相机从100多台降到约32台。场景侧，Meta Hyperscape Capture（2025年9月）让用户用Quest 3扫描房间5–10分钟，经云端1–8小时处理后生成可漫游的splat场景，每个实例最多8人；Apple的SHARP（ICLR 2026）能在1秒内从单张照片前馈生成具有度量尺度的3D Gaussians。显示端方面，Proto的箱式“全息”终端已进入50多个体育场馆，Looking Glass的Hololuminescent Display以2,000美元起的价格把2D视频呈现为有纵深的影像。\n\n标准方面，MPEG的V3C（ISO/IEC 23090-5）家族已覆盖V-PCC、MIV和V-DMC。MIV第二版在2025年初达到FDIS，新增MIV Simple MPI profile；V-DMC在2025年7月、V3C第四版在2025年10月分别达到FDIS。针对Gaussian splat，MPEG在2026年初把V-PCC的GSC修正案推进到CDAM，2026年第二季度又把G-PCC修正案推进到CDAM，形成“视频式”和“几何式”两条标准化路径。化身交换格式ARF（ISO/IEC 23090-39）在2026年8月达到FDIS。传输层面，IETF发布了V3C的RTP载荷格式RFC 10034。Khronos在2026年2月发布glTF扩展KHR_gaussian_splatting的候选规范，其GitHub仓库目前标注为已批准；配套的压缩格式是Niantic开源的SPZ，体积约为PLY的1/10。OpenXR 1.1（2024）和Spatial Entities扩展（2025）统一了空间锚点等运行时能力，但目前还没有跨厂商的化身/面部通话标准。\n\n综合来看，截至2026年9月的产业现状（SOTA）是：能买到的真正裸眼6DoF 3D通话只有Beam（仅1:1、约2.5万美元、6相机+AI重建、50 Mbps链路）；用户规模最大的是头显/眼镜端写实化身，但多数仍以2D或立体视频的形式与现有会议生态互通；4DGS串流已进入十几到几十Mbps的可用区间。两篇锚点论文分别对应“稀疏多视角实时前馈视图合成”（Quark：8视角，1080p@30fps，A100）和“在线、多视角且时间一致的3D视频合成”（Ha et al.）。这两项能力，正是上述产品从1:1走向多方、从立体视频走向真6DoF时所缺的核心技术模块。"}, {"b": "sec", "h": "子主题", "id": "subtopics"}, {"b": "h3", "t": "裸眼光场3D视频通话（Starline→Beam）", "en": "Glasses-free Light-field 3D Calling (Starline to Beam)"}, {"b": "p", "t": "以Google为代表的“免佩戴”路线：头部追踪光场/自由立体大屏，加上嵌入式多相机和AI体积重建，目标是1:1真人尺寸、眼神接触和运动视差。演进过程是：2021年TOG系统（专用彩色+深度采集）→2023年小型化原型（少量标准相机+AI）→2025年Beam/HP Dimension（6相机、65英寸8K光场屏、60 fps、24,999美元）→2026年六国出货、共享电话亭、群组会议实验和Zoom原生客户端。瓶颈在于成本、多方3D和接收端算力。"}, {"b": "p", "t": "Project Starline: A High-Fidelity Telepresence System；Google Beam: Our AI-first 3D video communication platform；HP Dimension with Google Beam (InfoComm 2025)；Google Beam technology specifications；A new experiment brings better group meetings to Google Beam；Google Beam expands with new regions, partners, and customers", "label": "代表"}, {"b": "h3", "t": "头显/眼镜端写实化身与空间通话", "en": "Photoreal Avatars & Spatial Calling on Headsets/Glasses"}, {"b": "p", "t": "用头显/眼镜的传感器驱动预先建好的写实化身，覆盖Apple Persona/spatial Personas、Meta Codec Avatars→Hologram和Google Likeness。表示从网格/神经纹理转向3D Gaussians；建模从采集棚转向手机扫描；驱动方式从面部追踪扩展到语音。传输上多以2D或立体视频与现有通话应用互通，多人真6DoF仍在演进中。"}, {"b": "p", "t": "Spatial Personas beta for Apple Vision Pro (visionOS 1.1)；visionOS 26: Personas with volumetric rendering and shared spatial experiences；Relightable Gaussian Codec Avatars；URAvatar: Universal Relightable Gaussian Codec Avatars；SqueezeMe: Mobile-Ready Distillation of Gaussian Full-Body Avatars；Meta VR Glasses and Hologram calling (Connect 2026)；Android XR Likeness photorealistic avatars", "label": "代表"}, {"b": "h3", "t": "企业协作平台与生态变迁", "en": "Enterprise UC Platforms & Ecosystem Shifts"}, {"b": "p", "t": "UC与平台厂商的战略变化：卡通化身式的“元宇宙会议”（Mesh、Workrooms、VR版Horizon Worlds）在2025–2026年相继关停；Zoom、Cisco、NVIDIA则分别以原生接入Beam/Vision Pro、立体空间视频、单摄像头AI升维等低摩擦方式介入。微软的Holoportation作为经典原型，是这一领域的参照基线。"}, {"b": "p", "t": "Holoportation: Virtual 3D Teleportation in Real-time；Microsoft retires Mesh app, launches immersive events for Teams；Meta shutters VR Horizon Worlds after discontinuing Horizon Workrooms；Zoom for Google Beam (Zoom Spaces, 2026)；Cisco Spatial Meetings for Apple Vision Pro；Real-Time Radiance Fields for Single-Image Portrait View Synthesis (Live 3D Portrait)", "label": "代表"}, {"b": "h3", "t": "空间捕捉与场景共享", "en": "Space Capture & Scene Sharing"}, {"b": "p", "t": "目标是“把地点传过去”：一是以Meta VR-NeRF→Hyperscape为代表的房间级高保真捕捉和多人共享，二是Apple SHARP这类单图前馈3DGS生成。它们为远程呈现提供共同在场的环境层，但目前多为静态场景，重建还需要云端数小时处理，商业模式也不稳定（Hyperscape的共享功能已随Horizon Worlds调整而取消）。"}, {"b": "p", "t": "VR-NeRF: High-Fidelity Virtualized Walkable Spaces；Meta Horizon Hyperscape Capture (Early Access)；Horizon Hyperscape adds invites and local rendering；Sharp Monocular View Synthesis in Less Than a Second", "label": "代表"}, {"b": "h3", "t": "体积视频工作室与4DGS创业公司", "en": "Volumetric Capture Studios & 4DGS Startups"}, {"b": "p", "t": "体积视频工作室和创业公司在2025–2026年集体转向4D Gaussian splatting：4DViews做网格/GS双导出，Gracia和4DV.ai做串流与头显播放，Peripheral面向体育场景减少相机数量；显示端有Proto全息箱和Looking Glass HLD。关键行业量级：360°采集需40–60台相机，串流码率17–80 Mbps，头显播放72 FPS。"}, {"b": "p", "t": "4DViews HOLOSYS+ adds Gaussian Splatting export；Gracia: moving volumetric captures are now streamable；Volumetric videos overcome a major hurdle on the path to the mainstream；4DV.ai WebXR demo of 6DoF volumetric video；Peripheral Labs brings volumetric video to live sports；Proto hologram expands in India (Proto Epic / Luma / M)；Looking Glass Hololuminescent Display (HLD)", "label": "代表"}, {"b": "h3", "t": "标准与交换格式", "en": "Standards & Interchange Formats"}, {"b": "p", "t": "MPEG的V3C家族（V-PCC、MIV、V-DMC）日趋完善，并开始覆盖Gaussian splat（V-PCC和G-PCC两条GSC修正案）和化身（ARF）。IETF RFC 10034定义了V3C的RTP承载。Khronos的glTF扩展KHR_gaussian_splatting和Niantic的SPZ，分别成为3DGS交换的正式标准和事实标准。OpenXR 1.1与Spatial Entities统一了XR运行时，但还没有化身通话标准。"}, {"b": "p", "t": "MPEG Immersive Video Coding Standard；An overview of ongoing point cloud compression standardization activities: video-based (V-PCC) and geometry-based (G-PCC)；MPEG Gaussian Splat Coding: V-PCC and G-PCC amendments reach CDAM；MPEG 155th meeting: Avatar Representation Format (ISO/IEC 23090-39) to FDIS；KHR_gaussian_splatting glTF 2.0 extension；SPZ: open-source compressed file format for 3D Gaussian splats；RFC 10034: RTP Payload Format for Visual Volumetric Video-Based Coding (V3C)", "label": "代表"}, {"b": "sec", "h": "时间线", "id": "timeline"}, {"b": "timeline", "items": [[2016, "微软Holoportation（UIST 2016）展示多台RGB-D相机实时全身重建+AR/VR双向远程呈现"], [2020, "MPEG V-PCC/G-PCC点云压缩标准化综述发表，体积视频“传几何”路线的标准框架成形"], [2021, "Project Starline亮相，论文发表于ACM TOG（SIGGRAPH Asia 2021），首次证明3D远程呈现优于2D视频会议；MIV标准综述发表于Proc. IEEE"], [2023, "Starline新原型（5月）：改用少量标准相机+AI，体积缩小到平板电视大小"], [2023, "NVIDIA在SIGGRAPH 2023演示单摄像头AI 3D视频会议（Live 3D Portrait，24 fps）；Meta在Lex Fridman访谈中展示写实Codec Avatars（9月）；VR-NeRF发表"], [2024, "微软Mesh在Teams中GA（1月26日）；Vision Pro发售、Persona beta上线（2月2日，3,499美元起）；spatial Personas上线（4月2日，最多5人）"], [2024, "OpenXR 1.1发布（4月15日）；Google宣布与HP合作量产Starline（5月）；Niantic开源SPZ（9月）；Cisco推出面向Vision Pro的Spatial Meetings（10月）；Quark（SIGGRAPH Asia 2024）实现8视角1080p@30fps实时NVS"], [2025, "MIV第二版达到FDIS，新增Simple MPI profile，ARF进入CD（MPEG第149次会议）；Google Beam发布（5月20日）；HP Dimension售价24,999美元（6月InfoComm）；Ha et al.发表于CVPR 2025"], [2025, "V-DMC达到FDIS（7月）；4DViews在SIGGRAPH 2025推出GS导出；visionOS 26体积渲染Persona正式推送（9月15日）；Hyperscape Capture开放Early Access（9月17日）；V3C第四版达到FDIS（10月）"], [2025, "微软下线Mesh、转向immersive events（12月）；Android XR Likeness beta上线（12月）；Gracia完成170万美元融资（12月）"], [2026, "Meta停止Horizon Workrooms（1月）；Khronos发布KHR_gaussian_splatting候选规范（2月3日）；MPEG把V-PCC的Gaussian Splat Coding修正案推进到CDAM（第153次会议）；Gracia上线4DGS串流（3月）"], [2026, "SPZ 4发布（5月）；Beam在I/O 2026推出群组会议实验（5月20日）；MPEG把G-PCC的GSC修正案推进到CDAM（第154次会议）；VR版Horizon Worlds从Quest移除（6月15日）；visionOS 27提供系统级Gaussian splat渲染"], [2026, "ARF（ISO/IEC 23090-39）达到FDIS（第155次会议）；IETF RFC 10034发布；Beam出货六国并进驻Industrious（9月23日）；Meta Connect 2026发布VR Glasses与Hologram通话（9月23日）"]]}, {"b": "sec", "h": "趋势", "id": "trends"}, {"b": "ul", "items": ["采集端从主动深度传感走向“少量RGB相机+AI重建”：Starline 2021用多套彩色+深度采集，2023年改为少量标准相机，Beam用6相机加AI体积模型；消费端进一步降到单相机或手机扫描（Likeness、URAvatar、Meta Hologram的自拍采集、NVIDIA单摄像头triplane）。", "表示层向3D Gaussian收敛：从Codec Avatars（RGCA、URAvatar、SqueezeMe）、visionOS 26 Persona（据媒体报道）和visionOS 27系统级GS渲染，到Hyperscape、4DViews、Gracia、4DV.ai，再到glTF KHR_gaussian_splatting、SPZ和MPEG GSC，整条产业链都在转向3DGS。", "“感知上的3D”与“几何上的6DoF”开始分化：Cisco输出立体空间视频，Meta Hologram首发是只有正面的立体视频，Beam群组会议中的远端参会者是被空间化的2D画面。与此同时，生成式/语音驱动的化身（Ray-Ban Display Hologram、延迟低于15 ms的音频驱动面部动画）用先验来换取更低的传感需求。", "互通优先于封闭平台：Beam原生支持Zoom/Meet，并与Teams/Webex做2D互通；Persona、Likeness、Hologram以虚拟摄像头或原生集成的方式进入Zoom、Teams、WhatsApp；Zoom for Google Beam将在2026年下半年上线。", "通用“元宇宙会议”退潮，市场聚焦高价值场景：Mesh下线，Workrooms和VR版Horizon Worlds关停；Beam定位于高管/客户1:1会议和共享电话亭（Industrious），并用会议回忆提升28%、非语言行为增加39%、联结感提升50%等内部研究数据论证ROI。", "体积视频串流进入可用码率区间：Gracia为17–75 Mbps，Beam要求每端50 Mbps对称带宽；4DGS开始采用“关键帧+运动增量”的编解码器式压缩；传输标准同步推进（V3C第四版、V-DMC、RFC 10034、ARF）。", "3D终端与生成式AI界面融合：Google在Beam Lab测试真人尺寸的AI代理，Proto提供AI全息数字人，Meta推出Muse实时化身模型。远程呈现终端正在同时成为“与AI面对面”的界面。"]}, {"b": "sec", "h": "开放问题", "id": "open-problems"}, {"b": "ul", "items": ["多方3D：Beam的3D通话仍限于1:1，群组方案只是把2D远端画面“空间化”。在N方会话里为每位观看者合成一致的6DoF视图，同时控制接近N²增长的带宽和算力，目前还没有产品级答案。", "端侧算力与功耗：Quark要在A100上才能做到1080p@30fps，Ha et al.在V100上约100 ms/帧，而Beam整机功耗达600 W，眼镜设备只有百克级重量。把高质量实时NVS压到NPU或移动GPU上（可参考SqueezeMe的蒸馏思路）是关键。", "时间一致性与难例：稀疏视角下的闪烁，头发、镜面和透明材质，以及遮挡区域都是难点（Quark逐帧独立重建、Ha et al.在镜面区域会失效）；4DGS体积视频也普遍存在帧间抖动。", "面向交互时延的3D码流与传输：MPEG GSC目前以V-PCC/G-PCC修正案的形式推进，MIV虽能承载多视角+深度，但缺少针对<100 ms双向会话的低延迟profile、码率控制和拥塞自适应实践；接收端合成范式也还没有成熟的端到端规范。", "真实性与信任：语音驱动或生成式补全的化身，以及“AI体积模型”，都可能幻觉出没有被拍到的内容。如何度量保真度、标识生成内容、防止冒用（深度伪造），并保护人脸等生物特征数据，是企业部署的前提。", "评测体系：现有成效数据大多是厂商内部研究（如Beam的会议回忆提升28%、非语言行为增加39%、联结感提升50%），缺少独立、可复现的presence/QoE基准；只看PSNR/LPIPS这类客观指标，也无法反映沟通质量。", "跨平台化身互通：ARF刚达到FDIS，OpenXR还没有化身/面部通话标准；Persona、Codec Avatar、Likeness之间无法直接互通，只能退化为2D虚拟摄像头。", "成本与形态：约2.5万美元、254磅、600 W的终端难以普及；廉价的裸眼显示（如Looking Glass HLD）缺少头部追踪和真实视差；眼镜形态目前还做不到体积式通话。"]}, {"b": "sec", "h": "与重点论文的关系", "id": "relation"}, {"b": "p", "t": "Quark（Google，SIGGRAPH Asia 2024）在单块A100上，从8路间距至多约30 cm的输入视图出发，以1080p、30 fps完成实时重建和渲染（二者合计约33 ms/帧），采用分层深度图加Transformer多视角聚合的feed-forward设计。这个问题设定和Google Beam的产品形态高度吻合：Beam用嵌在屏幕边框里的6台相机采集，由“AI体积视频模型”在接收端合成双眼视图，并以60 fps显示；Starline在2023年也正是从专用深度传感器转向了“少量标准相机+AI”。需要强调的是，Google的公开资料并没有确认Beam采用了Quark。不过Quark自己点出的限制——需要8–16个近距离视角、逐帧独立重建而没有时间一致性、依赖数据中心级GPU——恰好对应产品侧的工程挑战：Beam整机功耗600 W、需要云端和端侧协同推理、要求每端50 Mbps对称带宽。在标准层面，Quark的分层深度/MPI式表示与MIV的MVD/MPI profile（第二版新增了Simple MPI profile）同属“多视角视频+深度→接收端视图合成”的范式，可以复用现有的2D视频编解码器和RTP管线。\n\nHa et al.（KAIST+Meta，CVPR 2025）用渐进式深度细化，加上在目标视图图像空间中累积的TSDF，来引导预训练的融合网络，专门解决多视角之间和时间上的闪烁问题。在4路输入下，它在V100上约100 ms/帧（用TensorRT加速后融合阶段为23 ms），并明确把视频会议和AR/VR作为目标应用。它对应的产业缺口有三个。第一，Meta 2026年发布的Hologram首发只有正面立体视频，官方计划“演进为真正的6DoF”；要从头显或多相机实时生成时间稳定的自由视点视频，这正是必经之路。第二，4DViews、Gracia、4DV.ai等4DGS体积视频普遍面临帧间闪烁和码率压力，TSDF这类全局几何约束可以作为一致性先验。第三，Beam的群组会议如果要把远端参会者从“空间化2D”升级为真正的3D，也必须在更少、更不规则的相机配置下保持跨视角和跨时间的一致性。\n\n总体来看，产业已分化为两种传输范式：一种是“发送端重建，传几何/Gaussian”（V-PCC/G-PCC GSC、Gracia串流、Hyperscape），另一种是“只发少量视频，接收端做神经合成”（Beam、MIV、NVIDIA单摄像头方案）。两篇锚点论文都属于后者。这一范式的优势是带宽可控、能兼容现有视频基础设施，劣势是接收端算力要求高、一致性难保证。它能否从数据中心级GPU走进会议室终端乃至眼镜，将取决于端侧NPU能力、蒸馏/量化技术，以及面向低延迟会话的“视图+深度”码流规范。"}, {"b": "sec", "h": "本方向论文", "id": "works"}, {"b": "refs", "items": [{"u": "works/papers/database.html?area=industry", "t": "在论文库中查看本方向的 45 条论文"}]}], "toc": false, "series": {"prev": {"k": "area-eval"}, "up": {"u": "works/areas/index.html", "t": "Sub areas 目录"}}}}</script>
+<script>
+(function () {
+  "use strict";
+  // ================= lib: DOM, text and math helpers shared by every page =================
+  // A page script defines rich(text) (inline cross-links); paras() and eqList() call it.
+  var DATA;
+  try { DATA = JSON.parse(document.getElementById("data").textContent); } catch (e) { DATA = {}; }
+  var meta = DATA.meta || {};
+
+  // ---------- DOM helpers: all text goes through textContent; external links are https-only ----------
+  function safeUrl(u) { if (typeof u !== "string") return null; var s = u.trim(); return /^https:\/\/[^\s"'<>]+$/i.test(s) ? s : null; }
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "class") n.className = v;
+      else if (k === "text") n.textContent = String(v);
+      else if (k === "href") { var u = safeUrl(v); if (u) { n.setAttribute("href", u); n.setAttribute("target", "_blank"); n.setAttribute("rel", "noopener noreferrer"); } }
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c === null || c === undefined || c === false) return; n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return n;
+  }
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function sv(tag, attrs, kids) {
+    var n = document.createElementNS(SVGNS, tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "text") n.textContent = String(v);
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c) n.appendChild(c); });
+    return n;
+  }
+  function arr(x) { return Array.isArray(x) ? x : []; }
+  function str(x) { return typeof x === "string" ? x : (x === null || x === undefined ? "" : String(x)); }
+  function paras(text) { return str(text).split(/\n\s*\n/).map(function (t) { return t.trim(); }).filter(Boolean).map(function (t) { return el("p", null, rich(t)); }); }
+  function link(title, url) { return safeUrl(url) ? el("a", { href: url, text: title }) : el("span", { text: title }); }
+  function ul(items, map) { return el("ul", { class: "plain" }, arr(items).map(function (x) { return el("li", null, [map ? map(x) : str(x)]); })); }
+  function fmtCit(n) { n = Number(n); if (!(n >= 0)) return "—"; if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k"; return String(n); }
+
+  // ---------- math (MathJax, typeset lazily) ----------
+  var mathReady = false, mathQueue = [];
+  function mathUsable() { return !!(window.MathJax && typeof window.MathJax.typesetPromise === "function"); }
+  function flushMath() { mathReady = true; var q = mathQueue.slice(); mathQueue = []; q.forEach(typeset); }
+  window.__atlasMathReady = flushMath;
+  // MathJax may finish loading before this script runs (cached/async), so also poll for it.
+  var mathPoll = setInterval(function () { if (mathUsable()) { clearInterval(mathPoll); flushMath(); } }, 200);
+  setTimeout(function () { clearInterval(mathPoll); }, 30000);
+  function typeset(node) {
+    if (!node) return;
+    if (!mathReady && mathUsable()) mathReady = true;
+    if (!mathReady || !mathUsable()) { mathQueue.push(node); return; }
+    try { window.MathJax.typesetPromise([node]).catch(function () { /* leave raw TeX visible */ }); } catch (e) { /* leave raw TeX visible */ }
+  }
+  function eqList(eqs) {
+    eqs = arr(eqs).filter(function (q) { return q && str(q.tex).trim(); });
+    if (!eqs.length) return null;
+    return el("div", { class: "eqs" }, eqs.map(function (q) {
+      return el("div", { class: "eq" }, [el("div", { class: "math-block", text: "\\[" + str(q.tex) + "\\]" }), q.explain_zh ? el("p", null, rich(q.explain_zh)) : null]);
+    }));
+  }
+  document.addEventListener("toggle", function (e) { var t = e.target; if (t && t.tagName === "DETAILS" && t.open) typeset(t); }, true);
+
+  // ================= frame (Tufte site): links, notes, hover previews, top bar, theme =================
+  var SITE = DATA.site || {};
+  var ROOT = str(SITE.root);
+  var XREF = DATA.xref || {};
+  function hasX(key) { return Object.prototype.hasOwnProperty.call(XREF, key); }
+  // Custom page parts (search tools, diagrams, charts) register here; blocks.js calls them for {"b": "slot"} blocks.
+  var SLOTS = {};
+
+  // ---------- internal links: urls are relative to the site root; pages sit at different depths ----------
+  var SAFE_PATH = /^[A-Za-z0-9][A-Za-z0-9._\/-]*(\?[A-Za-z0-9=&._-]+)?(#[A-Za-z0-9._-]+)?$/;
+  function relHref(u) {
+    u = str(u);
+    if (/^#[A-Za-z0-9._-]+$/.test(u)) return u;
+    if (!SAFE_PATH.test(u)) return null;
+    var cut = u.indexOf("#"), path = cut < 0 ? u : u.slice(0, cut);
+    if (path === SITE.path) return cut < 0 ? "#" : u.slice(cut);
+    return ROOT + u;
+  }
+  function pageLink(u, text, cls) {
+    var h = relHref(u);
+    if (!h) return el("span", { class: cls || null, text: text });
+    var a = el("a", { class: cls || null, text: text });
+    a.setAttribute("href", h);
+    return a;
+  }
+  // A link to a known entry (concept, topic, paper, step...). data-xref drives the hover preview.
+  function xlink(key, text, cls) {
+    if (!hasX(key)) return text ? document.createTextNode(text) : null;
+    var x = XREF[key], a = pageLink(x.u, text || x.n || x.t, cls);
+    a.setAttribute("data-xref", key);
+    return a;
+  }
+
+  // Concept / topic ids mentioned in prose ("见 g-pinhole") become links labelled with the entry's short name.
+  var ID_RE = /(a-[a-z0-9]+(?:-[a-z0-9]+)*|[fgdrilnv]-[a-z0-9]+)/g;
+  var CJK = /[　-〿㐀-鿿＀-￯]/;
+  function rich(text) {
+    var s = str(text), out = [], last = 0, m;
+    ID_RE.lastIndex = 0;
+    while ((m = ID_RE.exec(s)) !== null) {
+      var id = m[1], prev = m.index > 0 ? s.charAt(m.index - 1) : "", next = s.charAt(m.index + id.length);
+      var key = hasX("concept-" + id) ? "concept-" + id : (hasX("adv-" + id) ? "adv-" + id : null);
+      if (!key || /[A-Za-z0-9_\-]/.test(prev) || /[A-Za-z0-9_]/.test(next)) continue;
+      // The prose spaces ids off from Chinese text; a Chinese label needs no such space.
+      var before = s.slice(last, m.index);
+      if (/ $/.test(before) && CJK.test(before.charAt(before.length - 2))) before = before.slice(0, -1);
+      if (before) out.push(document.createTextNode(before));
+      out.push(xlink(key, null, "xref"));
+      last = m.index + id.length;
+      if (s.charAt(last) === " " && CJK.test(s.charAt(last + 1))) last++;
+    }
+    if (last < s.length) out.push(document.createTextNode(s.slice(last)));
+    return out;
+  }
+  function lines(text) { return str(text).split(/\n+/).map(function (t) { return t.trim(); }).filter(Boolean).map(function (t) { return el("p", null, rich(t)); }); }
+
+  // ---------- side notes (numbered) and margin notes (unnumbered); on phones they fold behind a toggle ----------
+  var noteSeq = 0;
+  function sidenote(kids) {
+    var id = "sn-" + (++noteSeq);
+    return el("span", { class: "note-wrap" }, [
+      el("label", { for: id, class: "margin-toggle sidenote-number", "aria-label": "旁注" }),
+      el("input", { type: "checkbox", id: id, class: "margin-toggle" }),
+      el("span", { class: "sidenote" }, kids)
+    ]);
+  }
+  function marginnote(kids) {
+    var id = "mn-" + (++noteSeq);
+    return el("span", { class: "note-wrap" }, [
+      el("label", { for: id, class: "margin-toggle", "aria-label": "边注", text: "⊕" }),
+      el("input", { type: "checkbox", id: id, class: "margin-toggle" }),
+      el("span", { class: "marginnote" }, kids)
+    ]);
+  }
+  function noteLabel(text) { return el("span", { class: "note-label", text: text }); }
+
+  // ---------- article scaffolding ----------
+  var main = document.getElementById("main");
+  var art = main.querySelector("article");
+  function section(id, title, kids) {
+    var s = el("section", { id: id }, [title ? el("h2", { text: title }) : null].concat(kids));
+    art.appendChild(s);
+    return s;
+  }
+  function articleHead(o) {
+    var crumbs = el("nav", { class: "crumbs", "aria-label": "位置" });
+    arr(SITE.crumbs).forEach(function (c, i) {
+      if (i) crumbs.appendChild(el("span", { class: "sep", text: "›", "aria-hidden": "true" }));
+      crumbs.appendChild(c[1] ? pageLink(c[1], c[0]) : el("span", { text: c[0] }));
+    });
+    art.appendChild(el("header", { class: "art-head" }, [
+      crumbs,
+      el("h1", { text: o.title }),
+      o.subtitle ? el("p", { class: "subtitle", text: o.subtitle }) : null,
+      o.meta ? el("p", { class: "meta" }, o.meta) : null
+    ]));
+    if (o.epigraph) art.appendChild(el("div", { class: "epigraph" }, [el("blockquote", null, [el("p", null, rich(o.epigraph))])]));
+  }
+  // Previous / next in the series, each with its hover preview.
+  function seriesNav(prevKey, nextKey, indexUrl, indexLabel) {
+    var nav = el("nav", { class: "series", "aria-label": "同系列" });
+    nav.appendChild(el("div", { class: "prev" }, prevKey && hasX(prevKey) ? [el("small", { text: "上一篇" }), xlink(prevKey)] : []));
+    nav.appendChild(el("div", { class: "up" }, indexUrl ? [pageLink(indexUrl, indexLabel)] : []));
+    nav.appendChild(el("div", { class: "next" }, nextKey && hasX(nextKey) ? [el("small", { text: "下一篇" }), xlink(nextKey)] : []));
+    art.appendChild(nav);
+  }
+
+  // ---------- hover preview for internal links: mouse (after 300 ms) or keyboard focus; never on touch ----------
+  var tip = null, tipTimer = 0, tipFor = null;
+  function hideTip() {
+    clearTimeout(tipTimer);
+    if (tip) tip.hidden = true;
+    if (tipFor) { tipFor.removeAttribute("aria-describedby"); tipFor = null; }
+  }
+  function showTip(a) {
+    var key = a.getAttribute("data-xref");
+    if (!hasX(key)) return;
+    var x = XREF[key];
+    if (!tip) { tip = el("div", { class: "xtip", id: "xtip", role: "tooltip" }); document.body.appendChild(tip); }
+    tip.textContent = "";
+    if (x.m) tip.appendChild(el("div", { class: "xt-m", text: x.m }));
+    tip.appendChild(el("div", { class: "xt-t", text: x.t }));
+    if (x.e) tip.appendChild(el("div", { class: "xt-e", text: x.e }));
+    if (x.s) tip.appendChild(el("p", { class: "xt-s", text: x.s }));
+    tip.hidden = false;
+    var r = a.getClientRects()[0] || a.getBoundingClientRect(), vw = document.documentElement.clientWidth;
+    var w = tip.offsetWidth, h = tip.offsetHeight;
+    var left = Math.max(8, Math.min(r.left, vw - w - 8));
+    var top = r.bottom + 6;
+    if (top + h > window.innerHeight - 8 && r.top - h - 6 > 8) top = r.top - h - 6;
+    tip.style.left = Math.round(left + window.pageXOffset) + "px";
+    tip.style.top = Math.round(top + window.pageYOffset) + "px";
+    a.setAttribute("aria-describedby", "xtip");
+    tipFor = a;
+  }
+  function xrefTarget(e) { return e.target && e.target.closest ? e.target.closest("a[data-xref]") : null; }
+  document.addEventListener("pointerover", function (e) {
+    var a = xrefTarget(e);
+    if (!a || e.pointerType !== "mouse" || a === tipFor) return;
+    clearTimeout(tipTimer);
+    tipTimer = setTimeout(function () { showTip(a); }, 300);
+  });
+  document.addEventListener("pointerout", function (e) {
+    var a = xrefTarget(e);
+    if (!a || (e.relatedTarget && a.contains(e.relatedTarget))) return;
+    hideTip();
+  });
+  document.addEventListener("focusin", function (e) {
+    var a = xrefTarget(e);
+    if (a && a.matches(":focus-visible")) showTip(a);
+  });
+  document.addEventListener("focusout", function (e) { if (xrefTarget(e)) hideTip(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") hideTip(); });
+  window.addEventListener("scroll", function () { if (tipFor && !tipFor.matches(":focus-visible")) hideTip(); }, { passive: true });
+
+  // ---------- top bar: four menus with dropdowns (hover or click on desktop, a folding list on phones) ----------
+  var wide = window.matchMedia("(min-width: 761px)");
+  function setOpen(li, open) {
+    var btn = li.querySelector(".menu-btn");
+    if (open) Array.prototype.forEach.call(li.parentNode.children, function (o) { if (o !== li) setOpen(o, false); });
+    li.classList.toggle("open", open);
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (!open) li._hover = false;
+  }
+  function buildTopbar() {
+    var bar = document.getElementById("topbar");
+    var menus = el("ul", { class: "menus", id: "menus" });
+    arr(SITE.nav).forEach(function (m) {
+      var id = "menu-" + m.key;
+      var btn = el("button", { type: "button", class: "menu-btn", "aria-expanded": "false", "aria-controls": id, text: m.label });
+      var list = el("ul", { class: "drop", id: id }, arr(m.items).map(function (it) {
+        var a = pageLink(it[1], it[0]);
+        if (it[1] === SITE.navItem) a.classList.add("cur");
+        if (it[1] === SITE.path) a.setAttribute("aria-current", "page");
+        return el("li", null, [a]);
+      }));
+      var li = el("li", { class: "menu" + (m.key === SITE.navCur ? " cur" : "") }, [btn, list]);
+      btn.addEventListener("click", function () {
+        // A click on a menu the mouse already opened keeps it open instead of closing it again.
+        if (li._hover) { li._hover = false; return; }
+        setOpen(li, !li.classList.contains("open"));
+      });
+      btn.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowDown") { e.preventDefault(); setOpen(li, true); var f = list.querySelector("a"); if (f) f.focus(); }
+      });
+      li.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse" && wide.matches) { setOpen(li, true); li._hover = true; } });
+      li.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse" && wide.matches) setOpen(li, false); });
+      li.addEventListener("focusout", function (e) { if (wide.matches && !li.contains(e.relatedTarget)) setOpen(li, false); });
+      li.addEventListener("keydown", function (e) { if (e.key === "Escape" && li.classList.contains("open")) { setOpen(li, false); btn.focus(); } });
+      menus.appendChild(li);
+    });
+    var burger = el("button", { type: "button", class: "burger", "aria-expanded": "false", "aria-controls": "menus", text: "Menu" });
+    burger.addEventListener("click", function () {
+      var open = !bar.classList.contains("nav-open");
+      bar.classList.toggle("nav-open", open);
+      burger.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    var themeBtn = el("button", { type: "button", class: "theme-btn" });
+    function darkNow() {
+      var t = document.documentElement.getAttribute("data-theme");
+      return t ? t === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+    function paintThemeBtn() {
+      var dark = darkNow();
+      themeBtn.textContent = dark ? "Light" : "Dark";
+      themeBtn.setAttribute("aria-label", dark ? "切换到浅色" : "切换到深色");
+    }
+    themeBtn.addEventListener("click", function () {
+      var next = darkNow() ? "light" : "dark";
+      var system = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      // Choosing what the system already shows drops the override, so the page follows the system again.
+      if (next === system) document.documentElement.removeAttribute("data-theme");
+      else document.documentElement.setAttribute("data-theme", next);
+      try { if (next === system) localStorage.removeItem("atlas-theme"); else localStorage.setItem("atlas-theme", next); } catch (e) { /* storage unavailable */ }
+      paintThemeBtn();
+    });
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintThemeBtn);
+    paintThemeBtn();
+    bar.appendChild(el("div", { class: "bar-in" }, [pageLink("index.html", SITE.brand || "", "brand"), el("nav", { class: "site-nav", "aria-label": "站点导航" }, [menus]), themeBtn, burger]));
+    document.addEventListener("click", function (e) {
+      if (!bar.contains(e.target)) Array.prototype.forEach.call(menus.children, function (li) { setOpen(li, false); });
+    });
+  }
+
+  function finishPage() {
+    buildTopbar();
+    var foot = document.getElementById("site-foot");
+    if (foot) foot.appendChild(el("p", null, [pageLink("index.html", SITE.brand || ""), SITE.date ? " · 内容截至 " + SITE.date : ""]));
+    typeset(main);
+    // Deep links (#id): the page is rendered by script, so jump once it exists and again after fonts settle.
+    var h = window.location.hash ? window.location.hash.slice(1) : "";
+    if (h && /^[A-Za-z0-9._~-]+$/.test(h) && document.getElementById(h)) {
+      var moved = false;
+      ["wheel", "touchstart", "keydown", "mousedown"].forEach(function (ev) { window.addEventListener(ev, function () { moved = true; }, { once: true, passive: true }); });
+      var settle = function () { var t = document.getElementById(h); if (t && !moved) t.scrollIntoView({ block: "start" }); };
+      settle();
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { window.requestAnimationFrame(settle); });
+      [400, 1200, 2500].forEach(function (ms) { setTimeout(settle, ms); });
+    }
+  }
+
+  // ================= article: a page composed as blocks in routes.py =================
+  (function () {
+    var PG = DATA.page || {};
+    var H = PG.head || {};
+    if (PG.id) art.id = PG.id;
+
+    // A link dict from routes.py: {k} an entry with hover preview, {u, t} a page of this site, {url, t} an external page.
+    function part(x) {
+      if (x === null || x === undefined) return null;
+      if (typeof x === "string") return x;
+      if (x.k) return xlink(x.k, x.t || null);
+      if (x.u) return pageLink(x.u, x.t || x.u);
+      if (x.url) return link(x.t || x.url, x.url);
+      return x.t ? str(x.t) : null;
+    }
+    function noteNodes(n) {
+      var kids = [noteLabel(n.label)];
+      if (n.t) kids = kids.concat(rich(n.t));
+      arr(n.links).forEach(function (l, i) { if (i) kids.push(el("br")); kids.push(part(l)); });
+      return kids;
+    }
+    function runIn(label) { return el("b", { class: "run-in", text: label + "：" }); }
+    function multiline(text) {
+      var out = [];
+      str(text).split("\n").forEach(function (line, i) { if (i) out.push(el("br")); out = out.concat(rich(line)); });
+      return out;
+    }
+
+    // ---------- head ----------
+    var meta = [];
+    if (arr(H.prereqs).length) {
+      meta.push(marginnote([noteLabel("阅读前需要")].concat(arr(H.prereqs).map(function (p, i) {
+        var a = part(p);
+        return i ? el("span", null, ["；", a]) : a;
+      }))));
+    }
+    var sep = false;
+    arr(H.meta).concat(H.minutes > 1 ? ["约 " + H.minutes + " 分钟"] : []).forEach(function (x) {
+      var n = part(x);
+      if (!n || (typeof n === "string" && !n.trim())) return;
+      if (sep) meta.push(" · ");
+      meta.push(n);
+      sep = !(typeof x === "string" && /：$/.test(x));
+    });
+    articleHead({ title: H.title, subtitle: H.sub, meta: meta.length ? meta : null, epigraph: H.epigraph });
+    if (str(H.lede).trim()) art.appendChild(el("div", { class: "lede" }, paras(H.lede)));
+
+    // ---------- blocks ----------
+    function heading(tag, b) {
+      var title = b.url && safeUrl(b.url) ? link(b.t, b.url) : (b.k ? part({ k: b.k, t: b.t }) : str(b.t));
+      var h = el(tag, { id: b.id || null }, [title]);
+      if (b.sn) h.appendChild(sidenote(noteNodes(b.sn)));
+      if (b.en) h.appendChild(el("span", { class: "en", text: b.en }));
+      if (b.tag) h.appendChild(el("span", { class: "used", text: b.tag }));
+      return h;
+    }
+    function withNotes(nodes, b) {
+      if (nodes.length && b.mn) nodes[0].insertBefore(marginnote(noteNodes(b.mn)), nodes[0].firstChild);
+      if (nodes.length && b.label) nodes[0].insertBefore(runIn(b.label), nodes[0].firstChild);
+      return nodes;
+    }
+    function listItem(x) {
+      if (typeof x === "string") return el("li", null, rich(x));
+      return el("li", null, (x.label ? [runIn(x.label)] : []).concat(rich(x.t)));
+    }
+    function refsList(items, cls) {
+      var left = items.some(function (x) { return x.left; });
+      return el("ul", { class: "refs " + (cls || "") + (left ? "" : " noleft") }, items.map(function (x) {
+        var body = [x.k || x.u || x.url ? part(x) : el("span", { class: "plain-t", text: x.t })];
+        if (x.tag) body.push(el("span", { class: "used", text: x.tag }));
+        if (x.sub) body.push(el("div", { class: "en", text: x.sub }));
+        if (str(x.gloss).trim()) body.push(el("div", { class: "gloss" }, multiline(x.gloss)));
+        var kids = left ? [el("span", { class: /^\d{4}$/.test(str(x.left)) ? "yr" : "kind", text: str(x.left) })] : [];
+        return el("li", { id: x.id || null }, kids.concat([el("div", null, body)]));
+      }));
+    }
+    var TY = { book: "教材", course: "课程", paper: "论文", tutorial: "教程", code: "代码", video: "视频", blog: "文章" };
+    function tocGroups(groups, level) {
+      var out = [];
+      arr(groups).forEach(function (g) {
+        if (g.h) out.push(el(level, { class: "toc-h" }, [g.k || g.u ? part({ k: g.k, u: g.u, t: g.h }) : g.h]));
+        if (str(g.lede).trim()) out.push(el("p", { class: "toc-lede" }, rich(g.lede)));
+        out.push(el("ol", { class: "toc" }, arr(g.items).map(function (it) {
+          return el("li", null, [
+            el("div", { class: "toc-t" }, [part({ k: it.k, u: it.u, t: it.t }), it.en ? el("span", { class: "en", text: it.en }) : null,
+              it.meta ? el("span", { class: "toc-meta", text: it.meta }) : null]),
+            str(it.s).trim() ? el("p", { class: "toc-s", text: it.s }) : null
+          ]);
+        })));
+      });
+      return out;
+    }
+    function cell(tag, c) { return el(tag, null, c && typeof c === "object" ? [part(c)] : rich(c)); }
+
+    var box = null;
+    function cur() { if (!box) { box = el("section"); art.appendChild(box); } return box; }
+    function render(b) {
+      switch (b.b) {
+        case "p": return withNotes(paras(b.t), b);
+        case "lines": return withNotes(lines(b.t), b);
+        case "h3": return [heading("h3", b)];
+        case "note": return [el("p", { class: "note", text: b.t })];
+        case "ul": case "ol": return [el(b.b, null, arr(b.items).map(listItem))];
+        case "eqs": return [eqList(b.eqs)];
+        case "qa": return [el("p", { class: "quiz-h", text: "自测" }), el("ol", { class: "quiz" }, arr(b.items).map(function (q) {
+          return el("li", null, [el("p", null, rich(q.q)), el("details", null, [el("summary", { text: "答案" }), el("p", null, rich(q.a))])]);
+        }))];
+        case "res": return [refsList(arr(b.items).map(function (r) {
+          return { left: TY[r.type] || r.type || "", url: r.url, t: r.title, gloss: r.note_zh };
+        }))];
+        case "refs": return [refsList(arr(b.items), b.cls)];
+        case "toc": return tocGroups(b.groups, cur().querySelector("h2") ? "h3" : "h2");
+        case "table": return [el("div", { class: "table-wrap" + (b.wide ? " fullwidth" : "") }, [el("table", { class: "booktabs" + (b.cls ? " " + b.cls : "") }, [
+          el("thead", null, [el("tr", null, arr(b.head).map(function (h) { return el("th", { text: h }); }))]),
+          el("tbody", null, arr(b.rows).map(function (r) { return el("tr", null, arr(r).map(function (c) { return cell("td", c); })); }))
+        ])])];
+        case "timeline": return [el("ul", { class: "refs timeline" }, arr(b.items).map(function (x) {
+          return el("li", null, [el("span", { class: "yr", text: str(x[0]) }), el("div", null, rich(x[1]))]);
+        }))];
+        case "kv": return [el("table", { class: "kv" }, [el("tbody", null, arr(b.items).map(function (x) {
+          return el("tr", null, [el("th", { text: x[0] }), el("td", null, rich(x[1]))]);
+        }))])];
+        case "mtoc": return [marginToc(b.items)];
+        case "slot": return typeof SLOTS[b.name] === "function" ? [SLOTS[b.name](b)] : [];
+        default: return [];
+      }
+    }
+    // Long articles: a table of contents at the top of the margin (a folding list on phones).
+    function marginToc(items) {
+      var d = el("details", { class: "mtoc" }, [el("summary", { text: "本文目录" }), el("ol", null, arr(items).map(function (x) { return el("li", null, [part(x)]); }))]);
+      var wide = window.matchMedia("(min-width: 761px)");
+      d.open = wide.matches;
+      return d;
+    }
+    arr(PG.body).forEach(function (b) {
+      if (b.b === "sec") {
+        box = el("section", { id: b.id || null });
+        if (b.h) box.appendChild(heading("h2", { t: b.h, sn: b.sn }));
+        art.appendChild(box);
+        return;
+      }
+      render(b).forEach(function (n) { if (n) cur().appendChild(n); });
+    });
+
+    var S = PG.series || {};
+    if (S.prev || S.next || S.up) {
+      var nav = el("nav", { class: "series", "aria-label": "同系列" });
+      nav.appendChild(el("div", { class: "prev" }, S.prev ? [el("small", { text: "上一篇" }), part(S.prev)] : []));
+      nav.appendChild(el("div", { class: "up" }, S.up ? [part(S.up)] : []));
+      nav.appendChild(el("div", { class: "next" }, S.next ? [el("small", { text: "下一篇" }), part(S.next)] : []));
+      art.appendChild(nav);
+    }
+  })();
+
+  finishPage();
+})();
+</script>
+</body>
+</html>

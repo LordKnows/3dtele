@@ -6,6 +6,7 @@
 <title>对极几何、三角化与单应 · 3D 临场研究图谱</title>
 <meta name="description" content="两台相机看同一个点时，该点在第二张图中只可能出现在一条极线上（x&#x27;ᵀF x = 0）；有了对应点就能三角化出 3D 位置；空间中的一个平面在两张图之间诱导的映射是一个 3×3 单应。">
 <meta name="color-scheme" content="light dark">
+
 <script>
   // Apply a saved light/dark choice before first paint; without one the page follows the system setting.
   try { var t = localStorage.getItem("atlas-theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) { /* storage unavailable */ }
@@ -202,6 +203,122 @@ label.margin-toggle:not(.sidenote-number) { display: none; }
 .refs .gloss { font-family: var(--note); font-size: .88rem; color: var(--ink-2); margin-top: .1rem; }
 .art .refs li + li { margin-top: .75rem; }
 .art .papers li + li { margin-top: .35rem; }
+.refs.noleft li { grid-template-columns: minmax(0, 1fr); }
+.refs.noleft li > * { grid-column: 1; }
+.refs .used { font-family: var(--note); font-size: .82rem; color: var(--muted); margin-left: .5em; }
+.refs.terms .plain-t { font-weight: 600; }
+.refs.terms .en { display: inline; margin-left: .6em; }
+.timeline li { line-height: 1.7; }
+.art .timeline li + li { margin-top: .4rem; }
+
+/* ---------- blocks: lede, run-in labels, notes ---------- */
+.lede { margin-top: 1.6rem; color: var(--ink-2); }
+.run-in { font-weight: 600; color: var(--ink); }
+p.note { font-family: var(--note); font-size: .9rem; color: var(--muted); margin-top: .1rem; }
+h2 .en, h3 .en { font-family: "et-book", var(--serif); font-style: italic; font-weight: 400; color: var(--muted); margin-left: .6em; font-size: .92em; }
+h2 a, h3 a { text-decoration-color: var(--rule); }
+.quiz-h { font-family: var(--note); font-size: .88rem; color: var(--muted); margin-top: 1.4rem; }
+.quiz-h + ol.quiz { margin-top: .2rem; }
+
+/* Index pages: a table of contents instead of a card grid. */
+.art ol.toc { list-style: none; padding-left: 0; margin-top: .4rem; }
+.art ol.toc > li + li { margin-top: .85rem; }
+.toc-t { line-height: 1.55; }
+.toc-t .en { font-family: "et-book", var(--serif); font-style: italic; color: var(--muted); margin-left: .6em; font-size: .95em; }
+.toc-meta { font-family: var(--note); font-size: .82rem; color: var(--muted); margin-left: .7em; white-space: nowrap; }
+.toc-s { font-family: var(--note); font-size: .9rem; line-height: 1.65; color: var(--ink-2); margin-top: .1rem; }
+.toc-lede { font-family: var(--note); color: var(--ink-2); font-size: .95rem; }
+h2.toc-h, h3.toc-h { margin-bottom: .3rem; }
+
+/* Tables: booktabs rules (top, under the header, bottom), no vertical lines, no fills. */
+.table-wrap { overflow-x: auto; margin: 1rem 0; }
+table.booktabs { border-collapse: collapse; width: 100%; font-size: .9rem; line-height: 1.6; border-top: 1.5px solid var(--ink); border-bottom: 1.5px solid var(--ink); }
+table.booktabs th { text-align: left; font-weight: 600; padding: .45rem .7rem .35rem 0; border-bottom: 1px solid var(--ink); white-space: nowrap; vertical-align: bottom; }
+table.booktabs td { padding: .45rem .9rem .45rem 0; vertical-align: top; border-top: 1px solid var(--rule); }
+table.booktabs tbody tr:first-child td { border-top: 0; }
+table.rank td { white-space: nowrap; font-variant-numeric: tabular-nums; }
+table.rank td:nth-child(2) { white-space: normal; }
+table.kv { border-collapse: collapse; margin: .6rem 0; font-size: .95rem; }
+table.kv th { text-align: left; font-weight: 400; color: var(--muted); padding: .25rem 1.2rem .25rem 0; vertical-align: top; min-width: 5em; max-width: 12em; font-family: var(--note); }
+table.kv td { padding: .25rem 0; vertical-align: top; }
+
+/* Long articles: the table of contents sits at the top of the margin. */
+/* It sits in a full-width section, so it floats into the margin without a negative offset. */
+details.mtoc {
+  float: right; clear: right; width: var(--side); margin-right: 0; margin-bottom: 1rem;
+  font-family: var(--note); font-size: .86rem; line-height: 1.55; color: var(--ink-2);
+}
+details.mtoc summary { font-family: var(--serif); font-weight: 600; font-size: .82rem; color: var(--muted); list-style: none; cursor: default; }
+details.mtoc summary::-webkit-details-marker { display: none; }
+.art details.mtoc ol { list-style: none; padding: 0; margin: .3rem 0 0; }
+.art details.mtoc li + li { margin-top: .25rem; }
+details.mtoc a { text-decoration: none; }
+details.mtoc a:hover { text-decoration: underline; }
+
+/* Tools: search and filters with underlined inputs. */
+.tool { margin-top: 1rem; }
+.filters { display: flex; flex-wrap: wrap; gap: .6rem 1.6rem; align-items: baseline; font-family: var(--note); font-size: .92rem; color: var(--muted); }
+.filters label { display: inline-flex; gap: .5rem; align-items: baseline; }
+.filters input, .filters select {
+  font: inherit; color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid var(--rule-2); border-radius: 0;
+  padding: .15rem .1rem; min-width: 7rem;
+}
+.filters input[type="search"] { min-width: 14rem; }
+.filters select { max-width: 16rem; }
+.filters input:focus, .filters select:focus { outline: none; border-bottom-color: var(--accent); }
+.filters select option { background: var(--bg); color: var(--ink); }
+.filters .count { margin-left: auto; font-family: var(--mono); font-size: .8rem; }
+table.gl td.en { font-family: "et-book", var(--serif); width: 20%; }
+table.gl .abbr { color: var(--muted); }
+table.gl td.zh { white-space: nowrap; }
+table.gl td.def { color: var(--ink-2); min-width: 20rem; }
+table.gl td.c { font-size: .85rem; min-width: 9rem; padding-right: 0; }
+table.gl tr:target td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+table.db td.y { font-family: "et-book-osf", var(--serif); white-space: nowrap; }
+table.db td.t { min-width: 16rem; }
+table.db td.t small { display: block; color: var(--muted); font-size: .8rem; line-height: 1.45; margin-top: .15rem; }
+table.db td.tags { min-width: 7rem; font-family: var(--note); font-size: .8rem; color: var(--muted); }
+table.db td.tags span { display: block; }
+table.db .tier.milestone { color: var(--ink); font-weight: 600; }
+table.db td.s { min-width: 18rem; color: var(--ink-2); }
+table.db td.n { min-width: 12rem; font-size: .82rem; color: var(--ink-2); }
+
+/* Figures: the pipeline diagram and the timeline of classic papers, drawn in ink with one accent for interaction. */
+figure { margin: 1.4rem 0; }
+svg a { text-decoration: none; }
+.diagram-wrap, .lanes-wrap { position: relative; overflow-x: auto; }
+svg.diagram { width: 100%; min-width: 760px; height: auto; display: block; font-family: var(--note); }
+svg.diagram .dnode rect { fill: var(--bg); stroke: var(--ink-2); stroke-width: 1; }
+svg.diagram .dnode rect.data { stroke-dasharray: 4 3; }
+svg.diagram .dnode:hover rect, svg.diagram .dnode:focus rect { stroke: var(--accent); stroke-width: 1.5; }
+svg.diagram .dnode:focus { outline: none; }
+svg.diagram text { fill: var(--ink); }
+svg.diagram text.k { font-family: var(--mono); font-size: 10px; fill: var(--muted); }
+svg.diagram text.t { font-family: var(--serif); font-size: 13px; font-weight: 600; }
+svg.diagram text.s { font-size: 11px; fill: var(--ink-2); }
+svg.diagram .dedge { fill: none; stroke: var(--ink-2); stroke-width: 1; }
+svg.diagram .dedge.fb { stroke-dasharray: 4 3; }
+svg.diagram .dhead { fill: var(--ink-2); }
+svg.diagram .dloop { fill: none; stroke: var(--rule-2); stroke-dasharray: 2 3; }
+svg.diagram .dlabel { font-size: 12px; fill: var(--muted); }
+svg.diagram .dnote { font-size: 11px; fill: var(--muted); }
+svg.diagram a.dnode:hover .dnote { fill: var(--accent); }
+svg.lanes { width: 100%; min-width: 720px; height: auto; display: block; font-family: var(--note); }
+svg.lanes .grid { stroke: var(--rule); stroke-width: 1; }
+svg.lanes .axis { font-family: "et-book-osf", var(--serif); font-size: 12px; fill: var(--muted); }
+svg.lanes .lane-l { font-size: 12px; fill: var(--ink-2); }
+svg.lanes .brk { stroke: var(--muted); fill: none; }
+svg.lanes .hit { fill: transparent; }
+svg .dot { fill: var(--ink); }
+svg .dot.hollow { fill: var(--bg); stroke: var(--ink-2); stroke-width: 1.2; }
+svg.lanes a.m:hover .dot, svg.lanes a.m:focus .dot { fill: var(--accent); stroke: var(--accent); }
+svg.lanes a.m:focus { outline: none; }
+.vtip { position: absolute; z-index: 20; max-width: 20rem; padding: .45rem .7rem; background: var(--bg); border: 1px solid var(--rule-2); font-family: var(--note); font-size: .82rem; line-height: 1.5; pointer-events: none; }
+.vtip b { display: block; font-family: "et-book", var(--serif); font-weight: 400; font-size: .92rem; }
+.vtip small { display: block; color: var(--muted); }
+.vtip span { color: var(--accent); }
+figcaption { font-family: var(--note); font-size: .85rem; color: var(--muted); margin-top: .4rem; }
+figcaption svg { vertical-align: -1px; }
 
 .series { display: grid; grid-template-columns: 1fr auto 1fr; gap: 1rem; align-items: end; margin-top: 3.2rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: .98rem; }
 .series small { display: block; font-family: var(--note); font-size: .8rem; color: var(--muted); }
@@ -252,6 +369,17 @@ label.margin-toggle:not(.sidenote-number) { display: none; }
   }
   .series { grid-template-columns: 1fr 1fr; }
   .series .up { display: none; }
+  details.mtoc { float: none; width: 100%; margin: 0 0 1.2rem; padding-left: .8rem; border-left: 1px solid var(--rule-2); }
+  details.mtoc summary { cursor: pointer; }
+  details.mtoc summary::after { content: " +"; }
+  details.mtoc[open] summary::after { content: " −"; }
+  .filters { flex-direction: column; align-items: stretch; gap: .5rem; }
+  .filters label { justify-content: space-between; }
+  .filters input[type="search"], .filters input, .filters select { min-width: 0; flex: 1; }
+  .filters .count { margin-left: 0; }
+  .toc-meta { display: block; margin-left: 0; }
+  table.kv, table.kv tbody, table.kv tr, table.kv th, table.kv td { display: block; max-width: none; }
+  table.kv th { padding: .5rem 0 0; }
 }
 @media print {
   .topbar, .site-foot, .series { display: none; }
@@ -340,11 +468,14 @@ label.margin-toggle:not(.sidenote-number) { display: none; }
   var ROOT = str(SITE.root);
   var XREF = DATA.xref || {};
   function hasX(key) { return Object.prototype.hasOwnProperty.call(XREF, key); }
+  // Custom page parts (search tools, diagrams, charts) register here; blocks.js calls them for {"b": "slot"} blocks.
+  var SLOTS = {};
 
   // ---------- internal links: urls are relative to the site root; pages sit at different depths ----------
-  var SAFE_PATH = /^[A-Za-z0-9][A-Za-z0-9._\/-]*(#[A-Za-z0-9._-]+)?$/;
+  var SAFE_PATH = /^[A-Za-z0-9][A-Za-z0-9._\/-]*(\?[A-Za-z0-9=&._-]+)?(#[A-Za-z0-9._-]+)?$/;
   function relHref(u) {
     u = str(u);
+    if (/^#[A-Za-z0-9._-]+$/.test(u)) return u;
     if (!SAFE_PATH.test(u)) return null;
     var cut = u.indexOf("#"), path = cut < 0 ? u : u.slice(0, cut);
     if (path === SITE.path) return cut < 0 ? "#" : u.slice(cut);

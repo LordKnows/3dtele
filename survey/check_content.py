@@ -73,7 +73,9 @@ def dump(page: Path, attempts: int = 3) -> str:
 
 
 def site_pages():
-    return sorted(p for p in SITE.rglob("*.html") if not p.name.startswith("."))
+    """Every page of the site except redirect pages (old urls), which Chrome would follow to a page counted anyway."""
+    return sorted(p for p in SITE.rglob("*.html")
+                  if not p.name.startswith(".") and '<meta name="robots" content="noindex">' not in p.read_text(encoding="utf-8")[:600])
 
 
 def main() -> int:

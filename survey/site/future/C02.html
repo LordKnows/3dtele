@@ -1,0 +1,865 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>双眼之间的闪烁：在线 3D 视频中时间性、视角耦合与双目不一致的阈值心理物理学及三通道可见度模型 · 3D 临场研究图谱</title>
+<meta name="description" content="对在线基于图像的 3D 视频中参数化、由管线注入的不一致性进行 HMD 阈值心理物理实验，表明随时间变化的双眼间不一致是主导且未被度量的失效模式。">
+<meta name="color-scheme" content="light dark">
+
+<script>
+  // Apply a saved light/dark choice before first paint; without one the page follows the system setting.
+  try { var t = localStorage.getItem("atlas-theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) { /* storage unavailable */ }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Serif+SC:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/lxgwwenkai-regular.css">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]] },
+    options: { skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code", "input", "select", "button"] },
+    svg: { fontCache: "global" },
+    startup: {
+      typeset: false,
+      ready: function () {
+        window.MathJax.startup.defaultReady();
+        if (typeof window.__atlasMathReady === "function") window.__atlasMathReady();
+      }
+    }
+  };
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js"></script>
+<style>
+/* Tufte-style layout for Chinese long-form pages, after tufte-css (MIT, (c) 2014 Dave Liepmann; see LICENSE-tufte-css).
+   ET Book: MIT, (c) 2015 Dmitry Krasny, Bonnie Scranton, Edward Tufte (fonts/et-book/LICENSE).
+   ../ is the page's path to the site root. */
+
+/* ---------- fonts: ET Book for Latin (self-hosted), Noto Serif SC for Chinese text, LXGW WenKai for notes ---------- */
+/* ET Book leaves curly quotes, dashes and ellipses to the Chinese font so they keep full width in Chinese prose,
+   and single guillemets (› ‹), which it lacks. */
+@font-face { font-family: "et-book"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../fonts/et-book/et-book-roman-line-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book"; font-weight: 400; font-style: italic; font-display: swap;
+  src: url("../fonts/et-book/et-book-display-italic-old-style-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book"; font-weight: 700; font-style: normal; font-display: swap;
+  src: url("../fonts/et-book/et-book-bold-line-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+/* Notes pair Latin italic with upright Kai (the "italic ↔ 楷体" rule): the italic cut is registered as an upright
+   family so the browser never slants the Chinese glyphs. */
+@font-face { font-family: "et-book-note"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../fonts/et-book/et-book-display-italic-old-style-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book-osf"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../fonts/et-book/et-book-roman-old-style-figures.woff") format("woff"); }
+
+:root {
+  --bg: #fffff8;
+  --ink: #111111;
+  --ink-2: #3c3c36;
+  --muted: #74746a;
+  --rule: #d8d6c8;
+  --rule-2: #b9b6a4;
+  --accent: #a8322d;
+  --serif: "et-book", "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", Palatino, Georgia, serif;
+  --note: "et-book-note", "LXGW WenKai", "Kaiti SC", "STKaiti", "KaiTi", "et-book", serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --side: clamp(12rem, 21vw, 17rem);
+  --gap: 2.75rem;
+  --main: calc(100% - var(--side) - var(--gap));
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161614; --ink: #e2e0d6; --ink-2: #c3c1b6; --muted: #979589; --rule: #34332e; --rule-2: #4d4b44; --accent: #e8836f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161614; --ink: #e2e0d6; --ink-2: #c3c1b6; --muted: #979589; --rule: #34332e; --rule-2: #4d4b44; --accent: #e8836f;
+  color-scheme: dark;
+}
+
+/* ---------- base ---------- */
+* { box-sizing: border-box; }
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--serif); font-size: 1.15625rem; line-height: 1.85;
+  font-kerning: normal; font-variant-numeric: lining-nums;
+  /* Space between Chinese and Latin text where the source has none; squeeze adjacent CJK punctuation
+     (text-spacing-trim applies the fonts' halt / chws features). Browsers without them keep the source spacing. */
+  text-autospace: normal; text-spacing-trim: normal;
+  overflow-wrap: break-word;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+[hidden] { display: none !important; }
+a { color: inherit; text-decoration-line: underline; text-decoration-thickness: 1px; text-underline-offset: .18em; text-decoration-color: var(--rule-2); }
+a:hover { color: var(--accent); text-decoration-color: currentColor; }
+a:focus-visible, button:focus-visible, summary:focus-visible, label:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.skip { position: absolute; left: -999px; top: 0; }
+.skip:focus { left: 1rem; top: .5rem; background: var(--bg); padding: .2rem .5rem; z-index: 60; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+p { margin: 0; }
+p + p { margin-top: .9em; }
+
+/* ---------- top bar ---------- */
+.topbar { border-bottom: 1px solid var(--rule); }
+.bar-in { max-width: 67rem; margin: 0 auto; padding: 0 1.5rem; display: flex; align-items: center; gap: 2.2rem; min-height: 3.1rem; }
+.brand { font-size: 1rem; text-decoration: none; letter-spacing: .02em; white-space: nowrap; }
+.site-nav { flex: 1; }
+.menus { list-style: none; margin: 0; padding: 0; display: flex; gap: 1.6rem; }
+.menu { position: relative; }
+.menu-btn, .theme-btn, .burger {
+  font-family: "et-book", var(--serif); font-variant-caps: all-small-caps; letter-spacing: .08em; font-size: 1.12rem;
+  color: var(--ink-2); line-height: 3.1rem;
+}
+.menu-btn:hover, .theme-btn:hover, .burger:hover, .menu.open > .menu-btn { color: var(--accent); }
+.menu.cur > .menu-btn { color: var(--ink); box-shadow: inset 0 -1px 0 var(--ink); }
+.drop {
+  display: none; position: absolute; left: -1rem; top: 100%; z-index: 40; min-width: 13rem;
+  list-style: none; margin: 0; padding: .45rem 0; background: var(--bg); border: 1px solid var(--rule);
+}
+.menu.open > .drop { display: block; }
+.drop a { display: block; padding: .15rem 1rem; text-decoration: none; font-size: 1.02rem; color: var(--ink-2); white-space: nowrap; }
+.drop a:hover, .drop a:focus-visible { color: var(--accent); }
+.drop a.cur { color: var(--ink); }
+.drop a.cur::before { content: "›"; position: absolute; margin-left: -.7rem; color: var(--accent); }
+.theme-btn { margin-left: auto; }
+.burger { display: none; }
+
+/* ---------- article column + margin ---------- */
+main { display: block; }
+.art { max-width: 67rem; margin: 0 auto; padding: 2.6rem 1.5rem 3rem; counter-reset: sidenote-counter; }
+.art > *, .art section > * { width: var(--main); }
+.art > section { width: 100%; }
+.art .fullwidth { width: 100%; }
+section { padding-top: .6rem; }
+
+.crumbs { font-size: .86rem; color: var(--muted); letter-spacing: .01em; }
+.crumbs a { color: var(--muted); text-decoration: none; }
+.crumbs a:hover { color: var(--accent); }
+.crumbs .sep { margin: 0 .45em; color: var(--rule-2); }
+h1, h2, h3 { font-family: var(--serif); color: var(--ink); text-wrap: balance; }
+h1 { font-size: 2.3rem; font-weight: 400; line-height: 1.3; margin: .9rem 0 0; letter-spacing: .01em; }
+.subtitle { font-family: "et-book", var(--note); font-style: italic; font-size: 1.45rem; line-height: 1.3; color: var(--ink-2); margin-top: .35rem; }
+.meta { font-size: .92rem; color: var(--muted); margin-top: 1.1rem; }
+.meta a { color: var(--muted); }
+h2 { font-size: 1.42rem; font-weight: 600; line-height: 1.4; margin: 2.6rem 0 .9rem; }
+h3 { font-size: 1.12rem; font-weight: 600; line-height: 1.5; margin: 1.8rem 0 .5rem; }
+h3 .used { font-family: var(--note); font-weight: 400; font-size: .86rem; color: var(--muted); margin-left: .6em; }
+
+.epigraph { margin: 2.2rem 0 .6rem; }
+.epigraph blockquote { margin: 0; padding: 0 0 0 1.6rem; border-left: 1px solid var(--rule-2); }
+.epigraph p { font-family: var(--note); font-size: 1.12rem; line-height: 1.85; color: var(--ink-2); }
+
+.art ol, .art ul { margin: .6rem 0 0; padding-left: 1.6em; }
+.art li + li { margin-top: .45rem; }
+li::marker { font-family: "et-book-osf", var(--serif); color: var(--muted); }
+
+/* Equations: display math in the text column, scrolling sideways on narrow screens. */
+.eqs { display: block; }
+.eq + .eq { margin-top: 1.6rem; }
+.math-block { overflow-x: auto; overflow-y: hidden; margin: .4rem 0 .6rem; padding: .2rem 0; font-size: 1rem; }
+.math-block mjx-container { margin: 0 !important; }
+
+/* ---------- side notes & margin notes (floated into the right margin) ---------- */
+.sidenote, .marginnote {
+  float: right; clear: right; position: relative;
+  width: var(--side); margin-right: calc(-1 * (var(--side) + var(--gap))); margin-top: .3rem; margin-bottom: .6rem;
+  font-family: var(--note); font-size: .88rem; line-height: 1.6; color: var(--ink-2); text-align: left;
+  font-style: normal; font-weight: 400; letter-spacing: 0;
+}
+h3 .sidenote { margin-top: .2rem; }
+.sidenote-number { counter-increment: sidenote-counter; }
+.sidenote-number::after, .sidenote::before { font-family: "et-book-osf", var(--serif); position: relative; vertical-align: baseline; }
+.sidenote-number::after { content: counter(sidenote-counter); font-size: .75rem; top: -.55em; left: .08em; color: var(--ink-2); }
+.sidenote::before { content: counter(sidenote-counter) " "; font-size: .8rem; top: -.4em; }
+.note-label { font-family: var(--serif); font-weight: 600; font-size: .82rem; color: var(--muted); margin-right: .5em; }
+.marginnote .note-label { display: block; margin: 0 0 .1rem; }
+input.margin-toggle { display: none; }
+label.sidenote-number { display: inline; cursor: default; }
+label.margin-toggle:not(.sidenote-number) { display: none; }
+
+/* ---------- quiz, further reading, series ---------- */
+.quiz details { margin-top: .3rem; }
+.quiz summary { font-family: var(--note); font-size: .92rem; color: var(--muted); cursor: pointer; list-style: none; display: inline-block; }
+.quiz summary::-webkit-details-marker { display: none; }
+.quiz summary::before { content: "+ "; font-family: "et-book", var(--serif); }
+.quiz details[open] summary::before { content: "− "; }
+.quiz summary:hover { color: var(--accent); }
+.quiz details > p { margin-top: .3rem; padding-left: 1rem; border-left: 1px solid var(--rule); color: var(--ink-2); }
+
+/* Reference lists: a narrow label column (kind / year) and a hanging text column. */
+.art ul.refs { list-style: none; padding-left: 0; }
+.refs li { display: grid; grid-template-columns: 2.8rem minmax(0, 1fr); column-gap: .5rem; line-height: 1.6; }
+.refs li > :not(.kind):not(.yr) { grid-column: 2; }
+.refs .kind, .refs .yr { grid-column: 1; font-family: var(--note); font-size: .86rem; color: var(--muted); padding-top: .12rem; }
+.refs .yr { font-family: "et-book-osf", var(--serif); font-size: .95rem; padding-top: .05rem; }
+.refs .en { font-family: "et-book", var(--serif); font-style: italic; color: var(--muted); }
+.refs .gloss { font-family: var(--note); font-size: .88rem; color: var(--ink-2); margin-top: .1rem; }
+.art .refs li + li { margin-top: .75rem; }
+.art .papers li + li { margin-top: .35rem; }
+.refs.noleft li { grid-template-columns: minmax(0, 1fr); }
+.refs.noleft li > * { grid-column: 1; }
+.refs .used { font-family: var(--note); font-size: .82rem; color: var(--muted); margin-left: .5em; }
+.refs.terms .plain-t { font-weight: 600; }
+.refs.terms .en { display: inline; margin-left: .6em; }
+.timeline li { line-height: 1.7; }
+.art .timeline li + li { margin-top: .4rem; }
+
+/* ---------- blocks: lede, run-in labels, notes ---------- */
+.lede { margin-top: 1.6rem; color: var(--ink-2); }
+.run-in { font-weight: 600; color: var(--ink); }
+p.note { font-family: var(--note); font-size: .9rem; color: var(--muted); margin-top: .1rem; }
+h2 .en, h3 .en { font-family: "et-book", var(--serif); font-style: italic; font-weight: 400; color: var(--muted); margin-left: .6em; font-size: .92em; }
+h2 a, h3 a { text-decoration-color: var(--rule); }
+.quiz-h { font-family: var(--note); font-size: .88rem; color: var(--muted); margin-top: 1.4rem; }
+.quiz-h + ol.quiz { margin-top: .2rem; }
+
+/* Index pages: a table of contents instead of a card grid. */
+.art ol.toc { list-style: none; padding-left: 0; margin-top: .4rem; }
+.art ol.toc > li + li { margin-top: .85rem; }
+.toc-t { line-height: 1.55; }
+.toc-t .en { font-family: "et-book", var(--serif); font-style: italic; color: var(--muted); margin-left: .6em; font-size: .95em; }
+.toc-meta { font-family: var(--note); font-size: .82rem; color: var(--muted); margin-left: .7em; white-space: nowrap; }
+.toc-s { font-family: var(--note); font-size: .9rem; line-height: 1.65; color: var(--ink-2); margin-top: .1rem; }
+.toc-lede { font-family: var(--note); color: var(--ink-2); font-size: .95rem; }
+h2.toc-h, h3.toc-h { margin-bottom: .3rem; }
+
+/* Tables: booktabs rules (top, under the header, bottom), no vertical lines, no fills. */
+.table-wrap { overflow-x: auto; margin: 1rem 0; }
+table.booktabs { border-collapse: collapse; width: 100%; font-size: .9rem; line-height: 1.6; border-top: 1.5px solid var(--ink); border-bottom: 1.5px solid var(--ink); }
+table.booktabs th { text-align: left; font-weight: 600; padding: .45rem .7rem .35rem 0; border-bottom: 1px solid var(--ink); white-space: nowrap; vertical-align: bottom; }
+table.booktabs td { padding: .45rem .9rem .45rem 0; vertical-align: top; border-top: 1px solid var(--rule); }
+table.booktabs tbody tr:first-child td { border-top: 0; }
+table.rank td { white-space: nowrap; font-variant-numeric: tabular-nums; }
+table.rank td:nth-child(2) { white-space: normal; }
+table.kv { border-collapse: collapse; margin: .6rem 0; font-size: .95rem; }
+table.kv th { text-align: left; font-weight: 400; color: var(--muted); padding: .25rem 1.2rem .25rem 0; vertical-align: top; min-width: 5em; max-width: 12em; font-family: var(--note); }
+table.kv td { padding: .25rem 0; vertical-align: top; }
+
+/* Long articles: the table of contents sits at the top of the margin. */
+/* It sits in a full-width section, so it floats into the margin without a negative offset. */
+details.mtoc {
+  float: right; clear: right; width: var(--side); margin-right: 0; margin-bottom: 1rem;
+  font-family: var(--note); font-size: .86rem; line-height: 1.55; color: var(--ink-2);
+}
+details.mtoc summary { font-family: var(--serif); font-weight: 600; font-size: .82rem; color: var(--muted); list-style: none; cursor: default; }
+details.mtoc summary::-webkit-details-marker { display: none; }
+.art details.mtoc ol { list-style: none; padding: 0; margin: .3rem 0 0; }
+.art details.mtoc li + li { margin-top: .25rem; }
+details.mtoc a { text-decoration: none; }
+details.mtoc a:hover { text-decoration: underline; }
+
+/* Tools: search and filters with underlined inputs. */
+.tool { margin-top: 1rem; }
+.filters { display: flex; flex-wrap: wrap; gap: .6rem 1.6rem; align-items: baseline; font-family: var(--note); font-size: .92rem; color: var(--muted); }
+.filters label { display: inline-flex; gap: .5rem; align-items: baseline; }
+.filters input, .filters select {
+  font: inherit; color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid var(--rule-2); border-radius: 0;
+  padding: .15rem .1rem; min-width: 7rem;
+}
+.filters input[type="search"] { min-width: 14rem; }
+.filters select { max-width: 16rem; }
+.filters input:focus, .filters select:focus { outline: none; border-bottom-color: var(--accent); }
+.filters select option { background: var(--bg); color: var(--ink); }
+.filters .count { margin-left: auto; font-family: var(--mono); font-size: .8rem; }
+table.gl td.en { font-family: "et-book", var(--serif); width: 20%; }
+table.gl .abbr { color: var(--muted); }
+table.gl td.zh { white-space: nowrap; }
+table.gl td.def { color: var(--ink-2); min-width: 20rem; }
+table.gl td.c { font-size: .85rem; min-width: 9rem; padding-right: 0; }
+table.gl tr:target td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+table.db td.y { font-family: "et-book-osf", var(--serif); white-space: nowrap; }
+table.db td.t { min-width: 16rem; }
+table.db td.t small { display: block; color: var(--muted); font-size: .8rem; line-height: 1.45; margin-top: .15rem; }
+table.db td.tags { min-width: 7rem; font-family: var(--note); font-size: .8rem; color: var(--muted); }
+table.db td.tags span { display: block; }
+table.db .tier.milestone { color: var(--ink); font-weight: 600; }
+table.db td.s { min-width: 18rem; color: var(--ink-2); }
+table.db td.n { min-width: 12rem; font-size: .82rem; color: var(--ink-2); }
+
+/* Figures: the pipeline diagram and the timeline of classic papers, drawn in ink with one accent for interaction. */
+figure { margin: 1.4rem 0; }
+svg a { text-decoration: none; }
+.diagram-wrap, .lanes-wrap { position: relative; overflow-x: auto; }
+svg.diagram { width: 100%; min-width: 760px; height: auto; display: block; font-family: var(--note); }
+svg.diagram .dnode rect { fill: var(--bg); stroke: var(--ink-2); stroke-width: 1; }
+svg.diagram .dnode rect.data { stroke-dasharray: 4 3; }
+svg.diagram .dnode:hover rect, svg.diagram .dnode:focus rect { stroke: var(--accent); stroke-width: 1.5; }
+svg.diagram .dnode:focus { outline: none; }
+svg.diagram text { fill: var(--ink); }
+svg.diagram text.k { font-family: var(--mono); font-size: 10px; fill: var(--muted); }
+svg.diagram text.t { font-family: var(--serif); font-size: 13px; font-weight: 600; }
+svg.diagram text.s { font-size: 11px; fill: var(--ink-2); }
+svg.diagram .dedge { fill: none; stroke: var(--ink-2); stroke-width: 1; }
+svg.diagram .dedge.fb { stroke-dasharray: 4 3; }
+svg.diagram .dhead { fill: var(--ink-2); }
+svg.diagram .dloop { fill: none; stroke: var(--rule-2); stroke-dasharray: 2 3; }
+svg.diagram .dlabel { font-size: 12px; fill: var(--muted); }
+svg.diagram .dnote { font-size: 11px; fill: var(--muted); }
+svg.diagram a.dnode:hover .dnote { fill: var(--accent); }
+svg.lanes { width: 100%; min-width: 720px; height: auto; display: block; font-family: var(--note); }
+svg.lanes .grid { stroke: var(--rule); stroke-width: 1; }
+svg.lanes .axis { font-family: "et-book-osf", var(--serif); font-size: 12px; fill: var(--muted); }
+svg.lanes .lane-l { font-size: 12px; fill: var(--ink-2); }
+svg.lanes .brk { stroke: var(--muted); fill: none; }
+svg.lanes .hit { fill: transparent; }
+svg .dot { fill: var(--ink); }
+svg .dot.hollow { fill: var(--bg); stroke: var(--ink-2); stroke-width: 1.2; }
+svg.lanes a.m:hover .dot, svg.lanes a.m:focus .dot { fill: var(--accent); stroke: var(--accent); }
+svg.lanes a.m:focus { outline: none; }
+.vtip { position: absolute; z-index: 20; max-width: 20rem; padding: .45rem .7rem; background: var(--bg); border: 1px solid var(--rule-2); font-family: var(--note); font-size: .82rem; line-height: 1.5; pointer-events: none; }
+.vtip b { display: block; font-family: "et-book", var(--serif); font-weight: 400; font-size: .92rem; }
+.vtip small { display: block; color: var(--muted); }
+.vtip span { color: var(--accent); }
+figcaption { font-family: var(--note); font-size: .85rem; color: var(--muted); margin-top: .4rem; }
+figcaption svg { vertical-align: -1px; }
+
+.series { display: grid; grid-template-columns: 1fr auto 1fr; gap: 1rem; align-items: end; margin-top: 3.2rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: .98rem; }
+.series small { display: block; font-family: var(--note); font-size: .8rem; color: var(--muted); }
+.series .up { text-align: center; font-size: .88rem; }
+.series .up a { color: var(--muted); }
+.series .next { text-align: right; }
+
+.site-foot { max-width: 67rem; margin: 0 auto; padding: 1.2rem 1.5rem 2.5rem; font-size: .82rem; color: var(--muted); }
+.site-foot a { color: var(--muted); text-decoration: none; }
+
+/* ---------- hover preview ---------- */
+.xtip {
+  position: absolute; z-index: 50; max-width: min(22rem, calc(100vw - 16px)); padding: .55rem .8rem .6rem;
+  background: var(--bg); border: 1px solid var(--rule-2); color: var(--ink);
+  font-family: var(--note); font-size: .88rem; line-height: 1.6; pointer-events: none;
+}
+.xt-m { font-size: .76rem; color: var(--muted); }
+.xt-t { font-family: var(--serif); font-weight: 600; font-size: .95rem; line-height: 1.45; margin-top: .1rem; }
+.xt-e { font-family: "et-book", var(--serif); font-style: italic; color: var(--ink-2); line-height: 1.4; }
+.xt-s { margin-top: .35rem; color: var(--ink-2); }
+
+/* ---------- narrow screens: one column; notes fold behind their number or ⊕ ---------- */
+@media (max-width: 760px) {
+  body { font-size: 1.0625rem; line-height: 1.8; }
+  .bar-in { gap: 1rem; padding: 0 1rem; flex-wrap: wrap; }
+  .site-nav { order: 5; flex-basis: 100%; display: none; }
+  .topbar.nav-open .site-nav { display: block; }
+  .menus { flex-direction: column; gap: 0; padding-bottom: .6rem; }
+  .menu-btn { line-height: 2.4rem; width: 100%; text-align: left; }
+  .menu-btn::after { content: " +"; }
+  .menu.open > .menu-btn::after { content: " −"; }
+  .menu.cur > .menu-btn { box-shadow: none; }
+  .drop { position: static; border: 0; padding: 0 0 .4rem .9rem; min-width: 0; }
+  .drop a { padding: .2rem 0; white-space: normal; }
+  .burger { display: inline; }
+  .theme-btn { margin-left: auto; }
+  .art { padding: 1.6rem 1rem 2.4rem; }
+  .art > *, .art section > * { width: 100%; }
+  h1 { font-size: 1.85rem; }
+  .subtitle { font-size: 1.22rem; }
+  .epigraph blockquote { padding-left: 1rem; }
+  .epigraph p { font-size: 1.05rem; }
+  label.margin-toggle:not(.sidenote-number) { display: inline; cursor: pointer; color: var(--muted); font-family: "et-book", var(--serif); padding: 0 .15em; }
+  label.sidenote-number { cursor: pointer; }
+  .sidenote, .marginnote { display: none; }
+  .margin-toggle:checked + .sidenote, .margin-toggle:checked + .marginnote {
+    display: block; float: left; clear: both; width: 100%; margin: .6rem 0; padding-left: .8rem; border-left: 1px solid var(--rule-2);
+  }
+  .series { grid-template-columns: 1fr 1fr; }
+  .series .up { display: none; }
+  details.mtoc { float: none; width: 100%; margin: 0 0 1.2rem; padding-left: .8rem; border-left: 1px solid var(--rule-2); }
+  details.mtoc summary { cursor: pointer; }
+  details.mtoc summary::after { content: " +"; }
+  details.mtoc[open] summary::after { content: " −"; }
+  .filters { flex-direction: column; align-items: stretch; gap: .5rem; }
+  .filters label { justify-content: space-between; }
+  .filters input[type="search"], .filters input, .filters select { min-width: 0; flex: 1; }
+  .filters .count { margin-left: 0; }
+  .toc-meta { display: block; margin-left: 0; }
+  table.kv, table.kv tbody, table.kv tr, table.kv th, table.kv td { display: block; max-width: none; }
+  table.kv th { padding: .5rem 0 0; }
+}
+@media print {
+  .topbar, .site-foot, .series { display: none; }
+}
+
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<header class="topbar" id="topbar"></header>
+<main id="main"><article class="art"></article></main>
+<footer class="site-foot" id="site-foot"></footer>
+<script type="application/json" id="data">{"site": {"brand": "3D 临场研究图谱", "root": "../", "path": "future/C02.html", "nav": [{"key": "overview", "label": "Overview", "items": [["Introduction", "index.html"], ["Methodology", "overview/methodology.html"], ["How to use", "overview/how-to-use.html"]]}, {"key": "basics", "label": "Basics", "items": [["Routes", "basics/routes/index.html"], ["Foundations", "basics/foundations/index.html"], ["Advanced topics", "basics/advanced/index.html"], ["Classics", "basics/classics/index.html"], ["Glossary", "basics/glossary.html"]]}, {"key": "works", "label": "Works", "items": [["Papers", "works/papers/index.html"], ["Walkthrough", "works/walkthrough/index.html"], ["Field map", "works/field-map.html"], ["Sub areas", "works/areas/index.html"]]}, {"key": "future", "label": "Future", "items": [["Directions", "future/index.html"], ["Trends & Challenges", "future/trends.html"]]}], "navCur": "future", "navItem": "future/index.html", "crumbs": [["Future", ""], ["Directions", "future/index.html"]], "date": "2026-09-28"}, "xref": {"idea-C03": {"u": "future/C03.html", "t": "观看者真正看到的：在线多视角 RGB-D 远程呈现合成的流式、阵列外与双目评估", "e": "What the Viewer Actually Sees: Streaming, Off-Rig and Binocular Evaluation of Online Multi-View RGB-D Telepresence Synthesis", "m": "Directions · 第 3 名 · 综合 6", "s": "一个围绕单一发现构建的两层基准。"}, "idea-C13": {"u": "future/C13.html", "t": "渲染“当下”：面向实时自由视点远程临场的延迟感知评估与无悔、音频引导预测", "e": "Rendering the Present: Latency-Aware Evaluation and No-Regret, Audio-Led Forecasting for Live Free-Viewpoint Telepresence", "m": "Directions · 第 1 名 · 综合 6", "s": "评估在线 3D 视频时，应以帧被显示那一刻远端场景的真实样子为准，而不是以采集时刻为准。"}}, "page": {"id": "idea-C02", "head": {"title": "双眼之间的闪烁：在线 3D 视频中时间性、视角耦合与双目不一致的阈值心理物理学及三通道可见度模型", "sub": "Shimmer Between the Eyes: Threshold Psychophysics and a Three-Channel Visibility Model for Temporal, View-Coupled and Binocular Inconsistency in Online 3D Video", "meta": ["第 2 名", "重新定位后推进", "查新：部分已被做"], "epigraph": "对在线基于图像的 3D 视频中参数化、由管线注入的不一致性进行 HMD 阈值心理物理实验，表明随时间变化的双眼间不一致是主导且未被度量的失效模式。结果被提炼为一个经过标定的可微指标，将误差分解为时间、视角路径和双目三个通道，并在真实远程呈现方法上优于逐眼 VDP。", "prereqs": [], "lede": "", "minutes": 14}, "body": [{"b": "sec", "h": "评分", "id": "scores"}, {"b": "kv", "items": [["综合", "6"], ["新颖", "6"], ["意义", "6"], ["可行", "6"], ["临场契合", "8"]]}, {"b": "sec", "h": "核心论点（可证伪）", "id": "claim"}, {"b": "p", "t": "主张 A（心理物理）：在立体 HMD 中，在两眼间去相关且随时间变化的结构化合成不一致（例如以 2-10 Hz 独立施加于每只眼的 blend 权重或幻觉噪声），其被检测到的幅度比以下两种情况至少低 2 倍：(i) 相同的双眼间差异保持静态；(ii) 相同的时间扰动同样施加于双眼。因此逐眼（单目）指标会系统性地低估其可见度。主张 B（指标）：一个具有显式运动补偿时间通道、视角路径（K-set 切换）通道和视差补偿双目通道的模型，仅在阈值数据上标定，在留一方法（leave-one-method-out）下预测 8 个以上真实在线 NVS 方法的 JOD 评分。在立体 HMD 条件下，其 SROCC 至少比现有最佳指标（逐眼 ColorVideoVDP / FovVideoVDP）高 0.10，且去掉双目通道会消除大部分增益。若阈值比低于 1.5 倍，或留一方法增益低于 0.05，则两项主张均被证伪。"}, {"b": "sec", "h": "关键洞察", "id": "insight"}, {"b": "p", "t": "在线基于图像的 3D 视频的伪影不是一般的视频失真。它们由少数几个管线内部变量产生（逐像素深度、blend 权重、K-set 成员、去遮挡掩码），并且在立体 HMD 中每只眼的视图是由这些变量独立合成的。这使三件事成为可能。第一，伪影可以通过管线自身的内部变量被参数化地、精确地注入，因此每个刺激都存在干净的参考，即使沿着没有采集真值的任意头部路径。第二，可见度可以用已知的构件建模：运动补偿后的时间残差用 TCSF/elaTCSF，双目通道用融合极限以及已知的对双眼间时间调制的敏感度（双目光泽或闪烁）。二分视（dichoptic）注视点渲染的数据表明静态双眼间差异可以被很好地容忍。第三，逐眼指标在构造上就对双目交互视而不见。而这种交互恰恰是远程呈现渲染器和逐眼生成式修复器在独立计算两个视图时所制造的。"}, {"b": "sec", "h": "方法", "id": "method"}, {"b": "p", "t": "(1) 刺激引擎。重新实现一个基础论文风格的管线（像素大小的不透明 Gaussian 前向 splat、带前一帧深度反馈的 image-based TSDF、小型 blend U-Net）；基础论文没有公开代码。同时使用现成的 ENeRF 和 GPS-Gaussian(+)。添加扰动钩子：(a) 可控幅度（以 mm 和视差 arcmin 计）和时间频谱（1-15 Hz）的深度噪声，作用于掩码区域（面部、手部、躯干、背景）；(b) 可控 blend 不连续的强制 K-set 切换事件；(c) 去遮挡掩码边界抖动；(d) blend 权重或深度噪声的逐眼去相关（相关系数 rho 从 1 到 0），静态或时间调制；(e) 背景图像闪烁。干净参考是沿相同脚本化头部路径的未扰动渲染（从 3D 通话中的真人记录的 6DoF 轨迹，按 3 个头部速度等级采样）。刺激离线预渲染为立体 90 Hz 视频，因此管线无需以 HMD 帧率运行。(2) 心理物理。Quest 3（主要）加第二台 HMD（Varjo、Vision Pro 或 Quest Pro）用于迁移测试。用光度计做亮度标定，在可用时记录眼动。实验 1 测量阈值：2AFC 配 QUEST+ 阶梯法，因素为生成器 x 区域（面部/手部/身体/背景）x 离心率（0/10/20 度）x 头部速度（静止/慢/快）x 眼部条件（双眼相同 / 双眼间静态 / 双眼间时间调制 / 仅单眼）。通过预实验裁剪因子设计，目标约 16-20 名参与者 x 1.5 h。实验 2 测量阈上标度：对真实方法输出加注入伪影混合进行成对比较，用 pwcmp/ASAP 主动采样标定到 JOD，约 20-24 名参与者。在子集上加入显示器（2D、单目）条件，以展示结论在 2D 与 HMD 观看之间如何变化。(3) 模型（JNI：just-noticeable inconsistency，恰可察觉不一致）。输入：测试立体视频、参考立体视频、参考深度/视差和头部路径；简化参考变体只使用渲染的深度和光流。E_temp：用参考场景流和头部运动将第 t-1 帧 warp 到第 t 帧后的残差，经频带分解并通过带离心率和亮度项的 elaTCSF 式时间 CSF 汇聚，按注视/离心率加权。E_view：与 K-set 变化事件和头部角速度时间锁定的残差能量，即视角耦合的跳变（popping）。E_bino：用参考视差将左图 warp 到右图，双眼间残差分解为静态部分和时间调制部分，带融合极限 / Panum 区门控，并对双眼间时间调制使用单独的敏感度。E_static：在独眼（cyclopean）平均图上的 ColorVideoVDP。面部和手部的区域权重通过拟合而非手工设定。每个通道先标定到实验 1 的阈值，然后用嵌套交叉验证将少于 10 个参数的汇聚拟合到实验 2 的 JOD。全部在 PyTorch 中实现且可微，1080p 立体在单 GPU 上每帧不到 1 s。(4) 应用。(i) 在 HMD 头部路径下以 JOD 为单位重新评判基础论文的零结果消融（TSDF 引导、时间滤波、K）。(ii) 在 DNA-Rendering 短片段上用 L = L_rgb + lambda * JNI_temp+bino 微调 blend 网络，在相同 PSNR 下与 warping 误差损失和 TCC 式损失对比。(iii) 测试一种低成本的立体一致渲染变体，即通过视差重投影在双眼间共享一个 blend 权重场，以及逐眼生成式修复器的情形。所有结论都通过第二次独立用户研究确认，绝不只依赖该指标本身。"}, {"b": "sec", "h": "为什么不是工程改进", "id": "not-engineering"}, {"b": "p", "t": "主要成果是新的感知知识。它包括结构化合成不一致的阈值函数，以及一个具体、可证伪的交互：随时间变化的双眼间不一致远比其静态或单目对应物更可见。当前没有任何 NVS 指标或数据集包含这一点。该指标由心理物理推导而来，具有可解释的通道，而不是作为黑盒回归器调参得到。其价值通过改变结论来体现：它可以推翻或确认被 PSNR/TCC 判为零结果的已发表消融，并可以论证或驳斥逐眼与立体一致的渲染设计。这正是 SIGGRAPH/TOG 感知方向和 IEEE VR 审稿中被视为研究的那类贡献。"}, {"b": "sec", "h": "与已有工作的区分", "id": "differentiation"}, {"b": "p", "t": "Liang et al.（CGF 2024，Mantiuk 组）和 arXiv 2501.08072 是针对离线 NVS 的 2D 显示器 MOS/JOD 研究。它们没有阈值、没有立体、没有受控生成器，也没有模型。我们增加了 HMD 立体、头部路径观看、参数化生成器和经过标定的模型，并将它们的协议和指标基准作为基线。LIVE-Meta avatar VQA（TIP 2024）是针对网格 avatar 压缩的 HMD MOS，而非合成不一致，且没有双目因素。我们将其引用为最接近的远程呈现质量评估，并在可能时与 HoloQA 式学习型 VQA 比较。SCOPE/iSQoE（2412.21127）是针对静态图像的学习型立体 QoE，没有时间维度。我们增加了时间和视角路径，并且我们的双目通道是可解释的、经过阈值标定的。Dichoptic Foveation（SIGGRAPH 2026）是关于静态双眼间频率差异的 HMD JOD 心理物理。我们明确以其为基础：它关于静态双眼间差异可被容忍的发现，正是我们检验时间调制假设时的零假设。我们不主张是首个双目 HMD 研究。DIBR 闪烁指标（JVCIR 2018、TIP 2019）和 IV-PSNR-YUVM（2025）是针对 MVD 编解码器、与 MOS 相关的工程指标，没有 HMD、没有心理物理标定、没有双目-时间项。它们被纳入基线。ColorVideoVDP / elaTCSF 是我们扩展的单目构件，逐眼 ColorVideoVDP 是需要超越的主要基线。MEt3R 和 VoluMe 的抖动指标是未经标定的一致性代理，作为基线纳入。"}, {"b": "sec", "h": "查新后剩余的可辩护新意", "id": "novel-angle"}, {"b": "p", "t": "每个要素都有先前工作：NVS 视频感知质量评估（Liang et al. CGF 2024、2501.08072）、HMD avatar VQA（LIVE-Meta TIP 2024）、基于 VR 2AFC 的学习型立体 QoE（SCOPE/iSQoE）、HMD 中双眼间差异的 JOD 心理物理（Dichoptic Foveation，SIGGRAPH 2026）、DIBR 时间闪烁指标（2018-2021）以及运动感知的 IV-PSNR（2025）。诸如“首个针对合成视图时间一致性的感知指标”或“首个针对 3D 人体视频的 HMD 感知研究”这类笼统主张不可辩护。检索没有找到做到以下几点的工作，这是可辩护的核心。(1) 对基于图像/在线 NVS 不一致性的受控参数化生成器进行阈值（JND）心理物理：时间深度噪声的幅度和频谱、沿头部路径的 K-set blend 权重切换（跳变）、去遮挡边界抖动，以及双眼间 blend 权重或幻觉去相关。在立体 HMD 中以区域（面部、手部、身体）、离心率和头部速度为函数进行测量。(2) 一个将误差显式分解为经 TCSF 汇聚的运动补偿时间通道、观看者路径/视角切换通道以及由融合极限阈值化的视差补偿双目通道的指标，每个通道都标定到这些阈值，并在留一方法下与 TCC、STED、ColorVideoVDP、MEt3R 和时间 IV-PSNR 比较评估。(3) 用该指标重新评判一个具体的零结果消融（基础论文的 TSDF 引导，PSNR 31.16 vs 31.17），并作为实时管线中的可微损失或计算分配信号。审稿人会期望相关工作引用 Liang et al. 2024、LIVE-Meta avatar VQA、SCOPE/iSQoE、Dichoptic Foveation 和 DIBR 闪烁文献。双目通道必须定位为将二分视/立体 QoE 心理物理扩展到随时间变化的结构化合成不一致，而不是首个双目研究。"}, {"b": "sec", "h": "主要撞车风险（查新找到的相近工作）", "id": "threats"}, {"b": "refs", "items": [{"left": "中", "url": "https://onlinelibrary.wiley.com/doi/10.1111/cgf.15036", "t": "Perceptual Quality Assessment of NeRF and Neural View Synthesis Methods for Front-Facing Views (Liang, Wu, Hanji, Banterle, Gao, Mantiuk; CGF 2024)", "sub": "2024 · Computer Graphics Forum (Eurographics 2024) · 重叠度 中", "gloss": "重叠：首个使用参考视频序列对 NVS 方法进行受控感知质量评估的工作，明确旨在揭示图像指标遗漏的时间伪影。它将许多图像和视频指标与人类评分进行基准对比。这已经提出了“NVS 指标在时间上是盲的；应以视频感知来验证”的论点（Mantiuk 组）。\n差异：2D 显示器，仅有 MOS/JOD 标度，没有阈值心理物理。它使用离线逐场景 NeRF，而非在线 IBR。没有双目或 HMD 条件，没有受控伪影生成器（深度抖动、K-set 跳变、双眼间权重不匹配），也没有新的指标或损失。"}, {"left": "中", "url": "https://arxiv.org/abs/2408.07041", "t": "Subjective and Objective Quality Assessment of Rendered Human Avatar Videos in Virtual Reality (LIVE-Meta Rendered Human Avatar VQA; Chen, Saha, Chapiro, Häne, Bazin, ..., Bovik)", "sub": "2024 · IEEE TIP vol. 33, 2024 · 重叠度 中", "gloss": "重叠：在 6DoF VR 头显中评分的人体（远程呈现式“全息”）avatar 视频。它发布了一个数据集和一个新的 VQA 模型（HoloQA），并与 Meta 相关。它覆盖了“在 HMD 中观看的 3D 人体视频的感知指标”。\n差异：失真是网格 avatar 上的编码/压缩参数，而非合成不一致（时间深度抖动、blend 跳变、去遮挡闪烁）。它使用 MOS 而非 JND 阈值，没有双目不一致因素，也没有将误差分解为时间、视角路径和双目通道。"}, {"left": "中", "url": "https://arxiv.org/abs/2609.16385", "t": "Dichoptic Foveation (Kam, Groth, Kang, Saraf, Sun, Chen; SIGGRAPH 2026)", "sub": "2026 · SIGGRAPH 2026 Conference Papers · 重叠度 中", "gloss": "重叠：针对跨视网膜离心率的双眼间差异（一只眼模糊、另一只眼锐化）的 HMD 心理物理。它标定到 JOD 并拟合一个紧凑的 4D 模型，然后应用于 VR 渲染系统。它表明“拟合到 JOD 的、依赖离心率的心理物理双目通道模型”这一方法是当前的，并且已针对双眼间频率差异做过。\n差异：其双眼间差异是为注视点渲染而刻意施加的静态频率操控，而不是随时间变化的、结构化的视图合成不一致（每只眼不同的 blend 权重或幻觉、去遮挡不匹配）。它没有时间或视角切换通道，也不评估 NVS 质量。"}, {"left": "中", "url": "https://arxiv.org/abs/2412.21127", "t": "What Makes for a Good Stereoscopic Image? (SCOPE dataset + iSQoE; Tamir et al., Isola, Dekel, Zhang, Farber)", "sub": "2024 · arXiv 2024 (Dec) · 重叠度 中", "gloss": "重叠：在 VR 头显中对带有多种常见立体伪影的真实和合成立体图像收集 2AFC 偏好标注。它训练了一个学习型立体 QoE 模型（iSQoE），并报告跨头显一致性。它覆盖了“从 HMD 数据学习的双目感知指标”。\n差异：仅限静态图像，没有时间或视角路径成分。它不针对 IBR/NVS 特有的不一致生成器，不拟合阈值，也不做心理物理分解。它是学习型黑盒，而不是可解释的 JND 标定模型。"}, {"left": "中", "url": "https://www.sciencedirect.com/science/article/abs/pii/S1047320318301184", "t": "No-reference quality assessment of DIBR-synthesized videos by measuring temporal flickering (Zhou et al., JVCIR 2018), and related DIBR flicker metrics (TIP 2019, IEEE 2021 reference-free spatio-temporal metric; SIAT/IRCCyN databases)", "sub": "2018-2021 · J. Visual Communication and Image Representation 2018 / IEEE TIP 2019 · 重叠度 中", "gloss": "重叠：一条长期的前神经网络时代工作线：专门针对基于深度图像渲染（DIBR）合成视频中时间闪烁的指标（闪烁区域检测、时空不一致），在主观数据库上验证（SIAT：140 段合成视频）。带双眼竞争的立体 3D VQA 在 2020 年前也已被充分研究。这削弱了任何“针对合成视图的时间闪烁指标是新的”的主张。\n差异：面向 2D 或被动立体显示器上的传统 MVD/DIBR 编解码器，仅 MOS。没有 HMD 头部路径观看，没有神经 blend 权重/K-set 跳变，没有心理物理（TCSF/Panum）标定，也没有可微损失。"}]}, {"b": "sec", "h": "实验设计", "id": "experiments"}, {"b": "h3", "t": "数据集"}, {"b": "ul", "items": ["DNA-Rendering（60 视角人体采集，签署许可协议后公开）：主要的远程呈现内容，包含面部和手部。以稀疏的 4-8 相机子集作为方法输入；稠密视角为真实方法验证提供离线伪参考。", "ActorsHQ（160 相机 12MP 人体采集，许可后公开）：稠密阵列伪 GT，来自在全部相机上逐序列离线拟合的 4DGS/3DGS，用于沿头部路径渲染参考立体；稀疏子集作为方法输入。", "MVHumanNet++（大规模多视角人体视频）：为损失微调实验提供额外身份和动作。", "Neural 3D Video / DyNeRF（18-21 台相机，厨房场景）：与基础论文保持连续性并重新评判其消融。", "ENeRF-Outdoor：一个非人体、深度范围更大的条件，用于测试离心率和视差范围效应。", "在 Quest 3 上模拟 3D 通话时，从约 10 人记录的 6DoF 头部轨迹（内部采集；采集很容易，并随数据集发布）。", "可选的小规模自定义采集：6-8 台同步相机加一对安装在滑轨上、间距约 63 mm 的立体相机，为 10-20 段简短的远程呈现片段提供真实立体真值。"]}, {"b": "h3", "t": "对比基线"}, {"b": "ul", "items": ["PSNR / SSIM / LPIPS（逐眼）", "TCC（按基础论文的改编版本）、STED、SDT、SDV", "光流 warping 误差（Lai et al. 2018）以及 tLP / tOF", "逐眼以及在独眼平均图上应用的 FovVideoVDP 和 ColorVideoVDP", "应用于帧差残差的基于 elaTCSF 的闪烁预测器", "IV-PSNR 以及具备时间感知的 IV-PSNR-YUVM", "MEt3R（应用于左右图对和连续帧）", "VMAF", "逐立体帧的 iSQoE（SCOPE），在时间上取平均", "在我们的 JOD 数据上训练的学习型 VQA（例如微调的 FAST-VQA/DOVER 式模型），作为上界黑盒对照", "产生刺激的渲染方法：基础论文风格的重新实现（+/- TSDF 引导，+/- 时间滤波，K=2/4/8）、ENeRF、GPS-Gaussian(+)、一个逐帧 feed-forward Gaussian 方法、一个逐帧 3DGS/4DGS 流式方法，以及一个应用于基础输出的逐眼单步生成式修复器（Difix 式）"]}, {"b": "h3", "t": "指标"}, {"b": "ul", "items": ["心理测量阈值（2AFC 75% 点）及 bootstrap 95% 置信区间；双眼间时间调制 vs 双眼间静态 vs 双眼相同条件的阈值比（关键证伪量）", "由成对比较得到的 JOD 标度值及置信区间", "指标性能：在留一方法和留一伪影划分下的 SROCC、PLCC 和以 JOD 计的 RMSE；以对数单位计的阈值预测误差", "跨头显迁移：在 Quest 3 上拟合的指标在第二台 HMD 上测试", "通道消融：去掉 E_bino / E_view / E_temp，测量每个条件下 SROCC 的变化", "应用：JNI 损失微调在相同 PSNR 下的 JOD 增益；立体一致 vs 独立逐眼渲染的 JOD 与计算量对比；基础论文消融的 JOD 差异"]}, {"b": "h3", "t": "关键消融"}, {"b": "ul", "items": ["无双目通道的模型（仅逐眼汇聚）：检验主张 B 的机制", "双目通道去掉时间调制项（仅静态双眼间差异，即 Dichoptic-Foveation 式）：分离出新的部分", "E_temp 不做运动补偿（原始帧差，类似 TCC）：说明为何现有时间指标混淆了真实运动与闪烁", "去掉视角路径/K-set 事件锁定", "均匀 vs 拟合的区域权重（面部/手部 vs 身体/背景）", "阈值标定的通道 vs 端到端拟合到 JOD 的通道（过拟合与可解释性检查）", "显示器 vs HMD：方法排名是否改变？", "全参考 vs 简化参考（仅深度/光流）变体"]}, {"b": "h3", "t": "需要自建采集"}, {"b": "p", "t": "核心心理物理实验不需要自定义采集。刺激注入在公开数据（DNA-Rendering、ActorsHQ）的干净渲染之上，因此每个刺激都有精确参考，包括沿任意头部路径的立体。真实方法验证可以使用稠密阵列伪真值，但来自离线 4DGS 拟合的伪 GT 自带伪影，审稿人会对此提出质疑。因此建议但不强制进行小规模自定义采集：6-8 台同步全局快门相机加一对安装在滑轨上或固定位姿的真实 63 mm 立体对，采集 10-20 段 10-30 s 的说话和手势片段。这能提供瞳距基线下的真实立体参考。头部轨迹必须在 Quest 3 上内部记录（成本低）。人体受试者研究需要 IRB/伦理审批（第 1 周启动）以及 HMD 光度标定（借用光度计或分光辐射计）。"}, {"b": "sec", "h": "两周内的验证实验", "id": "two-weeks"}, {"b": "p", "t": "主张 A 的预实验加基线盲区检查。不需要重新实现基础管线。第 1-4 天：取 3 段 DNA-Rendering（或 ActorsHQ）序列，用任意可用渲染器沿 2 条记录的头部路径渲染干净的立体 90 Hz 片段，例如用已发布代码的 GPS-Gaussian，或在单帧上拟合 3DGS 并用简单的刚性头部路径运动驱动。利用渲染深度，直接在图像/深度空间注入 3 种扰动：(a) 双眼相同的 5 Hz 时间深度 warp 噪声；(b) 静态的双眼间 warp 差异；(c) 以 5 Hz 调制的双眼间 warp 差异。每种使用 5-6 个幅度，并区分面部与躯干掩码。第 5-10 天：在 Quest 3 中对 5-6 名实验室参与者进行 2AFC 恒定刺激法测试（在现有豁免协议下进行，或在 IRB 待批时仅由作者参与），每人约 45 min，拟合心理测量函数。第 8-12 天，并行进行：在同样的刺激上计算逐眼 ColorVideoVDP、TCC、warping 误差和 MEt3R，检查它们在相同幅度下能否预测三种条件的检测概率。通过标准：(c) 的阈值比 (a) 和 (b) 都至少低 2 倍（汇总观察者后 bootstrap 置信区间不重叠），并且逐眼 ColorVideoVDP 对 (b) 和 (c) 给出几乎相同的预测可见度或排序错误。任一结果都支持双目-时间的叙事，并表明基线对此是盲目的。"}, {"b": "sec", "h": "止损标准", "id": "kill"}, {"b": "p", "t": "若出现以下任一情况，则放弃或降级项目。(1) 在预实验中，双眼间时间调制的阈值与双眼间静态和双眼相同条件相差在 1.5 倍以内。那么双目通道只是逐眼闪烁，关键新颖性消失；最多退回为一篇显示器加 HMD 的数据集论文。(2) 逐眼 ColorVideoVDP 加一个简单的左右差异项，在真实方法 JOD 数据上的留一方法 SROCC 与完整模型相差在 0.05 以内（约在第 4 个月用前 10-12 名参与者检查）。(3) 真实在线方法的伪影全部远高于阈值，使排序变得平凡且 PSNR 已能排序；或者全部低于阈值，使什么都不可见。无论哪种，该指标在远程呈现中都没有判别作用。(4) 在第 4 个月之前出现 Mantiuk 组或 Meta 的论文，提供针对 NVS 伪影的 HMD 立体-时间 JOD 数据。在这种情况下，将范围缩小到视角路径/K-set 通道和应用结果。"}, {"b": "sec", "h": "审稿人可能的质疑与回应", "id": "objections"}, {"b": "p", "t": "这不过是 ColorVideoVDP 加几个额外通道，而双目方面刚被 Dichoptic Foveation（SIGGRAPH 2026）和 SCOPE/iSQoE 做过。新在哪里？", "label": "质疑"}, {"b": "p", "t": "Dichoptic Foveation 测量静态双眼间频率差异，SCOPE 测量静态立体图像。两者都没有测量随时间变化、由合成变量（blend 权重、逐眼幻觉、去遮挡）构造的双眼间差异。我们的主打结果正是这些工作看不到的交互：时间调制将双眼间阈值降低了一个我们会报告的倍数。我们把它们的静态数据用作零条件。指标增益在留一方法下相对于逐眼 ColorVideoVDP 定量展示，通道消融将增益归因于新的双目-时间项。", "label": "回应"}, {"b": "p", "t": "注入的伪影是合成的，可能无法反映真实渲染器的失败，因此在其上得到的阈值不能迁移。", "label": "质疑"}, {"b": "p", "t": "注入是通过管线自身的内部变量（深度、权重、K-set、掩码）进行的，而不是通过图像空间噪声。幅度和时间频谱与从真实方法输出测得的统计量相匹配，即 ENeRF、GPS-Gaussian 和基础管线的深度噪声 PSD 和切换率。模型只在阈值上标定，然后零样本测试于 8 个以上真实方法（包括一个逐眼生成式修复器）的 JOD 评分，采用留一方法。因此迁移是一个被明确检验的主张，而非假设。", "label": "回应"}, {"b": "p", "t": "样本量小、只有一台头显，所以结果无法推广；CV 会议上的感知研究看起来统计功效不足。", "label": "质疑"}, {"b": "p", "t": "阈值使用约 16-20 名观察者，JOD 使用约 20-24 名，这是 SIGGRAPH/TOG 感知论文的典型规模，配有 bootstrap 置信区间，并由预实验计算功效。有两台 HMD 并进行跨头显迁移测试，另有显示器条件。所有刺激、原始响应、头部路径和代码都会发布，他人可以扩展数据集。主要投稿目标是对感知研究友好的图形学或 VR 会议，而不是 CVPR。", "label": "回应"}, {"b": "p", "t": "沿头部路径的真实方法验证没有真值立体，而稠密阵列的伪 GT 会让指标偏向与伪 GT 渲染器相似的方法。", "label": "质疑"}, {"b": "p", "t": "阈值实验不需要 GT，因为干净渲染就是精确参考。对于真实方法，我们 (a) 只在接近真实相机的视角使用稠密阵列伪 GT，并报告与真实留出相机的一致性作为健全性检查；(b) 提供由渲染深度和光流驱动的简化参考变体；(c) 加入带真实 IPD 立体对的小规模自定义采集。我们还报告方法排名在伪 GT 与真 GT 子集之间是否不同。", "label": "回应"}, {"b": "p", "t": "把该指标用作损失是循环论证（Goodhart），而且应用增益会很有限。", "label": "质疑"}, {"b": "p", "t": "每一项应用主张都由第二次独立用户研究评判，使用新的观察者和成对 JOD，绝不用 JNI 本身评判，并在相同 PSNR 下与 warping 误差和 TCC 损失对比。立体一致渲染应用还给出成本上的论据（双眼共用一个权重场），因此即使感知上没有差异，也是有用的结果。", "label": "回应"}, {"b": "sec", "h": "投入", "id": "effort"}, {"b": "kv", "items": [["周期", "7-9（2 周预实验；第 1-2 个月做刺激引擎、基础论文风格重新实现和 IRB；第 3-4 个月做阈值研究；第 5-6 个月做 JOD 研究和模型拟合；第 7-8 个月做应用和确认性研究；写作）"], ["人力", "2 人：一名博士生负责渲染/刺激引擎和损失实验，一名负责心理物理和建模。强烈建议有一位具有视觉科学或心理物理经验的合作者，例如用于 Panum/TCSF 建模以及增强研究设计的可信度。"], ["算力", "2-4 块消费级或工作站 GPU（RTX 4090/A6000 级），用于离线 4DGS 伪 GT 拟合、立体刺激渲染和 blend 网络微调；总计低于约 1,500 GPU 小时。硬件：Quest 3 以及可使用的第二台 HMD（Varjo、Vision Pro 或 Quest Pro）、一台光度计，以及可选的 6-8 相机阵列加立体对（约 $5-15k）用于自定义采集。约 40-50 名参与者的报酬。"], ["目标会议", "SIGGRAPH Asia 2027（ACM TOG，截稿约 2027 年 5 月），与时间线最契合。备选：IEEE VR 2028 期刊轨道（TVCG），或面向重心理物理版本的 ACM TAP / SAP。只有当损失和应用结果很强且数据集规模大时才考虑 CVPR/ICCV；否则视觉方向的审稿人会认为统计功效不足。"]]}, {"b": "sec", "h": "可组合的方向", "id": "synergies"}, {"b": "p", "t": "(1) 立体一致与多观看者渲染：双目通道直接论证并度量在双眼和多个观看者之间共享 blend 权重或 TSDF 状态。这既消除了双眼竞争，又削减了基础管线每个观看者 2 倍的开销。这是一篇自然的配套方法论文。(2) 用学习型时间记忆取代 TSDF/颜色掩码启发式（ConvGRU/TTT 状态、Stereo Any Video 前端）：JNI 同时作为训练损失和评估，最终可以表明几何引导在感知上是否重要。(3) RGB-D 或 Gaussian 流的码率-失真-闪烁编码（Starline 式 HEVC 深度、DSGS、Tele360 传输格式）：JNI 为码率分配提供感知闪烁项。(4) 在线生成式修复器（Difix/DiffusionHarmonizer/Restereo/SyncFix 式）：逐眼独立修复恰恰产生本工作表明高度可见的随时间变化的双眼间不一致，因此本文为同步立体修复器提供动机并对其进行评估。(5) 长时程、头部跟踪的远程呈现基准：发布的头部路径、刺激和 JOD 数据成为其感知赛道。(6) 注视点相关或 foveated 计算分配：随离心率变化的阈值决定哪里需要时间滤波和 blend 网络容量。自然的系列是：本感知/指标论文，然后是用它训练的立体一致时间渲染器，然后是感知码率控制。"}], "toc": false, "series": {"prev": {"k": "idea-C13"}, "next": {"k": "idea-C03"}, "up": {"u": "future/index.html", "t": "Directions 目录"}}}}</script>
+<script>
+(function () {
+  "use strict";
+  // ================= lib: DOM, text and math helpers shared by every page =================
+  // A page script defines rich(text) (inline cross-links); paras() and eqList() call it.
+  var DATA;
+  try { DATA = JSON.parse(document.getElementById("data").textContent); } catch (e) { DATA = {}; }
+  var meta = DATA.meta || {};
+
+  // ---------- DOM helpers: all text goes through textContent; external links are https-only ----------
+  function safeUrl(u) { if (typeof u !== "string") return null; var s = u.trim(); return /^https:\/\/[^\s"'<>]+$/i.test(s) ? s : null; }
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "class") n.className = v;
+      else if (k === "text") n.textContent = String(v);
+      else if (k === "href") { var u = safeUrl(v); if (u) { n.setAttribute("href", u); n.setAttribute("target", "_blank"); n.setAttribute("rel", "noopener noreferrer"); } }
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c === null || c === undefined || c === false) return; n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return n;
+  }
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function sv(tag, attrs, kids) {
+    var n = document.createElementNS(SVGNS, tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "text") n.textContent = String(v);
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c) n.appendChild(c); });
+    return n;
+  }
+  function arr(x) { return Array.isArray(x) ? x : []; }
+  function str(x) { return typeof x === "string" ? x : (x === null || x === undefined ? "" : String(x)); }
+  function paras(text) { return str(text).split(/\n\s*\n/).map(function (t) { return t.trim(); }).filter(Boolean).map(function (t) { return el("p", null, rich(t)); }); }
+  function link(title, url) { return safeUrl(url) ? el("a", { href: url, text: title }) : el("span", { text: title }); }
+  function ul(items, map) { return el("ul", { class: "plain" }, arr(items).map(function (x) { return el("li", null, [map ? map(x) : str(x)]); })); }
+  function fmtCit(n) { n = Number(n); if (!(n >= 0)) return "—"; if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k"; return String(n); }
+
+  // ---------- math (MathJax, typeset lazily) ----------
+  var mathReady = false, mathQueue = [];
+  function mathUsable() { return !!(window.MathJax && typeof window.MathJax.typesetPromise === "function"); }
+  function flushMath() { mathReady = true; var q = mathQueue.slice(); mathQueue = []; q.forEach(typeset); }
+  window.__atlasMathReady = flushMath;
+  // MathJax may finish loading before this script runs (cached/async), so also poll for it.
+  var mathPoll = setInterval(function () { if (mathUsable()) { clearInterval(mathPoll); flushMath(); } }, 200);
+  setTimeout(function () { clearInterval(mathPoll); }, 30000);
+  function typeset(node) {
+    if (!node) return;
+    if (!mathReady && mathUsable()) mathReady = true;
+    if (!mathReady || !mathUsable()) { mathQueue.push(node); return; }
+    try { window.MathJax.typesetPromise([node]).catch(function () { /* leave raw TeX visible */ }); } catch (e) { /* leave raw TeX visible */ }
+  }
+  function eqList(eqs) {
+    eqs = arr(eqs).filter(function (q) { return q && str(q.tex).trim(); });
+    if (!eqs.length) return null;
+    return el("div", { class: "eqs" }, eqs.map(function (q) {
+      return el("div", { class: "eq" }, [el("div", { class: "math-block", text: "\\[" + str(q.tex) + "\\]" }), q.explain_zh ? el("p", null, rich(q.explain_zh)) : null]);
+    }));
+  }
+  document.addEventListener("toggle", function (e) { var t = e.target; if (t && t.tagName === "DETAILS" && t.open) typeset(t); }, true);
+
+  // ================= frame (Tufte site): links, notes, hover previews, top bar, theme =================
+  var SITE = DATA.site || {};
+  var ROOT = str(SITE.root);
+  var XREF = DATA.xref || {};
+  function hasX(key) { return Object.prototype.hasOwnProperty.call(XREF, key); }
+  // Custom page parts (search tools, diagrams, charts) register here; blocks.js calls them for {"b": "slot"} blocks.
+  var SLOTS = {};
+
+  // ---------- internal links: urls are relative to the site root; pages sit at different depths ----------
+  var SAFE_PATH = /^[A-Za-z0-9][A-Za-z0-9._\/-]*(\?[A-Za-z0-9=&._-]+)?(#[A-Za-z0-9._-]+)?$/;
+  function relHref(u) {
+    u = str(u);
+    if (/^#[A-Za-z0-9._-]+$/.test(u)) return u;
+    if (!SAFE_PATH.test(u)) return null;
+    var cut = u.indexOf("#"), path = cut < 0 ? u : u.slice(0, cut);
+    if (path === SITE.path) return cut < 0 ? "#" : u.slice(cut);
+    return ROOT + u;
+  }
+  function pageLink(u, text, cls) {
+    var h = relHref(u);
+    if (!h) return el("span", { class: cls || null, text: text });
+    var a = el("a", { class: cls || null, text: text });
+    a.setAttribute("href", h);
+    return a;
+  }
+  // A link to a known entry (concept, topic, paper, step...). data-xref drives the hover preview.
+  function xlink(key, text, cls) {
+    if (!hasX(key)) return text ? document.createTextNode(text) : null;
+    var x = XREF[key], a = pageLink(x.u, text || x.n || x.t, cls);
+    a.setAttribute("data-xref", key);
+    return a;
+  }
+
+  // Concept / topic ids mentioned in prose ("见 g-pinhole") become links labelled with the entry's short name.
+  var ID_RE = /(a-[a-z0-9]+(?:-[a-z0-9]+)*|[fgdrilnv]-[a-z0-9]+)/g;
+  var CJK = /[　-〿㐀-鿿＀-￯]/;
+  function rich(text) {
+    var s = str(text), out = [], last = 0, m;
+    ID_RE.lastIndex = 0;
+    while ((m = ID_RE.exec(s)) !== null) {
+      var id = m[1], prev = m.index > 0 ? s.charAt(m.index - 1) : "", next = s.charAt(m.index + id.length);
+      var key = hasX("concept-" + id) ? "concept-" + id : (hasX("adv-" + id) ? "adv-" + id : null);
+      if (!key || /[A-Za-z0-9_\-]/.test(prev) || /[A-Za-z0-9_]/.test(next)) continue;
+      // The prose spaces ids off from Chinese text; a Chinese label needs no such space.
+      var before = s.slice(last, m.index);
+      if (/ $/.test(before) && CJK.test(before.charAt(before.length - 2))) before = before.slice(0, -1);
+      if (before) out.push(document.createTextNode(before));
+      out.push(xlink(key, null, "xref"));
+      last = m.index + id.length;
+      if (s.charAt(last) === " " && CJK.test(s.charAt(last + 1))) last++;
+    }
+    if (last < s.length) out.push(document.createTextNode(s.slice(last)));
+    return out;
+  }
+  function lines(text) { return str(text).split(/\n+/).map(function (t) { return t.trim(); }).filter(Boolean).map(function (t) { return el("p", null, rich(t)); }); }
+
+  // ---------- side notes (numbered) and margin notes (unnumbered); on phones they fold behind a toggle ----------
+  var noteSeq = 0;
+  function sidenote(kids) {
+    var id = "sn-" + (++noteSeq);
+    return el("span", { class: "note-wrap" }, [
+      el("label", { for: id, class: "margin-toggle sidenote-number", "aria-label": "旁注" }),
+      el("input", { type: "checkbox", id: id, class: "margin-toggle" }),
+      el("span", { class: "sidenote" }, kids)
+    ]);
+  }
+  function marginnote(kids) {
+    var id = "mn-" + (++noteSeq);
+    return el("span", { class: "note-wrap" }, [
+      el("label", { for: id, class: "margin-toggle", "aria-label": "边注", text: "⊕" }),
+      el("input", { type: "checkbox", id: id, class: "margin-toggle" }),
+      el("span", { class: "marginnote" }, kids)
+    ]);
+  }
+  function noteLabel(text) { return el("span", { class: "note-label", text: text }); }
+
+  // ---------- article scaffolding ----------
+  var main = document.getElementById("main");
+  var art = main.querySelector("article");
+  function section(id, title, kids) {
+    var s = el("section", { id: id }, [title ? el("h2", { text: title }) : null].concat(kids));
+    art.appendChild(s);
+    return s;
+  }
+  function articleHead(o) {
+    var crumbs = el("nav", { class: "crumbs", "aria-label": "位置" });
+    arr(SITE.crumbs).forEach(function (c, i) {
+      if (i) crumbs.appendChild(el("span", { class: "sep", text: "›", "aria-hidden": "true" }));
+      crumbs.appendChild(c[1] ? pageLink(c[1], c[0]) : el("span", { text: c[0] }));
+    });
+    art.appendChild(el("header", { class: "art-head" }, [
+      crumbs,
+      el("h1", { text: o.title }),
+      o.subtitle ? el("p", { class: "subtitle", text: o.subtitle }) : null,
+      o.meta ? el("p", { class: "meta" }, o.meta) : null
+    ]));
+    if (o.epigraph) art.appendChild(el("div", { class: "epigraph" }, [el("blockquote", null, [el("p", null, rich(o.epigraph))])]));
+  }
+  // Previous / next in the series, each with its hover preview.
+  function seriesNav(prevKey, nextKey, indexUrl, indexLabel) {
+    var nav = el("nav", { class: "series", "aria-label": "同系列" });
+    nav.appendChild(el("div", { class: "prev" }, prevKey && hasX(prevKey) ? [el("small", { text: "上一篇" }), xlink(prevKey)] : []));
+    nav.appendChild(el("div", { class: "up" }, indexUrl ? [pageLink(indexUrl, indexLabel)] : []));
+    nav.appendChild(el("div", { class: "next" }, nextKey && hasX(nextKey) ? [el("small", { text: "下一篇" }), xlink(nextKey)] : []));
+    art.appendChild(nav);
+  }
+
+  // ---------- hover preview for internal links: mouse (after 300 ms) or keyboard focus; never on touch ----------
+  var tip = null, tipTimer = 0, tipFor = null;
+  function hideTip() {
+    clearTimeout(tipTimer);
+    if (tip) tip.hidden = true;
+    if (tipFor) { tipFor.removeAttribute("aria-describedby"); tipFor = null; }
+  }
+  function showTip(a) {
+    var key = a.getAttribute("data-xref");
+    if (!hasX(key)) return;
+    var x = XREF[key];
+    if (!tip) { tip = el("div", { class: "xtip", id: "xtip", role: "tooltip" }); document.body.appendChild(tip); }
+    tip.textContent = "";
+    if (x.m) tip.appendChild(el("div", { class: "xt-m", text: x.m }));
+    tip.appendChild(el("div", { class: "xt-t", text: x.t }));
+    if (x.e) tip.appendChild(el("div", { class: "xt-e", text: x.e }));
+    if (x.s) tip.appendChild(el("p", { class: "xt-s", text: x.s }));
+    tip.hidden = false;
+    var r = a.getClientRects()[0] || a.getBoundingClientRect(), vw = document.documentElement.clientWidth;
+    var w = tip.offsetWidth, h = tip.offsetHeight;
+    var left = Math.max(8, Math.min(r.left, vw - w - 8));
+    var top = r.bottom + 6;
+    if (top + h > window.innerHeight - 8 && r.top - h - 6 > 8) top = r.top - h - 6;
+    tip.style.left = Math.round(left + window.pageXOffset) + "px";
+    tip.style.top = Math.round(top + window.pageYOffset) + "px";
+    a.setAttribute("aria-describedby", "xtip");
+    tipFor = a;
+  }
+  function xrefTarget(e) { return e.target && e.target.closest ? e.target.closest("a[data-xref]") : null; }
+  document.addEventListener("pointerover", function (e) {
+    var a = xrefTarget(e);
+    if (!a || e.pointerType !== "mouse" || a === tipFor) return;
+    clearTimeout(tipTimer);
+    tipTimer = setTimeout(function () { showTip(a); }, 300);
+  });
+  document.addEventListener("pointerout", function (e) {
+    var a = xrefTarget(e);
+    if (!a || (e.relatedTarget && a.contains(e.relatedTarget))) return;
+    hideTip();
+  });
+  document.addEventListener("focusin", function (e) {
+    var a = xrefTarget(e);
+    if (a && a.matches(":focus-visible")) showTip(a);
+  });
+  document.addEventListener("focusout", function (e) { if (xrefTarget(e)) hideTip(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") hideTip(); });
+  window.addEventListener("scroll", function () { if (tipFor && !tipFor.matches(":focus-visible")) hideTip(); }, { passive: true });
+
+  // ---------- top bar: four menus with dropdowns (hover or click on desktop, a folding list on phones) ----------
+  var wide = window.matchMedia("(min-width: 761px)");
+  function setOpen(li, open) {
+    var btn = li.querySelector(".menu-btn");
+    if (open) Array.prototype.forEach.call(li.parentNode.children, function (o) { if (o !== li) setOpen(o, false); });
+    li.classList.toggle("open", open);
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (!open) li._hover = false;
+  }
+  function buildTopbar() {
+    var bar = document.getElementById("topbar");
+    var menus = el("ul", { class: "menus", id: "menus" });
+    arr(SITE.nav).forEach(function (m) {
+      var id = "menu-" + m.key;
+      var btn = el("button", { type: "button", class: "menu-btn", "aria-expanded": "false", "aria-controls": id, text: m.label });
+      var list = el("ul", { class: "drop", id: id }, arr(m.items).map(function (it) {
+        var a = pageLink(it[1], it[0]);
+        if (it[1] === SITE.navItem) a.classList.add("cur");
+        if (it[1] === SITE.path) a.setAttribute("aria-current", "page");
+        return el("li", null, [a]);
+      }));
+      var li = el("li", { class: "menu" + (m.key === SITE.navCur ? " cur" : "") }, [btn, list]);
+      btn.addEventListener("click", function () {
+        // A click on a menu the mouse already opened keeps it open instead of closing it again.
+        if (li._hover) { li._hover = false; return; }
+        setOpen(li, !li.classList.contains("open"));
+      });
+      btn.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowDown") { e.preventDefault(); setOpen(li, true); var f = list.querySelector("a"); if (f) f.focus(); }
+      });
+      li.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse" && wide.matches) { setOpen(li, true); li._hover = true; } });
+      li.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse" && wide.matches) setOpen(li, false); });
+      li.addEventListener("focusout", function (e) { if (wide.matches && !li.contains(e.relatedTarget)) setOpen(li, false); });
+      li.addEventListener("keydown", function (e) { if (e.key === "Escape" && li.classList.contains("open")) { setOpen(li, false); btn.focus(); } });
+      menus.appendChild(li);
+    });
+    var burger = el("button", { type: "button", class: "burger", "aria-expanded": "false", "aria-controls": "menus", text: "Menu" });
+    burger.addEventListener("click", function () {
+      var open = !bar.classList.contains("nav-open");
+      bar.classList.toggle("nav-open", open);
+      burger.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    var themeBtn = el("button", { type: "button", class: "theme-btn" });
+    function darkNow() {
+      var t = document.documentElement.getAttribute("data-theme");
+      return t ? t === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+    function paintThemeBtn() {
+      var dark = darkNow();
+      themeBtn.textContent = dark ? "Light" : "Dark";
+      themeBtn.setAttribute("aria-label", dark ? "切换到浅色" : "切换到深色");
+    }
+    themeBtn.addEventListener("click", function () {
+      var next = darkNow() ? "light" : "dark";
+      var system = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      // Choosing what the system already shows drops the override, so the page follows the system again.
+      if (next === system) document.documentElement.removeAttribute("data-theme");
+      else document.documentElement.setAttribute("data-theme", next);
+      try { if (next === system) localStorage.removeItem("atlas-theme"); else localStorage.setItem("atlas-theme", next); } catch (e) { /* storage unavailable */ }
+      paintThemeBtn();
+    });
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintThemeBtn);
+    paintThemeBtn();
+    bar.appendChild(el("div", { class: "bar-in" }, [pageLink("index.html", SITE.brand || "", "brand"), el("nav", { class: "site-nav", "aria-label": "站点导航" }, [menus]), themeBtn, burger]));
+    document.addEventListener("click", function (e) {
+      if (!bar.contains(e.target)) Array.prototype.forEach.call(menus.children, function (li) { setOpen(li, false); });
+    });
+  }
+
+  function finishPage() {
+    buildTopbar();
+    var foot = document.getElementById("site-foot");
+    if (foot) foot.appendChild(el("p", null, [pageLink("index.html", SITE.brand || ""), SITE.date ? " · 内容截至 " + SITE.date : ""]));
+    typeset(main);
+    // Deep links (#id): the page is rendered by script, so jump once it exists and again after fonts settle.
+    var h = window.location.hash ? window.location.hash.slice(1) : "";
+    if (h && /^[A-Za-z0-9._~-]+$/.test(h) && document.getElementById(h)) {
+      var moved = false;
+      ["wheel", "touchstart", "keydown", "mousedown"].forEach(function (ev) { window.addEventListener(ev, function () { moved = true; }, { once: true, passive: true }); });
+      var settle = function () { var t = document.getElementById(h); if (t && !moved) t.scrollIntoView({ block: "start" }); };
+      settle();
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { window.requestAnimationFrame(settle); });
+      [400, 1200, 2500].forEach(function (ms) { setTimeout(settle, ms); });
+    }
+  }
+
+  // ================= article: a page composed as blocks in routes.py =================
+  (function () {
+    var PG = DATA.page || {};
+    var H = PG.head || {};
+    if (PG.id) art.id = PG.id;
+
+    // A link dict from routes.py: {k} an entry with hover preview, {u, t} a page of this site, {url, t} an external page.
+    function part(x) {
+      if (x === null || x === undefined) return null;
+      if (typeof x === "string") return x;
+      if (x.k) return xlink(x.k, x.t || null);
+      if (x.u) return pageLink(x.u, x.t || x.u);
+      if (x.url) return link(x.t || x.url, x.url);
+      return x.t ? str(x.t) : null;
+    }
+    function noteNodes(n) {
+      var kids = [noteLabel(n.label)];
+      if (n.t) kids = kids.concat(rich(n.t));
+      arr(n.links).forEach(function (l, i) { if (i) kids.push(el("br")); kids.push(part(l)); });
+      return kids;
+    }
+    function runIn(label) { return el("b", { class: "run-in", text: label + "：" }); }
+    function multiline(text) {
+      var out = [];
+      str(text).split("\n").forEach(function (line, i) { if (i) out.push(el("br")); out = out.concat(rich(line)); });
+      return out;
+    }
+
+    // ---------- head ----------
+    var meta = [];
+    if (arr(H.prereqs).length) {
+      meta.push(marginnote([noteLabel("阅读前需要")].concat(arr(H.prereqs).map(function (p, i) {
+        var a = part(p);
+        return i ? el("span", null, ["；", a]) : a;
+      }))));
+    }
+    var sep = false;
+    arr(H.meta).concat(H.minutes > 1 ? ["约 " + H.minutes + " 分钟"] : []).forEach(function (x) {
+      var n = part(x);
+      if (!n || (typeof n === "string" && !n.trim())) return;
+      if (sep) meta.push(" · ");
+      meta.push(n);
+      sep = !(typeof x === "string" && /：$/.test(x));
+    });
+    articleHead({ title: H.title, subtitle: H.sub, meta: meta.length ? meta : null, epigraph: H.epigraph });
+    if (str(H.lede).trim()) art.appendChild(el("div", { class: "lede" }, paras(H.lede)));
+
+    // ---------- blocks ----------
+    function heading(tag, b) {
+      var title = b.url && safeUrl(b.url) ? link(b.t, b.url) : (b.k ? part({ k: b.k, t: b.t }) : str(b.t));
+      var h = el(tag, { id: b.id || null }, [title]);
+      if (b.sn) h.appendChild(sidenote(noteNodes(b.sn)));
+      if (b.en) h.appendChild(el("span", { class: "en", text: b.en }));
+      if (b.tag) h.appendChild(el("span", { class: "used", text: b.tag }));
+      return h;
+    }
+    function withNotes(nodes, b) {
+      if (nodes.length && b.mn) nodes[0].insertBefore(marginnote(noteNodes(b.mn)), nodes[0].firstChild);
+      if (nodes.length && b.label) nodes[0].insertBefore(runIn(b.label), nodes[0].firstChild);
+      return nodes;
+    }
+    function listItem(x) {
+      if (typeof x === "string") return el("li", null, rich(x));
+      return el("li", null, (x.label ? [runIn(x.label)] : []).concat(rich(x.t)));
+    }
+    function refsList(items, cls) {
+      var left = items.some(function (x) { return x.left; });
+      return el("ul", { class: "refs " + (cls || "") + (left ? "" : " noleft") }, items.map(function (x) {
+        var body = [x.k || x.u || x.url ? part(x) : el("span", { class: "plain-t", text: x.t })];
+        if (x.tag) body.push(el("span", { class: "used", text: x.tag }));
+        if (x.sub) body.push(el("div", { class: "en", text: x.sub }));
+        if (str(x.gloss).trim()) body.push(el("div", { class: "gloss" }, multiline(x.gloss)));
+        var kids = left ? [el("span", { class: /^\d{4}$/.test(str(x.left)) ? "yr" : "kind", text: str(x.left) })] : [];
+        return el("li", { id: x.id || null }, kids.concat([el("div", null, body)]));
+      }));
+    }
+    var TY = { book: "教材", course: "课程", paper: "论文", tutorial: "教程", code: "代码", video: "视频", blog: "文章" };
+    function tocGroups(groups, level) {
+      var out = [];
+      arr(groups).forEach(function (g) {
+        if (g.h) out.push(el(level, { class: "toc-h" }, [g.k || g.u ? part({ k: g.k, u: g.u, t: g.h }) : g.h]));
+        if (str(g.lede).trim()) out.push(el("p", { class: "toc-lede" }, rich(g.lede)));
+        out.push(el("ol", { class: "toc" }, arr(g.items).map(function (it) {
+          return el("li", null, [
+            el("div", { class: "toc-t" }, [part({ k: it.k, u: it.u, t: it.t }), it.en ? el("span", { class: "en", text: it.en }) : null,
+              it.meta ? el("span", { class: "toc-meta", text: it.meta }) : null]),
+            str(it.s).trim() ? el("p", { class: "toc-s", text: it.s }) : null
+          ]);
+        })));
+      });
+      return out;
+    }
+    function cell(tag, c) { return el(tag, null, c && typeof c === "object" ? [part(c)] : rich(c)); }
+
+    var box = null;
+    function cur() { if (!box) { box = el("section"); art.appendChild(box); } return box; }
+    function render(b) {
+      switch (b.b) {
+        case "p": return withNotes(paras(b.t), b);
+        case "lines": return withNotes(lines(b.t), b);
+        case "h3": return [heading("h3", b)];
+        case "note": return [el("p", { class: "note", text: b.t })];
+        case "ul": case "ol": return [el(b.b, null, arr(b.items).map(listItem))];
+        case "eqs": return [eqList(b.eqs)];
+        case "qa": return [el("p", { class: "quiz-h", text: "自测" }), el("ol", { class: "quiz" }, arr(b.items).map(function (q) {
+          return el("li", null, [el("p", null, rich(q.q)), el("details", null, [el("summary", { text: "答案" }), el("p", null, rich(q.a))])]);
+        }))];
+        case "res": return [refsList(arr(b.items).map(function (r) {
+          return { left: TY[r.type] || r.type || "", url: r.url, t: r.title, gloss: r.note_zh };
+        }))];
+        case "refs": return [refsList(arr(b.items), b.cls)];
+        case "toc": return tocGroups(b.groups, cur().querySelector("h2") ? "h3" : "h2");
+        case "table": return [el("div", { class: "table-wrap" + (b.wide ? " fullwidth" : "") }, [el("table", { class: "booktabs" + (b.cls ? " " + b.cls : "") }, [
+          el("thead", null, [el("tr", null, arr(b.head).map(function (h) { return el("th", { text: h }); }))]),
+          el("tbody", null, arr(b.rows).map(function (r) { return el("tr", null, arr(r).map(function (c) { return cell("td", c); })); }))
+        ])])];
+        case "timeline": return [el("ul", { class: "refs timeline" }, arr(b.items).map(function (x) {
+          return el("li", null, [el("span", { class: "yr", text: str(x[0]) }), el("div", null, rich(x[1]))]);
+        }))];
+        case "kv": return [el("table", { class: "kv" }, [el("tbody", null, arr(b.items).map(function (x) {
+          return el("tr", null, [el("th", { text: x[0] }), el("td", null, rich(x[1]))]);
+        }))])];
+        case "mtoc": return [marginToc(b.items)];
+        case "slot": return typeof SLOTS[b.name] === "function" ? [SLOTS[b.name](b)] : [];
+        default: return [];
+      }
+    }
+    // Long articles: a table of contents at the top of the margin (a folding list on phones).
+    function marginToc(items) {
+      var d = el("details", { class: "mtoc" }, [el("summary", { text: "本文目录" }), el("ol", null, arr(items).map(function (x) { return el("li", null, [part(x)]); }))]);
+      var wide = window.matchMedia("(min-width: 761px)");
+      d.open = wide.matches;
+      return d;
+    }
+    arr(PG.body).forEach(function (b) {
+      if (b.b === "sec") {
+        box = el("section", { id: b.id || null });
+        if (b.h) box.appendChild(heading("h2", { t: b.h, sn: b.sn }));
+        art.appendChild(box);
+        return;
+      }
+      render(b).forEach(function (n) { if (n) cur().appendChild(n); });
+    });
+
+    var S = PG.series || {};
+    if (S.prev || S.next || S.up) {
+      var nav = el("nav", { class: "series", "aria-label": "同系列" });
+      nav.appendChild(el("div", { class: "prev" }, S.prev ? [el("small", { text: "上一篇" }), part(S.prev)] : []));
+      nav.appendChild(el("div", { class: "up" }, S.up ? [part(S.up)] : []));
+      nav.appendChild(el("div", { class: "next" }, S.next ? [el("small", { text: "下一篇" }), part(S.next)] : []));
+      art.appendChild(nav);
+    }
+  })();
+
+  finishPage();
+})();
+</script>
+</body>
+</html>

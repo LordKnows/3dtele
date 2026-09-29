@@ -1,0 +1,865 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>一次混合，多视共享：面向时间稳定光场远程临场的视角无关源空间混合 · 3D 临场研究图谱</title>
+<meta name="description" content="在静态标定相机阵列上，把学习式 IBR 混合从目标图像移到源像素上的一个低阶方向场中。">
+<meta name="color-scheme" content="light dark">
+
+<script>
+  // Apply a saved light/dark choice before first paint; without one the page follows the system setting.
+  try { var t = localStorage.getItem("atlas-theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) { /* storage unavailable */ }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Serif+SC:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/lxgwwenkai-regular.css">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]] },
+    options: { skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code", "input", "select", "button"] },
+    svg: { fontCache: "global" },
+    startup: {
+      typeset: false,
+      ready: function () {
+        window.MathJax.startup.defaultReady();
+        if (typeof window.__atlasMathReady === "function") window.__atlasMathReady();
+      }
+    }
+  };
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js"></script>
+<style>
+/* Tufte-style layout for Chinese long-form pages, after tufte-css (MIT, (c) 2014 Dave Liepmann; see LICENSE-tufte-css).
+   ET Book: MIT, (c) 2015 Dmitry Krasny, Bonnie Scranton, Edward Tufte (fonts/et-book/LICENSE).
+   ../ is the page's path to the site root. */
+
+/* ---------- fonts: ET Book for Latin (self-hosted), Noto Serif SC for Chinese text, LXGW WenKai for notes ---------- */
+/* ET Book leaves curly quotes, dashes and ellipses to the Chinese font so they keep full width in Chinese prose,
+   and single guillemets (› ‹), which it lacks. */
+@font-face { font-family: "et-book"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../fonts/et-book/et-book-roman-line-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book"; font-weight: 400; font-style: italic; font-display: swap;
+  src: url("../fonts/et-book/et-book-display-italic-old-style-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book"; font-weight: 700; font-style: normal; font-display: swap;
+  src: url("../fonts/et-book/et-book-bold-line-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+/* Notes pair Latin italic with upright Kai (the "italic ↔ 楷体" rule): the italic cut is registered as an upright
+   family so the browser never slants the Chinese glyphs. */
+@font-face { font-family: "et-book-note"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../fonts/et-book/et-book-display-italic-old-style-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book-osf"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../fonts/et-book/et-book-roman-old-style-figures.woff") format("woff"); }
+
+:root {
+  --bg: #fffff8;
+  --ink: #111111;
+  --ink-2: #3c3c36;
+  --muted: #74746a;
+  --rule: #d8d6c8;
+  --rule-2: #b9b6a4;
+  --accent: #a8322d;
+  --serif: "et-book", "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", Palatino, Georgia, serif;
+  --note: "et-book-note", "LXGW WenKai", "Kaiti SC", "STKaiti", "KaiTi", "et-book", serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --side: clamp(12rem, 21vw, 17rem);
+  --gap: 2.75rem;
+  --main: calc(100% - var(--side) - var(--gap));
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161614; --ink: #e2e0d6; --ink-2: #c3c1b6; --muted: #979589; --rule: #34332e; --rule-2: #4d4b44; --accent: #e8836f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161614; --ink: #e2e0d6; --ink-2: #c3c1b6; --muted: #979589; --rule: #34332e; --rule-2: #4d4b44; --accent: #e8836f;
+  color-scheme: dark;
+}
+
+/* ---------- base ---------- */
+* { box-sizing: border-box; }
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--serif); font-size: 1.15625rem; line-height: 1.85;
+  font-kerning: normal; font-variant-numeric: lining-nums;
+  /* Space between Chinese and Latin text where the source has none; squeeze adjacent CJK punctuation
+     (text-spacing-trim applies the fonts' halt / chws features). Browsers without them keep the source spacing. */
+  text-autospace: normal; text-spacing-trim: normal;
+  overflow-wrap: break-word;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+[hidden] { display: none !important; }
+a { color: inherit; text-decoration-line: underline; text-decoration-thickness: 1px; text-underline-offset: .18em; text-decoration-color: var(--rule-2); }
+a:hover { color: var(--accent); text-decoration-color: currentColor; }
+a:focus-visible, button:focus-visible, summary:focus-visible, label:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.skip { position: absolute; left: -999px; top: 0; }
+.skip:focus { left: 1rem; top: .5rem; background: var(--bg); padding: .2rem .5rem; z-index: 60; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+p { margin: 0; }
+p + p { margin-top: .9em; }
+
+/* ---------- top bar ---------- */
+.topbar { border-bottom: 1px solid var(--rule); }
+.bar-in { max-width: 67rem; margin: 0 auto; padding: 0 1.5rem; display: flex; align-items: center; gap: 2.2rem; min-height: 3.1rem; }
+.brand { font-size: 1rem; text-decoration: none; letter-spacing: .02em; white-space: nowrap; }
+.site-nav { flex: 1; }
+.menus { list-style: none; margin: 0; padding: 0; display: flex; gap: 1.6rem; }
+.menu { position: relative; }
+.menu-btn, .theme-btn, .burger {
+  font-family: "et-book", var(--serif); font-variant-caps: all-small-caps; letter-spacing: .08em; font-size: 1.12rem;
+  color: var(--ink-2); line-height: 3.1rem;
+}
+.menu-btn:hover, .theme-btn:hover, .burger:hover, .menu.open > .menu-btn { color: var(--accent); }
+.menu.cur > .menu-btn { color: var(--ink); box-shadow: inset 0 -1px 0 var(--ink); }
+.drop {
+  display: none; position: absolute; left: -1rem; top: 100%; z-index: 40; min-width: 13rem;
+  list-style: none; margin: 0; padding: .45rem 0; background: var(--bg); border: 1px solid var(--rule);
+}
+.menu.open > .drop { display: block; }
+.drop a { display: block; padding: .15rem 1rem; text-decoration: none; font-size: 1.02rem; color: var(--ink-2); white-space: nowrap; }
+.drop a:hover, .drop a:focus-visible { color: var(--accent); }
+.drop a.cur { color: var(--ink); }
+.drop a.cur::before { content: "›"; position: absolute; margin-left: -.7rem; color: var(--accent); }
+.theme-btn { margin-left: auto; }
+.burger { display: none; }
+
+/* ---------- article column + margin ---------- */
+main { display: block; }
+.art { max-width: 67rem; margin: 0 auto; padding: 2.6rem 1.5rem 3rem; counter-reset: sidenote-counter; }
+.art > *, .art section > * { width: var(--main); }
+.art > section { width: 100%; }
+.art .fullwidth { width: 100%; }
+section { padding-top: .6rem; }
+
+.crumbs { font-size: .86rem; color: var(--muted); letter-spacing: .01em; }
+.crumbs a { color: var(--muted); text-decoration: none; }
+.crumbs a:hover { color: var(--accent); }
+.crumbs .sep { margin: 0 .45em; color: var(--rule-2); }
+h1, h2, h3 { font-family: var(--serif); color: var(--ink); text-wrap: balance; }
+h1 { font-size: 2.3rem; font-weight: 400; line-height: 1.3; margin: .9rem 0 0; letter-spacing: .01em; }
+.subtitle { font-family: "et-book", var(--note); font-style: italic; font-size: 1.45rem; line-height: 1.3; color: var(--ink-2); margin-top: .35rem; }
+.meta { font-size: .92rem; color: var(--muted); margin-top: 1.1rem; }
+.meta a { color: var(--muted); }
+h2 { font-size: 1.42rem; font-weight: 600; line-height: 1.4; margin: 2.6rem 0 .9rem; }
+h3 { font-size: 1.12rem; font-weight: 600; line-height: 1.5; margin: 1.8rem 0 .5rem; }
+h3 .used { font-family: var(--note); font-weight: 400; font-size: .86rem; color: var(--muted); margin-left: .6em; }
+
+.epigraph { margin: 2.2rem 0 .6rem; }
+.epigraph blockquote { margin: 0; padding: 0 0 0 1.6rem; border-left: 1px solid var(--rule-2); }
+.epigraph p { font-family: var(--note); font-size: 1.12rem; line-height: 1.85; color: var(--ink-2); }
+
+.art ol, .art ul { margin: .6rem 0 0; padding-left: 1.6em; }
+.art li + li { margin-top: .45rem; }
+li::marker { font-family: "et-book-osf", var(--serif); color: var(--muted); }
+
+/* Equations: display math in the text column, scrolling sideways on narrow screens. */
+.eqs { display: block; }
+.eq + .eq { margin-top: 1.6rem; }
+.math-block { overflow-x: auto; overflow-y: hidden; margin: .4rem 0 .6rem; padding: .2rem 0; font-size: 1rem; }
+.math-block mjx-container { margin: 0 !important; }
+
+/* ---------- side notes & margin notes (floated into the right margin) ---------- */
+.sidenote, .marginnote {
+  float: right; clear: right; position: relative;
+  width: var(--side); margin-right: calc(-1 * (var(--side) + var(--gap))); margin-top: .3rem; margin-bottom: .6rem;
+  font-family: var(--note); font-size: .88rem; line-height: 1.6; color: var(--ink-2); text-align: left;
+  font-style: normal; font-weight: 400; letter-spacing: 0;
+}
+h3 .sidenote { margin-top: .2rem; }
+.sidenote-number { counter-increment: sidenote-counter; }
+.sidenote-number::after, .sidenote::before { font-family: "et-book-osf", var(--serif); position: relative; vertical-align: baseline; }
+.sidenote-number::after { content: counter(sidenote-counter); font-size: .75rem; top: -.55em; left: .08em; color: var(--ink-2); }
+.sidenote::before { content: counter(sidenote-counter) " "; font-size: .8rem; top: -.4em; }
+.note-label { font-family: var(--serif); font-weight: 600; font-size: .82rem; color: var(--muted); margin-right: .5em; }
+.marginnote .note-label { display: block; margin: 0 0 .1rem; }
+input.margin-toggle { display: none; }
+label.sidenote-number { display: inline; cursor: default; }
+label.margin-toggle:not(.sidenote-number) { display: none; }
+
+/* ---------- quiz, further reading, series ---------- */
+.quiz details { margin-top: .3rem; }
+.quiz summary { font-family: var(--note); font-size: .92rem; color: var(--muted); cursor: pointer; list-style: none; display: inline-block; }
+.quiz summary::-webkit-details-marker { display: none; }
+.quiz summary::before { content: "+ "; font-family: "et-book", var(--serif); }
+.quiz details[open] summary::before { content: "− "; }
+.quiz summary:hover { color: var(--accent); }
+.quiz details > p { margin-top: .3rem; padding-left: 1rem; border-left: 1px solid var(--rule); color: var(--ink-2); }
+
+/* Reference lists: a narrow label column (kind / year) and a hanging text column. */
+.art ul.refs { list-style: none; padding-left: 0; }
+.refs li { display: grid; grid-template-columns: 2.8rem minmax(0, 1fr); column-gap: .5rem; line-height: 1.6; }
+.refs li > :not(.kind):not(.yr) { grid-column: 2; }
+.refs .kind, .refs .yr { grid-column: 1; font-family: var(--note); font-size: .86rem; color: var(--muted); padding-top: .12rem; }
+.refs .yr { font-family: "et-book-osf", var(--serif); font-size: .95rem; padding-top: .05rem; }
+.refs .en { font-family: "et-book", var(--serif); font-style: italic; color: var(--muted); }
+.refs .gloss { font-family: var(--note); font-size: .88rem; color: var(--ink-2); margin-top: .1rem; }
+.art .refs li + li { margin-top: .75rem; }
+.art .papers li + li { margin-top: .35rem; }
+.refs.noleft li { grid-template-columns: minmax(0, 1fr); }
+.refs.noleft li > * { grid-column: 1; }
+.refs .used { font-family: var(--note); font-size: .82rem; color: var(--muted); margin-left: .5em; }
+.refs.terms .plain-t { font-weight: 600; }
+.refs.terms .en { display: inline; margin-left: .6em; }
+.timeline li { line-height: 1.7; }
+.art .timeline li + li { margin-top: .4rem; }
+
+/* ---------- blocks: lede, run-in labels, notes ---------- */
+.lede { margin-top: 1.6rem; color: var(--ink-2); }
+.run-in { font-weight: 600; color: var(--ink); }
+p.note { font-family: var(--note); font-size: .9rem; color: var(--muted); margin-top: .1rem; }
+h2 .en, h3 .en { font-family: "et-book", var(--serif); font-style: italic; font-weight: 400; color: var(--muted); margin-left: .6em; font-size: .92em; }
+h2 a, h3 a { text-decoration-color: var(--rule); }
+.quiz-h { font-family: var(--note); font-size: .88rem; color: var(--muted); margin-top: 1.4rem; }
+.quiz-h + ol.quiz { margin-top: .2rem; }
+
+/* Index pages: a table of contents instead of a card grid. */
+.art ol.toc { list-style: none; padding-left: 0; margin-top: .4rem; }
+.art ol.toc > li + li { margin-top: .85rem; }
+.toc-t { line-height: 1.55; }
+.toc-t .en { font-family: "et-book", var(--serif); font-style: italic; color: var(--muted); margin-left: .6em; font-size: .95em; }
+.toc-meta { font-family: var(--note); font-size: .82rem; color: var(--muted); margin-left: .7em; white-space: nowrap; }
+.toc-s { font-family: var(--note); font-size: .9rem; line-height: 1.65; color: var(--ink-2); margin-top: .1rem; }
+.toc-lede { font-family: var(--note); color: var(--ink-2); font-size: .95rem; }
+h2.toc-h, h3.toc-h { margin-bottom: .3rem; }
+
+/* Tables: booktabs rules (top, under the header, bottom), no vertical lines, no fills. */
+.table-wrap { overflow-x: auto; margin: 1rem 0; }
+table.booktabs { border-collapse: collapse; width: 100%; font-size: .9rem; line-height: 1.6; border-top: 1.5px solid var(--ink); border-bottom: 1.5px solid var(--ink); }
+table.booktabs th { text-align: left; font-weight: 600; padding: .45rem .7rem .35rem 0; border-bottom: 1px solid var(--ink); white-space: nowrap; vertical-align: bottom; }
+table.booktabs td { padding: .45rem .9rem .45rem 0; vertical-align: top; border-top: 1px solid var(--rule); }
+table.booktabs tbody tr:first-child td { border-top: 0; }
+table.rank td { white-space: nowrap; font-variant-numeric: tabular-nums; }
+table.rank td:nth-child(2) { white-space: normal; }
+table.kv { border-collapse: collapse; margin: .6rem 0; font-size: .95rem; }
+table.kv th { text-align: left; font-weight: 400; color: var(--muted); padding: .25rem 1.2rem .25rem 0; vertical-align: top; min-width: 5em; max-width: 12em; font-family: var(--note); }
+table.kv td { padding: .25rem 0; vertical-align: top; }
+
+/* Long articles: the table of contents sits at the top of the margin. */
+/* It sits in a full-width section, so it floats into the margin without a negative offset. */
+details.mtoc {
+  float: right; clear: right; width: var(--side); margin-right: 0; margin-bottom: 1rem;
+  font-family: var(--note); font-size: .86rem; line-height: 1.55; color: var(--ink-2);
+}
+details.mtoc summary { font-family: var(--serif); font-weight: 600; font-size: .82rem; color: var(--muted); list-style: none; cursor: default; }
+details.mtoc summary::-webkit-details-marker { display: none; }
+.art details.mtoc ol { list-style: none; padding: 0; margin: .3rem 0 0; }
+.art details.mtoc li + li { margin-top: .25rem; }
+details.mtoc a { text-decoration: none; }
+details.mtoc a:hover { text-decoration: underline; }
+
+/* Tools: search and filters with underlined inputs. */
+.tool { margin-top: 1rem; }
+.filters { display: flex; flex-wrap: wrap; gap: .6rem 1.6rem; align-items: baseline; font-family: var(--note); font-size: .92rem; color: var(--muted); }
+.filters label { display: inline-flex; gap: .5rem; align-items: baseline; }
+.filters input, .filters select {
+  font: inherit; color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid var(--rule-2); border-radius: 0;
+  padding: .15rem .1rem; min-width: 7rem;
+}
+.filters input[type="search"] { min-width: 14rem; }
+.filters select { max-width: 16rem; }
+.filters input:focus, .filters select:focus { outline: none; border-bottom-color: var(--accent); }
+.filters select option { background: var(--bg); color: var(--ink); }
+.filters .count { margin-left: auto; font-family: var(--mono); font-size: .8rem; }
+table.gl td.en { font-family: "et-book", var(--serif); width: 20%; }
+table.gl .abbr { color: var(--muted); }
+table.gl td.zh { white-space: nowrap; }
+table.gl td.def { color: var(--ink-2); min-width: 20rem; }
+table.gl td.c { font-size: .85rem; min-width: 9rem; padding-right: 0; }
+table.gl tr:target td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+table.db td.y { font-family: "et-book-osf", var(--serif); white-space: nowrap; }
+table.db td.t { min-width: 16rem; }
+table.db td.t small { display: block; color: var(--muted); font-size: .8rem; line-height: 1.45; margin-top: .15rem; }
+table.db td.tags { min-width: 7rem; font-family: var(--note); font-size: .8rem; color: var(--muted); }
+table.db td.tags span { display: block; }
+table.db .tier.milestone { color: var(--ink); font-weight: 600; }
+table.db td.s { min-width: 18rem; color: var(--ink-2); }
+table.db td.n { min-width: 12rem; font-size: .82rem; color: var(--ink-2); }
+
+/* Figures: the pipeline diagram and the timeline of classic papers, drawn in ink with one accent for interaction. */
+figure { margin: 1.4rem 0; }
+svg a { text-decoration: none; }
+.diagram-wrap, .lanes-wrap { position: relative; overflow-x: auto; }
+svg.diagram { width: 100%; min-width: 760px; height: auto; display: block; font-family: var(--note); }
+svg.diagram .dnode rect { fill: var(--bg); stroke: var(--ink-2); stroke-width: 1; }
+svg.diagram .dnode rect.data { stroke-dasharray: 4 3; }
+svg.diagram .dnode:hover rect, svg.diagram .dnode:focus rect { stroke: var(--accent); stroke-width: 1.5; }
+svg.diagram .dnode:focus { outline: none; }
+svg.diagram text { fill: var(--ink); }
+svg.diagram text.k { font-family: var(--mono); font-size: 10px; fill: var(--muted); }
+svg.diagram text.t { font-family: var(--serif); font-size: 13px; font-weight: 600; }
+svg.diagram text.s { font-size: 11px; fill: var(--ink-2); }
+svg.diagram .dedge { fill: none; stroke: var(--ink-2); stroke-width: 1; }
+svg.diagram .dedge.fb { stroke-dasharray: 4 3; }
+svg.diagram .dhead { fill: var(--ink-2); }
+svg.diagram .dloop { fill: none; stroke: var(--rule-2); stroke-dasharray: 2 3; }
+svg.diagram .dlabel { font-size: 12px; fill: var(--muted); }
+svg.diagram .dnote { font-size: 11px; fill: var(--muted); }
+svg.diagram a.dnode:hover .dnote { fill: var(--accent); }
+svg.lanes { width: 100%; min-width: 720px; height: auto; display: block; font-family: var(--note); }
+svg.lanes .grid { stroke: var(--rule); stroke-width: 1; }
+svg.lanes .axis { font-family: "et-book-osf", var(--serif); font-size: 12px; fill: var(--muted); }
+svg.lanes .lane-l { font-size: 12px; fill: var(--ink-2); }
+svg.lanes .brk { stroke: var(--muted); fill: none; }
+svg.lanes .hit { fill: transparent; }
+svg .dot { fill: var(--ink); }
+svg .dot.hollow { fill: var(--bg); stroke: var(--ink-2); stroke-width: 1.2; }
+svg.lanes a.m:hover .dot, svg.lanes a.m:focus .dot { fill: var(--accent); stroke: var(--accent); }
+svg.lanes a.m:focus { outline: none; }
+.vtip { position: absolute; z-index: 20; max-width: 20rem; padding: .45rem .7rem; background: var(--bg); border: 1px solid var(--rule-2); font-family: var(--note); font-size: .82rem; line-height: 1.5; pointer-events: none; }
+.vtip b { display: block; font-family: "et-book", var(--serif); font-weight: 400; font-size: .92rem; }
+.vtip small { display: block; color: var(--muted); }
+.vtip span { color: var(--accent); }
+figcaption { font-family: var(--note); font-size: .85rem; color: var(--muted); margin-top: .4rem; }
+figcaption svg { vertical-align: -1px; }
+
+.series { display: grid; grid-template-columns: 1fr auto 1fr; gap: 1rem; align-items: end; margin-top: 3.2rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: .98rem; }
+.series small { display: block; font-family: var(--note); font-size: .8rem; color: var(--muted); }
+.series .up { text-align: center; font-size: .88rem; }
+.series .up a { color: var(--muted); }
+.series .next { text-align: right; }
+
+.site-foot { max-width: 67rem; margin: 0 auto; padding: 1.2rem 1.5rem 2.5rem; font-size: .82rem; color: var(--muted); }
+.site-foot a { color: var(--muted); text-decoration: none; }
+
+/* ---------- hover preview ---------- */
+.xtip {
+  position: absolute; z-index: 50; max-width: min(22rem, calc(100vw - 16px)); padding: .55rem .8rem .6rem;
+  background: var(--bg); border: 1px solid var(--rule-2); color: var(--ink);
+  font-family: var(--note); font-size: .88rem; line-height: 1.6; pointer-events: none;
+}
+.xt-m { font-size: .76rem; color: var(--muted); }
+.xt-t { font-family: var(--serif); font-weight: 600; font-size: .95rem; line-height: 1.45; margin-top: .1rem; }
+.xt-e { font-family: "et-book", var(--serif); font-style: italic; color: var(--ink-2); line-height: 1.4; }
+.xt-s { margin-top: .35rem; color: var(--ink-2); }
+
+/* ---------- narrow screens: one column; notes fold behind their number or ⊕ ---------- */
+@media (max-width: 760px) {
+  body { font-size: 1.0625rem; line-height: 1.8; }
+  .bar-in { gap: 1rem; padding: 0 1rem; flex-wrap: wrap; }
+  .site-nav { order: 5; flex-basis: 100%; display: none; }
+  .topbar.nav-open .site-nav { display: block; }
+  .menus { flex-direction: column; gap: 0; padding-bottom: .6rem; }
+  .menu-btn { line-height: 2.4rem; width: 100%; text-align: left; }
+  .menu-btn::after { content: " +"; }
+  .menu.open > .menu-btn::after { content: " −"; }
+  .menu.cur > .menu-btn { box-shadow: none; }
+  .drop { position: static; border: 0; padding: 0 0 .4rem .9rem; min-width: 0; }
+  .drop a { padding: .2rem 0; white-space: normal; }
+  .burger { display: inline; }
+  .theme-btn { margin-left: auto; }
+  .art { padding: 1.6rem 1rem 2.4rem; }
+  .art > *, .art section > * { width: 100%; }
+  h1 { font-size: 1.85rem; }
+  .subtitle { font-size: 1.22rem; }
+  .epigraph blockquote { padding-left: 1rem; }
+  .epigraph p { font-size: 1.05rem; }
+  label.margin-toggle:not(.sidenote-number) { display: inline; cursor: pointer; color: var(--muted); font-family: "et-book", var(--serif); padding: 0 .15em; }
+  label.sidenote-number { cursor: pointer; }
+  .sidenote, .marginnote { display: none; }
+  .margin-toggle:checked + .sidenote, .margin-toggle:checked + .marginnote {
+    display: block; float: left; clear: both; width: 100%; margin: .6rem 0; padding-left: .8rem; border-left: 1px solid var(--rule-2);
+  }
+  .series { grid-template-columns: 1fr 1fr; }
+  .series .up { display: none; }
+  details.mtoc { float: none; width: 100%; margin: 0 0 1.2rem; padding-left: .8rem; border-left: 1px solid var(--rule-2); }
+  details.mtoc summary { cursor: pointer; }
+  details.mtoc summary::after { content: " +"; }
+  details.mtoc[open] summary::after { content: " −"; }
+  .filters { flex-direction: column; align-items: stretch; gap: .5rem; }
+  .filters label { justify-content: space-between; }
+  .filters input[type="search"], .filters input, .filters select { min-width: 0; flex: 1; }
+  .filters .count { margin-left: 0; }
+  .toc-meta { display: block; margin-left: 0; }
+  table.kv, table.kv tbody, table.kv tr, table.kv th, table.kv td { display: block; max-width: none; }
+  table.kv th { padding: .5rem 0 0; }
+}
+@media print {
+  .topbar, .site-foot, .series { display: none; }
+}
+
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<header class="topbar" id="topbar"></header>
+<main id="main"><article class="art"></article></main>
+<footer class="site-foot" id="site-foot"></footer>
+<script type="application/json" id="data">{"site": {"brand": "3D 临场研究图谱", "root": "../", "path": "future/C11.html", "nav": [{"key": "overview", "label": "Overview", "items": [["Introduction", "index.html"], ["Methodology", "overview/methodology.html"], ["How to use", "overview/how-to-use.html"]]}, {"key": "basics", "label": "Basics", "items": [["Routes", "basics/routes/index.html"], ["Foundations", "basics/foundations/index.html"], ["Advanced topics", "basics/advanced/index.html"], ["Classics", "basics/classics/index.html"], ["Glossary", "basics/glossary.html"]]}, {"key": "works", "label": "Works", "items": [["Papers", "works/papers/index.html"], ["Walkthrough", "works/walkthrough/index.html"], ["Field map", "works/field-map.html"], ["Sub areas", "works/areas/index.html"]]}, {"key": "future", "label": "Future", "items": [["Directions", "future/index.html"], ["Trends & Challenges", "future/trends.html"]]}], "navCur": "future", "navItem": "future/index.html", "crumbs": [["Future", ""], ["Directions", "future/index.html"]], "date": "2026-09-28"}, "xref": {"idea-C05": {"u": "future/C05.html", "t": "在部署处训练：面向移动远程呈现观看者的在线几何引导渲染器的 on-policy、置信度门控判别器训练", "e": "Train Where You Deploy: On-Policy, Confidence-Gated Critic Training of Online Geometry-Guided Renderers for Moving Telepresence Viewers", "m": "Directions · 第 10 名 · 综合 5", "s": "沿移动的、阵列外的头部轨迹对实时阵列渲染器做展开 rollout 训练，并通过 TSDF 回馈其自身的前一帧深度。"}, "idea-C07": {"u": "future/C07.html", "t": "Plate Memory：面向在线、发丝保真多视角远程临场的可见性门控背景记忆与软占据融合", "e": "Plate Memory: Visibility-Gated Background Memory and Soft-Occupancy Fusion for Online Hair-Faithful Multi-View Telepresence", "m": "Directions · 第 8 名 · 综合 5.5", "s": "在固定的远程临场（telepresence）相机阵列中，由 pipeline 自行构建并维护的逐相机颜色+深度背景记忆，把轮廓处的在线抠图（matting）转化为已知背景问题。"}}, "page": {"id": "idea-C11", "head": {"title": "一次混合，多视共享：面向时间稳定光场远程临场的视角无关源空间混合", "sub": "Blend Once, View Many: Viewer-Invariant Source-Space Blending for Temporally Stable Light-Field Telepresence", "meta": ["第 9 名", "重新定位后推进", "查新：部分已被做"], "epigraph": "在静态标定相机阵列上，把学习式 IBR 混合从目标图像移到源像素上的一个低阶方向场中。该场每帧只预测一次，并在固定的相机坐标系中进行滤波。于是每增加一只眼睛、一个观看者或一个光场视图，只需一次光栅化，既没有 K 集合跳变，也没有观看者运动引起的闪烁。", "prereqs": [], "lede": "", "minutes": 14}, "body": [{"b": "sec", "h": "评分", "id": "scores"}, {"b": "kv", "items": [["综合", "5.5"], ["新颖", "4.5"], ["意义", "6"], ["可行", "6"], ["临场契合", "8"]]}, {"b": "sec", "h": "核心论点（可证伪）", "id": "claim"}, {"b": "p", "t": "在静态标定的 RGB-D/立体相机阵列上，一旦可见性由 z-buffer 光栅化处理，几何引导的目标空间 IBR blender（Ha et al. 风格）所学到的逐相机混合权重在目标方向上是低带宽的。每个源像素上的方向场，每相机至多 16 个系数（SH 3 阶或 8 个球面 lobe），每帧 feed-forward 预测一次，在留出的真实相机上与逐视图 teacher 的差距在 0.5 dB PSNR 和 0.015 LPIPS 以内。它们在单块消费级 GPU 上能以 30 fps 或更高渲染至少 45 个显示视图（每视图 512p）。在跨视图和观看者运动下，它们严格比逐视图目标空间混合更一致：EPI/MEt3R 视图间误差和沿移动观看者轨迹的闪烁都降低 30% 或更多。即使目标空间基线获得软性全 N 加权和 K 集合迟滞（hysteresis），这一结论依然成立。如果拟合的 oracle 场需要超过 16 个系数才能达到距 teacher 0.5 dB 以内，或者加了迟滞的目标空间 blender 能达到相同的一致性提升，则该主张被证伪。"}, {"b": "sec", "h": "关键洞察", "id": "insight"}, {"b": "p", "t": "把可见性与偏好分开。从目标射线看哪些源采样可见是一个几何问题。z-buffer（加上每帧计算一次的共享 TSDF）对每个视图都能精确且廉价地回答它。去掉可见性后，学习式 blender 输出的剩余部分——对一个可见表面点应偏好哪个相机——是目标方向的平滑低频函数。这是全光采样（plenoptic sampling）的直觉：带宽由相机间距和表面反射决定，而不是由观看者决定。由于阵列是静态的，每个源像素都是一个持久实体。偏好场可以驻留在那里：计算一次、所有观看者共享，并在一个永不移动的坐标系中做时间滤波。目标空间流水线做不到这一点，因为它们的混合坐标系随每个观看者移动，且在 K 集合切换时权重会突变。观看者位姿只在光栅化时进入，因此可以 late-latch，这也降低了 motion-to-photon 延迟。"}, {"b": "sec", "h": "方法", "id": "method"}, {"b": "p", "t": "输入：N（4-10）路标定、同步的 RGB-D 流；深度来自传感器或实时立体前端，并报告其开销。(1) 共享的逐帧几何阶段只运行一次：每个源视图的像素大小 Gaussian（如 Ha et al.）、在全部 N 个相机（而非 K 近邻）上融合的低分辨率基于图像的 TSDF，以及由 TSDF 一致性得到的逐源可见性与置信度图。(2) 源空间偏好网络是每相机一个轻量 2D CNN，对几何上最近的 2-3 个相机做极线或跨视图注意力。输入为 RGB、深度、深度置信度、TSDF 一致性残差、表面法线，以及编码为指向其他相机方向的阵列几何。对每个源像素，它输出一个方向偏好场 w_n(p, d)：SH 2-3 阶，或 M=8 个球面 lobe（其轴初始化为阵列的相机方向）。它还输出一个小的 SH 颜色残差（1-2 阶）和一个边缘柔化/不透明度项以抑制飞点。(3) 渲染逐视图进行，不使用神经网络。以 z-test（软深度测试带）光栅化所有源的 Gaussian。累加 颜色 × alpha × softplus(w_n(p, d_target)) 并在相机间归一化。用一个持久化、TSDF 门控的背景板（因为阵列静态而成为可能）加上每个显示帧一个共享的低分辨率补洞器来填补去遮挡区域。后端是一个相干 LFD 光栅化器（CoherentRaster 式属性复用或 LFDPR 式点 splatting），直接渲染 32-45 个视图或子像素交织输出。(4) 时间：一个置信度门控的 EMA 在每个源像素上对系数（而非颜色）做滤波。该门控由 TSDF 残差、深度变化和颜色变化学习得到。背景像素采用长时平均。(5) 训练：从一个复现的 Ha 式目标空间 U-Net teacher（K=4，带 TSDF 和深度反馈）蒸馏。每帧在阵列凸包内及略超出范围采样约 100 个虚拟目标，使用逐相机权重匹配损失和光度损失。另加留出真实相机上的光度损失、相邻虚拟视图间的 EPI 梯度平滑损失，以及 4-8 帧片段上的时间 warping 损失。测试时丢弃 teacher。在 RTX 4090/5090 上的运行时预算：逐帧源阶段低于 15 ms（N=8，每个源 512x384），加上每视图约 0.3-0.6 ms 的光栅化，因此 45 个视图约 40 ms 内完成。"}, {"b": "sec", "h": "为什么不是工程改进", "id": "not-engineering"}, {"b": "p", "t": "本文的贡献超越了一个更快的流水线，包括三点。第一，一个可测量的实证主张及其原理性解释：在剥离可见性后，学习式 IBR 混合的角度带宽。它通过 oracle SH/lobe 拟合研究（所需系数 vs 误差，作为相机基线和材质高光程度的函数）来量化，并与全光采样理论联系起来。还没有人测量过学习式 blender 实际使用了多少角度自由度。第二，目标空间 IBR 的一种新失效模式和指标：观看者运动引起的闪烁，K 近邻流水线即使在静态内容上也会产生。本文表明源空间参数化在构造上消除了它。第三，一个关于时间滤波的表示层面论证：在静态源坐标系中，滤波无需重投影且与观看者无关。它在观看者运动下与目标空间深度反馈进行比较。系统（45 视图实时 LFD、多方）是演示，而非主张。每个主张都有 kill 条件。"}, {"b": "sec", "h": "与已有工作的区分", "id": "differentiation"}, {"b": "p", "t": "NoPo4D (arXiv 2605.22190) 已经从静态阵列多视图视频中预测每个源像素的 Gaussian，带有 SH 视角相关不透明度，作为一种学习的跨相机置信度。我们将其视为该表示最接近的先前工作并予以致谢，并把它作为直接的消融基线（端到端训练的不透明度 SH，无蒸馏、无源空间时间滤波器、无 TSDF 可见性）。NoPo4D 是无位姿的、非实时的，也没有在多视图显示一致性上评估。我们的贡献是带宽研究、视角不变性与时间滤波分析，以及实时多视图显示系统。ViewSplat (2603.25265) 为静态、无位姿场景预测视角条件的属性残差；它没有时间模型，也没有多视图显示研究，其 View-MLP 作为基函数选择的基线。GPS-Gaussian/GPS-Gaussian+ (2312.02155, 2411.11363) 已经让额外视图只需光栅化开销，但只有标量不透明度，没有跨相机偏好；它们展示了我们在相同开销下增加的质量。扫描平面 LFD 渲染 (2508.18540)、CoherentRaster (2605.04509)、DirectL (2407.14053) 和 LFDPR (2601.19901) 为静态优化场景摊销光栅化，并丢弃或忽略学习式视角相关混合。我们把它们用作后端，不声称它们的任何贡献。目标空间实时 IBR 包括 Ha et al. (2505.18932)、3DTV (2604.11211)、VirtualCube (2112.06730) 和 Tele-Aloha (2405.14866)。我们在相同每秒视图数下比较，并为它们加上迟滞和软性全 N 加权，使收益可归因于源空间参数化。LentiAvatar (2606.10550) 专用于 avatar 且为单目；我们的方法面向通用场景、多相机且真实。"}, {"b": "sec", "h": "查新后剩余的可辩护新意", "id": "novel-angle"}, {"b": "p", "t": "机制本身已经发表，因此不能作为主要主张。NoPo4D (arXiv 2605.22190, 2026 年 5 月) 从静态阵列多视图视频 feed-forward 预测每个源像素的 Gaussian，其视角相关不透明度以 SH 参数化，并明确地将其用作学习的跨相机置信度/混合权重。ViewSplat (2603.25265) 一次性预测逐基元的视角条件不透明度和颜色残差，并对每个视图廉价求值。像素对齐的 feed-forward Gaussian（GPS-Gaussian）已经让额外视图只需光栅化开销。\n\n仍然站得住的是面向实时远程临场显示的系统与评估贡献：\n(1) 首个实时（<50-100 ms）、时间一致的实时采集 IBR，驱动 32-45 视图的光场或柱透镜显示器，或 P-1 个注视正确的多方视图。它将包括一条相对于逐视图目标空间 blender（base paper、3DTV、VirtualCube 式）的质量 vs 每秒视图数的实测 Pareto 前沿。\n(2) 将时间稳定化实现为在固定源像素坐标系中对方向系数的置信度门控滤波。这对观看者运动不变，且没有先前工作这样做；NoPo4D 建模的是速度，而不是系数滤波。\n(3) 将目标空间、遮挡感知的 IBR blender（Ha et al. 风格，TSDF 可见性）蒸馏为源空间方向场，并量化 teacher 与 student 之间的差距。\n(4) 一项明确的研究，表明软性全 N 方向权重消除了 K 集合跳变，用跨稠密显示视图的 EPI/MEt3R 度量。\n(5) 与相干 LFD 光栅化器（CoherentRaster 或扫描平面）耦合，使开销的两半都得到摊销。\n\n审稿人会要求以 NoPo4D 式不透明度 SH 作为直接消融基线，因此论文必须表明收益来自远程临场特有的部分（源空间时间滤波、TSDF 可见性、蒸馏、显示流水线），而非方向性不透明度本身。"}, {"b": "sec", "h": "主要撞车风险（查新找到的相近工作）", "id": "threats"}, {"b": "refs", "items": [{"left": "高", "url": "https://arxiv.org/abs/2605.22190", "t": "No Pose, No Problem in 4D (NoPo4D): Feed-Forward Dynamic Gaussians from Unposed Multi-View Videos", "sub": "2026 · arXiv (May 2026) · 重叠度 高", "gloss": "重叠：这篇论文实现了核心机制。从静态阵列上的同步多视图视频中，一个 feed-forward 网络为每个源相机预测逐像素 Gaussian。它们的不透明度被参数化为 k 阶球谐函数，而不是标量。论文称不透明度 SH“充当学习的置信度度量”，使来自某相机的未对齐 Gaussian 在跨相机几何不一致的视点下变得透明。这就是逐源像素的方向性跨相机混合权重场，而渲染任意视图都是纯光栅化。去掉不透明度 SH 的消融损失 7.5 dB PSNR。它在 N3DV (DyNeRF) 和 Immersive Light Field 上评估，其局限性部分提到了静态阵列假设。\n差异：没有摊销、多观看者或光场显示的框架，也没有每秒视图数缩放研究。它是无位姿的，不使用标定 RGB-D 或 TSDF，也不是为实时远程临场延迟而构建。其时间模型是速度与运动，而不是源空间中的系数滤波。没有从目标空间 IBR blender 的蒸馏，没有通过共享 TSDF 可见性的显式遮挡处理，没有持久背景板，也没有对 K 集合跳变、EPI 或光场显示质量的评估。"}, {"left": "中", "url": "https://arxiv.org/abs/2603.25265", "t": "ViewSplat: View-Adaptive 3D Gaussian Splatting for Feed-Forward Synthesis", "sub": "2026 · arXiv (Mar 2026, v2 Jun 2026) · 重叠度 中", "gloss": "重叠：feed-forward 像素对齐 Gaussian 加上预测的逐场景 View MLP。这些 MLP 将目标视图坐标映射为不透明度、颜色、位置、尺度和旋转的视角相关残差。网络只运行一次，每个额外视图只是一次廉价的逐基元求值加光栅化（90 FPS 渲染）。这是相同的“在源/基元空间预测一次，按视图做方向性求值”的分解，且基函数比 SH 更具表达力。\n差异：静态场景、无位姿图像、无视频。没有时间一致性，没有多视图或光场显示摊销研究，也没有远程临场或 RGB-D 阵列。"}, {"left": "中", "url": "https://arxiv.org/abs/2605.04509", "t": "CoherentRaster: Efficient 3D Gaussian Splatting for Light Field Displays", "sub": "2026 · arXiv (May 2026) · 重叠度 中", "gloss": "重叠：在光场显示器的众多视图间摊销 3DGS 光栅化，采用跨视图相干属性复用和子像素级光栅化，在消费级 GPU 上实时运行。这覆盖了所提开销模型中“O(#视图 x 光栅化)”那一半以及光场显示渲染贡献。\n差异：逐场景优化的静态 3DGS。没有实时多相机采集，没有学习式跨相机混合，也没有时间一致性。它是互补的：可以作为所提方法的光栅化后端。"}, {"left": "中", "url": "https://arxiv.org/abs/2508.18540", "t": "Real-time 3D Visualization of Radiance Fields on Light Field Displays", "sub": "2025 · ACM (arXiv 2508.18540) · 重叠度 中", "gloss": "重叠：在 45 个光场显示视图间共享中间计算（扫描平面）以实现实时渲染：200+ FPS，比逐视图单独渲染快至多 22 倍。\n差异：静态、优化得到的辐射场。它明确丢弃了视角相关性。没有实时采集，没有学习式 IBR 混合，也没有时间稳定化。"}, {"left": "低", "url": "https://arxiv.org/abs/2407.14053", "t": "DirectL: Efficient Radiance Fields Rendering for 3D Light Field Displays", "sub": "2024 · ACM TOG (SIGGRAPH Asia 2024) · 重叠度 低", "gloss": "重叠：通过子像素重新利用（subpixel repurposing）直接从 NeRF 或 3DGS 渲染光场显示，避免完整的 45 视图渲染开销。\n差异：静态的逐场景辐射场。没有实时 IBR、混合或时间模型。"}]}, {"b": "sec", "h": "实验设计", "id": "experiments"}, {"b": "h3", "t": "数据集"}, {"b": "ul", "items": ["Technicolor 光场视频（4x4 相机阵列；留出内部相机以模拟稠密 LFD 角度采样；显示视图评估的最佳公开替代）", "DyNeRF / Neural 3D Video（18-21 个相机；与 base paper 协议直接比较，留出相机）", "CMU Panoptic Studio（HD 相机加 10 个 Kinect RGB-D；真实的传感器深度设置，大量留出视图）", "DNA-Rendering 和 MVHumanNet++（围绕人体 48-60 个相机；用于多观看者和角度带宽研究的稠密留出视图；人体远程临场内容）", "ActorsHQ（160 个相机，12MP；在相机子集上做带宽-基线研究的非常稠密的角度 ground truth）", "ENeRF-Outdoor（次要，用于与 base paper 比较；注意其低分辨率协议）", "自定义：6-8 相机 RGB(-D) 阵列加一台 Looking Glass（16 或 32 英寸），仅用于实时端到端 demo 和用户研究"]}, {"b": "h3", "t": "对比基线"}, {"b": "ul", "items": ["Ha et al. 2025（复现），逐视图运行，K=4；另加 K 集合迟滞和软性全 N 权重（强化的目标空间基线）", "以扫描平面在相邻视图间共享来摊销的 Ha et al. teacher（arXiv 2508.18540 风格），最强的目标空间摊销", "NoPo4D 式不透明度 SH（端到端训练的逐像素 SH 不透明度，相同骨干，无蒸馏或时间滤波）", "ViewSplat 式 View-MLP 残差，作为另一种方向基函数", "GPS-Gaussian+（标量不透明度加 SH 颜色；相同光栅化开销）", "3DTV (arXiv 2604.11211) 和 ENeRF，作为 feed-forward 目标空间 IBR", "基于距离/角度的非结构化 lumigraph 混合（Buehler 式），在全部 N 上软加权，作为非学习的方向性基线"]}, {"b": "h3", "t": "指标"}, {"b": "ul", "items": ["留出真实相机上的 PSNR / SSIM / LPIPS（teacher-student 差距是关键数字）", "视图间一致性：跨稠密虚拟或留出视图集的 EPI 切片误差、MEt3R、SDV", "时间：TCC、STED、静态观看者下的光流 warping 误差", "新指标：观看者运动闪烁，即在静态和动态内容上沿平滑虚拟观看者轨迹的 warping 误差，用于隔离 K 集合跳变", "角度带宽：权重重建误差和渲染 PSNR 随系数数量（SH 0-4 阶，lobe 2-16）的变化，作为相机基线和高光区域 mask 的函数", "运行时：ms/帧 随同时视图数（1、2、8、32、45、100）的变化，拆分为源阶段和逐视图光栅化；GPU 显存；实时 demo 中 late-latch 位姿下的 motion-to-photon 延迟", "LFD 上的用户研究：相同帧率下相对逐视图基线的跳变与闪烁 2AFC；可选的三方注视方向判断准确率"]}, {"b": "h3", "t": "关键消融"}, {"b": "ul", "items": ["基函数类型与阶数（SH 0-4、lobe 4/8/16、View-MLP），用于质量/开销 Pareto", "可见性：仅 z-buffer vs z-buffer 加 TSDF 一致性输入 vs 无（检验可见性/偏好分离）", "蒸馏 vs 直接光度训练 vs 两者兼用", "源空间系数 EMA（学习门控 vs 颜色门控 vs 无）vs 目标空间深度反馈，在静态和移动观看者下", "源空间中的全 N 软加权 vs K 近邻", "背景板加共享低分辨率补洞器 vs 逐视图补洞器", "换入不透明度 SH（NoPo4D 式）并保持其他一切不变，以表明收益并非来自方向性不透明度本身", "源分辨率 vs 光栅化开销 vs 质量（45 视图的可行性边界）"]}, {"b": "h3", "t": "需要自建采集"}, {"b": "p", "t": "核心科学主张（角度带宽、teacher-student 差距、视图间与观看者运动一致性、每秒视图数缩放）都可在公开数据上完成。Technicolor 和 ActorsHQ/DNA-Rendering 提供稠密留出视图，Panoptic 提供 Kinect RGB-D。只有实时主张需要自定义硬件：一个 6-8 相机同步阵列（例如硬件触发的工业相机或 ZED/RealSense 设备）加一块 Looking Glass 面板（约 16-32 英寸，几千美元），用于端到端延迟测量和一个小型用户研究（约 15-20 名参与者，需 IRB）。没有它，论文就降为 CVPR 式方法论文，并失去面向 SIGGRAPH Asia 或 IEEE VR 最有力的卖点。"}, {"b": "sec", "h": "两周内的验证实验", "id": "two-weeks"}, {"b": "p", "t": "Oracle 带宽拟合，暂不涉及 student 网络。（第 1-4 天）在 DyNeRF（2-3 个场景）和 Technicolor（2 个场景）上，使用离线立体或提供的深度，训练或复现一个简化的 Ha 式目标空间 U-Net blender（K=4，深度加相机特征输入；几个 GPU 天）。如果时间紧，可用 ENeRF 的逐源混合权重作为替代 teacher。（第 5-8 天）对 10 帧，在阵列凸包内稠密采样约 150 个虚拟目标并渲染 teacher。对每个目标像素，把每个相机的权重归属到它所 splat 自的源像素（z-buffer 胜出者），然后用加权最小二乘拟合每个源像素的 SH（0-4 阶）和 8 个 lobe。（第 9-12 天）仅用 z-test Gaussian 光栅化器，以拟合的场重新渲染留出真实相机和一次稠密虚拟扫动。测量：(a) 与 teacher 的 PSNR/LPIPS 差距；(b) 沿扫动的 EPI 误差和观看者运动闪烁，与有无 K 集合迟滞的 teacher 比较；(c) 用 8 x 512x384 源 Gaussian 渲染 45 个 512p 视图的光栅化 ms。（第 13-14 天）绘制系数 vs 差距曲线并做决定。若至多 3 阶（16 个系数）落在 0.5 dB 和 0.015 LPIPS 以内、闪烁相对加迟滞的 teacher 下降 30% 或更多，且 45 视图光栅化在 50 ms 以内，则 GO。这是 feed-forward student 能达到的上界，因此此处失败可以低成本地否决该想法。"}, {"b": "sec", "h": "止损标准", "id": "kill"}, {"b": "p", "t": "若以下任一成立，则放弃或重新界定范围。(1) oracle 拟合需要每相机每像素超过 16 个系数才能达到距目标空间 teacher 0.5 dB PSNR / 0.015 LPIPS 以内。那么学习式混合在方向上并非低带宽，核心前提不成立。(2) 以软性全 N 权重加 K 集合迟滞强化的目标空间 teacher，在 EPI/MEt3R 和观看者运动闪烁数值上达到源空间方法的 10% 以内。那么一致性主张就只是一个调参技巧。(3) 3 个月后，即使给予 teacher 的输入，feed-forward student 在留出相机上仍比 teacher 低 1 dB 以上。(4) 在同一骨干中端到端训练的 NoPo4D 式不透明度 SH 在质量、EPI 和时间指标上与完整方法在噪声范围内持平。那么远程临场特有的部分（蒸馏、源空间时间滤波、TSDF 可见性）没有任何增益，论文将只是一次复现。(5) 即使使用相干 LFD 光栅化器，在有用的源分辨率下，单块消费级 GPU 也无法以 30 fps 或更高渲染 45 个 512p 视图。那么摊销这一卖点就落空，只剩一致性结果，或许只够一篇 workshop 论文。"}, {"b": "sec", "h": "审稿人可能的质疑与回应", "id": "objections"}, {"b": "p", "t": "这就是 NoPo4D 的视角相关不透明度 SH，加上 GPS-Gaussian 的“额外视图只需光栅化”，应用到光场显示上：一个工程组合。", "label": "质疑"}, {"b": "p", "t": "我们明确致谢两者，并不声称该表示是我们的。贡献在于：(i) 首次测量剥离可见性后学习式 IBR 混合的角度带宽，附带相机基线和高光程度分析，告诉从业者一个阵列需要多少系数；(ii) 将观看者运动闪烁确立为目标空间 IBR 的失效模式，并给出指标和构造上的修复；(iii) 源坐标系中的系数滤波，无需重投影且与观看者无关。在其他一切固定的情况下换入 NoPo4D 式不透明度 SH 的消融，隔离了我们远程临场特有部分的增益。带有实测延迟的实时 45 视图显示结果在先前工作中并不存在。", "label": "回应"}, {"b": "p", "t": "源像素上的方向权重无法表示依赖于目标视图的遮挡。从一个同时看到全部 K 张 warp 图像的目标空间 U-Net 蒸馏，必然在深度边缘和去遮挡区域损失质量。", "label": "质疑"}, {"b": "p", "t": "这正是可见性/偏好分离要解决的问题。遮挡由 z-test 光栅化器和共享 TSDF 逐视图解决，每视图不产生额外开销。只有平滑的偏好被摊销。我们在边缘带和去遮挡 mask 内单独报告差距，并包含每个显示帧一个共享的低分辨率补洞器。如果差距集中在边缘，这个结果本身就有信息量，补洞器的逐视图开销也会如实报告在 Pareto 图中。", "label": "回应"}, {"b": "p", "t": "只需给目标空间 blender 加上迟滞或软加权，并在较低分辨率运行即可，没有必要引入新的参数化。", "label": "质疑"}, {"b": "p", "t": "这个基线是按设计包含在内的：带软性全 N 权重加 K 集合迟滞的 Ha et al.，并额外以扫描平面摊销。迟滞能减少跳变，但会让权重依赖于观看者的历史。因此同一时刻的不同观看者会看到不一致的内容，而且网络开销仍随视图数缩放。我们在相同每秒视图数和相同分辨率下比较，并有一条 kill criterion 覆盖该基线追平我们的情况。", "label": "回应"}, {"b": "p", "t": "高光和高频视角相关效果无法用 2 阶或 3 阶 SH 拟合，因此在真实远程临场内容（眼镜、皮肤光泽、屏幕）上质量会崩溃。", "label": "质疑"}, {"b": "p", "t": "带宽研究按高光 mask 和相机基线分层，并报告低阶在何处失效。模型保留了一个单独的 SH 颜色残差，lobe 基函数初始化为阵列的相机方向，从而把容量集中在需要的地方。对于稀疏阵列，观测到的角度信号本身就被相机间距带限（全光采样），因此更高阶的基函数也无法恢复相机从未看到的内容。我们用不同密度的 ActorsHQ 子集在实证上展示这一点。", "label": "回应"}, {"b": "p", "t": "评估主要在稀疏的留出阵列相机上进行；关于 45 视图光场质量和用户感知跳变的主张没有 ground truth 支撑。", "label": "质疑"}, {"b": "p", "t": "Technicolor 的 4x4 阵列和稠密的 ActorsHQ/DNA-Rendering 子集在类显示器的基线上提供了 ground truth 角度采样。EPI 和 MEt3R 无需 ground truth 即可度量视图间一致性。实时 Looking Glass demo 包含一个相同帧率下关于跳变与闪烁的受控 2AFC 用户研究，以及实测的 motion-to-photon 延迟。我们还会发布渲染的视图集，以便他人核查一致性指标。", "label": "回应"}, {"b": "sec", "h": "投入", "id": "effort"}, {"b": "kv", "items": [["周期", "6-8（2 周 oracle 研究；约 3 个月在公开数据上做 student 网络加时间滤波；约 2 个月做实时阵列、LFD 后端集成和用户研究；1 个月写作）"], ["人力", "1 名全职博士生，加 1 名兼职学生或工程师负责阵列、LFD 光栅化器和用户研究"], ["算力", "2-4 块 24-48 GB GPU（RTX 4090/5090 或 A6000 级）用于 teacher 和 student 训练；1 块消费级 GPU 用于实时 demo；硬件约 5-12k 美元（Looking Glass 16-32 英寸加 6-8 个同步相机，或复用现有阵列）"], ["目标会议", "SIGGRAPH Asia / ACM TOG（以系统加分析的框架配合实时 LFD demo）。备选：IEEE VR 或 ISMAR（TVCG track），强调多观看者、多方注视和用户研究。只有在没有实时 demo 时才可能投 CVPR，并且会因为与 NoPo4D 的重叠而较弱。"]]}, {"b": "sec", "h": "可组合的方向", "id": "synergies"}, {"b": "p", "t": "(1) 多方通话的流式传输与计算拆分：逐帧源空间系数图是紧凑、与观看者无关的载荷。发送端计算一次，每个接收端只做光栅化，这自然形成发送端/接收端拆分，并适合观看者自适应的逐相机码率分配；是一篇有力的姊妹论文。(2) 静态阵列的持久背景与长期记忆：同样的“静态阵列意味着持久源像素”论证支撑背景板和基于记忆的去遮挡填补（参见 arXiv 2607.15271）。(3) 学习式实时深度前端（Fast-FoundationStereo、时间一致的立体方法如 PPMStereo），其置信度输入到可见性和时间门控中。(4) 低延迟或 HMD 远程临场：观看者位姿只在光栅化时进入，因此 late-latch 和双目一致渲染是免费获得的。这可以与立体一致的生成式修复器结合，后者同样必须在视图间摊销。(5) 以相干 LFD 光栅化器（CoherentRaster、LFDPR、扫描平面）为后端：本方向提供了它们缺少的实时、学习式、时间稳定的前端。论文系列可以是：oracle 带宽研究与方法（本文），然后是源空间流式传输与压缩，再然后是多方注视正确的部署。"}], "toc": false, "series": {"prev": {"k": "idea-C07"}, "next": {"k": "idea-C05"}, "up": {"u": "future/index.html", "t": "Directions 目录"}}}}</script>
+<script>
+(function () {
+  "use strict";
+  // ================= lib: DOM, text and math helpers shared by every page =================
+  // A page script defines rich(text) (inline cross-links); paras() and eqList() call it.
+  var DATA;
+  try { DATA = JSON.parse(document.getElementById("data").textContent); } catch (e) { DATA = {}; }
+  var meta = DATA.meta || {};
+
+  // ---------- DOM helpers: all text goes through textContent; external links are https-only ----------
+  function safeUrl(u) { if (typeof u !== "string") return null; var s = u.trim(); return /^https:\/\/[^\s"'<>]+$/i.test(s) ? s : null; }
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "class") n.className = v;
+      else if (k === "text") n.textContent = String(v);
+      else if (k === "href") { var u = safeUrl(v); if (u) { n.setAttribute("href", u); n.setAttribute("target", "_blank"); n.setAttribute("rel", "noopener noreferrer"); } }
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c === null || c === undefined || c === false) return; n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return n;
+  }
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function sv(tag, attrs, kids) {
+    var n = document.createElementNS(SVGNS, tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "text") n.textContent = String(v);
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c) n.appendChild(c); });
+    return n;
+  }
+  function arr(x) { return Array.isArray(x) ? x : []; }
+  function str(x) { return typeof x === "string" ? x : (x === null || x === undefined ? "" : String(x)); }
+  function paras(text) { return str(text).split(/\n\s*\n/).map(function (t) { return t.trim(); }).filter(Boolean).map(function (t) { return el("p", null, rich(t)); }); }
+  function link(title, url) { return safeUrl(url) ? el("a", { href: url, text: title }) : el("span", { text: title }); }
+  function ul(items, map) { return el("ul", { class: "plain" }, arr(items).map(function (x) { return el("li", null, [map ? map(x) : str(x)]); })); }
+  function fmtCit(n) { n = Number(n); if (!(n >= 0)) return "—"; if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k"; return String(n); }
+
+  // ---------- math (MathJax, typeset lazily) ----------
+  var mathReady = false, mathQueue = [];
+  function mathUsable() { return !!(window.MathJax && typeof window.MathJax.typesetPromise === "function"); }
+  function flushMath() { mathReady = true; var q = mathQueue.slice(); mathQueue = []; q.forEach(typeset); }
+  window.__atlasMathReady = flushMath;
+  // MathJax may finish loading before this script runs (cached/async), so also poll for it.
+  var mathPoll = setInterval(function () { if (mathUsable()) { clearInterval(mathPoll); flushMath(); } }, 200);
+  setTimeout(function () { clearInterval(mathPoll); }, 30000);
+  function typeset(node) {
+    if (!node) return;
+    if (!mathReady && mathUsable()) mathReady = true;
+    if (!mathReady || !mathUsable()) { mathQueue.push(node); return; }
+    try { window.MathJax.typesetPromise([node]).catch(function () { /* leave raw TeX visible */ }); } catch (e) { /* leave raw TeX visible */ }
+  }
+  function eqList(eqs) {
+    eqs = arr(eqs).filter(function (q) { return q && str(q.tex).trim(); });
+    if (!eqs.length) return null;
+    return el("div", { class: "eqs" }, eqs.map(function (q) {
+      return el("div", { class: "eq" }, [el("div", { class: "math-block", text: "\\[" + str(q.tex) + "\\]" }), q.explain_zh ? el("p", null, rich(q.explain_zh)) : null]);
+    }));
+  }
+  document.addEventListener("toggle", function (e) { var t = e.target; if (t && t.tagName === "DETAILS" && t.open) typeset(t); }, true);
+
+  // ================= frame (Tufte site): links, notes, hover previews, top bar, theme =================
+  var SITE = DATA.site || {};
+  var ROOT = str(SITE.root);
+  var XREF = DATA.xref || {};
+  function hasX(key) { return Object.prototype.hasOwnProperty.call(XREF, key); }
+  // Custom page parts (search tools, diagrams, charts) register here; blocks.js calls them for {"b": "slot"} blocks.
+  var SLOTS = {};
+
+  // ---------- internal links: urls are relative to the site root; pages sit at different depths ----------
+  var SAFE_PATH = /^[A-Za-z0-9][A-Za-z0-9._\/-]*(\?[A-Za-z0-9=&._-]+)?(#[A-Za-z0-9._-]+)?$/;
+  function relHref(u) {
+    u = str(u);
+    if (/^#[A-Za-z0-9._-]+$/.test(u)) return u;
+    if (!SAFE_PATH.test(u)) return null;
+    var cut = u.indexOf("#"), path = cut < 0 ? u : u.slice(0, cut);
+    if (path === SITE.path) return cut < 0 ? "#" : u.slice(cut);
+    return ROOT + u;
+  }
+  function pageLink(u, text, cls) {
+    var h = relHref(u);
+    if (!h) return el("span", { class: cls || null, text: text });
+    var a = el("a", { class: cls || null, text: text });
+    a.setAttribute("href", h);
+    return a;
+  }
+  // A link to a known entry (concept, topic, paper, step...). data-xref drives the hover preview.
+  function xlink(key, text, cls) {
+    if (!hasX(key)) return text ? document.createTextNode(text) : null;
+    var x = XREF[key], a = pageLink(x.u, text || x.n || x.t, cls);
+    a.setAttribute("data-xref", key);
+    return a;
+  }
+
+  // Concept / topic ids mentioned in prose ("见 g-pinhole") become links labelled with the entry's short name.
+  var ID_RE = /(a-[a-z0-9]+(?:-[a-z0-9]+)*|[fgdrilnv]-[a-z0-9]+)/g;
+  var CJK = /[　-〿㐀-鿿＀-￯]/;
+  function rich(text) {
+    var s = str(text), out = [], last = 0, m;
+    ID_RE.lastIndex = 0;
+    while ((m = ID_RE.exec(s)) !== null) {
+      var id = m[1], prev = m.index > 0 ? s.charAt(m.index - 1) : "", next = s.charAt(m.index + id.length);
+      var key = hasX("concept-" + id) ? "concept-" + id : (hasX("adv-" + id) ? "adv-" + id : null);
+      if (!key || /[A-Za-z0-9_\-]/.test(prev) || /[A-Za-z0-9_]/.test(next)) continue;
+      // The prose spaces ids off from Chinese text; a Chinese label needs no such space.
+      var before = s.slice(last, m.index);
+      if (/ $/.test(before) && CJK.test(before.charAt(before.length - 2))) before = before.slice(0, -1);
+      if (before) out.push(document.createTextNode(before));
+      out.push(xlink(key, null, "xref"));
+      last = m.index + id.length;
+      if (s.charAt(last) === " " && CJK.test(s.charAt(last + 1))) last++;
+    }
+    if (last < s.length) out.push(document.createTextNode(s.slice(last)));
+    return out;
+  }
+  function lines(text) { return str(text).split(/\n+/).map(function (t) { return t.trim(); }).filter(Boolean).map(function (t) { return el("p", null, rich(t)); }); }
+
+  // ---------- side notes (numbered) and margin notes (unnumbered); on phones they fold behind a toggle ----------
+  var noteSeq = 0;
+  function sidenote(kids) {
+    var id = "sn-" + (++noteSeq);
+    return el("span", { class: "note-wrap" }, [
+      el("label", { for: id, class: "margin-toggle sidenote-number", "aria-label": "旁注" }),
+      el("input", { type: "checkbox", id: id, class: "margin-toggle" }),
+      el("span", { class: "sidenote" }, kids)
+    ]);
+  }
+  function marginnote(kids) {
+    var id = "mn-" + (++noteSeq);
+    return el("span", { class: "note-wrap" }, [
+      el("label", { for: id, class: "margin-toggle", "aria-label": "边注", text: "⊕" }),
+      el("input", { type: "checkbox", id: id, class: "margin-toggle" }),
+      el("span", { class: "marginnote" }, kids)
+    ]);
+  }
+  function noteLabel(text) { return el("span", { class: "note-label", text: text }); }
+
+  // ---------- article scaffolding ----------
+  var main = document.getElementById("main");
+  var art = main.querySelector("article");
+  function section(id, title, kids) {
+    var s = el("section", { id: id }, [title ? el("h2", { text: title }) : null].concat(kids));
+    art.appendChild(s);
+    return s;
+  }
+  function articleHead(o) {
+    var crumbs = el("nav", { class: "crumbs", "aria-label": "位置" });
+    arr(SITE.crumbs).forEach(function (c, i) {
+      if (i) crumbs.appendChild(el("span", { class: "sep", text: "›", "aria-hidden": "true" }));
+      crumbs.appendChild(c[1] ? pageLink(c[1], c[0]) : el("span", { text: c[0] }));
+    });
+    art.appendChild(el("header", { class: "art-head" }, [
+      crumbs,
+      el("h1", { text: o.title }),
+      o.subtitle ? el("p", { class: "subtitle", text: o.subtitle }) : null,
+      o.meta ? el("p", { class: "meta" }, o.meta) : null
+    ]));
+    if (o.epigraph) art.appendChild(el("div", { class: "epigraph" }, [el("blockquote", null, [el("p", null, rich(o.epigraph))])]));
+  }
+  // Previous / next in the series, each with its hover preview.
+  function seriesNav(prevKey, nextKey, indexUrl, indexLabel) {
+    var nav = el("nav", { class: "series", "aria-label": "同系列" });
+    nav.appendChild(el("div", { class: "prev" }, prevKey && hasX(prevKey) ? [el("small", { text: "上一篇" }), xlink(prevKey)] : []));
+    nav.appendChild(el("div", { class: "up" }, indexUrl ? [pageLink(indexUrl, indexLabel)] : []));
+    nav.appendChild(el("div", { class: "next" }, nextKey && hasX(nextKey) ? [el("small", { text: "下一篇" }), xlink(nextKey)] : []));
+    art.appendChild(nav);
+  }
+
+  // ---------- hover preview for internal links: mouse (after 300 ms) or keyboard focus; never on touch ----------
+  var tip = null, tipTimer = 0, tipFor = null;
+  function hideTip() {
+    clearTimeout(tipTimer);
+    if (tip) tip.hidden = true;
+    if (tipFor) { tipFor.removeAttribute("aria-describedby"); tipFor = null; }
+  }
+  function showTip(a) {
+    var key = a.getAttribute("data-xref");
+    if (!hasX(key)) return;
+    var x = XREF[key];
+    if (!tip) { tip = el("div", { class: "xtip", id: "xtip", role: "tooltip" }); document.body.appendChild(tip); }
+    tip.textContent = "";
+    if (x.m) tip.appendChild(el("div", { class: "xt-m", text: x.m }));
+    tip.appendChild(el("div", { class: "xt-t", text: x.t }));
+    if (x.e) tip.appendChild(el("div", { class: "xt-e", text: x.e }));
+    if (x.s) tip.appendChild(el("p", { class: "xt-s", text: x.s }));
+    tip.hidden = false;
+    var r = a.getClientRects()[0] || a.getBoundingClientRect(), vw = document.documentElement.clientWidth;
+    var w = tip.offsetWidth, h = tip.offsetHeight;
+    var left = Math.max(8, Math.min(r.left, vw - w - 8));
+    var top = r.bottom + 6;
+    if (top + h > window.innerHeight - 8 && r.top - h - 6 > 8) top = r.top - h - 6;
+    tip.style.left = Math.round(left + window.pageXOffset) + "px";
+    tip.style.top = Math.round(top + window.pageYOffset) + "px";
+    a.setAttribute("aria-describedby", "xtip");
+    tipFor = a;
+  }
+  function xrefTarget(e) { return e.target && e.target.closest ? e.target.closest("a[data-xref]") : null; }
+  document.addEventListener("pointerover", function (e) {
+    var a = xrefTarget(e);
+    if (!a || e.pointerType !== "mouse" || a === tipFor) return;
+    clearTimeout(tipTimer);
+    tipTimer = setTimeout(function () { showTip(a); }, 300);
+  });
+  document.addEventListener("pointerout", function (e) {
+    var a = xrefTarget(e);
+    if (!a || (e.relatedTarget && a.contains(e.relatedTarget))) return;
+    hideTip();
+  });
+  document.addEventListener("focusin", function (e) {
+    var a = xrefTarget(e);
+    if (a && a.matches(":focus-visible")) showTip(a);
+  });
+  document.addEventListener("focusout", function (e) { if (xrefTarget(e)) hideTip(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") hideTip(); });
+  window.addEventListener("scroll", function () { if (tipFor && !tipFor.matches(":focus-visible")) hideTip(); }, { passive: true });
+
+  // ---------- top bar: four menus with dropdowns (hover or click on desktop, a folding list on phones) ----------
+  var wide = window.matchMedia("(min-width: 761px)");
+  function setOpen(li, open) {
+    var btn = li.querySelector(".menu-btn");
+    if (open) Array.prototype.forEach.call(li.parentNode.children, function (o) { if (o !== li) setOpen(o, false); });
+    li.classList.toggle("open", open);
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (!open) li._hover = false;
+  }
+  function buildTopbar() {
+    var bar = document.getElementById("topbar");
+    var menus = el("ul", { class: "menus", id: "menus" });
+    arr(SITE.nav).forEach(function (m) {
+      var id = "menu-" + m.key;
+      var btn = el("button", { type: "button", class: "menu-btn", "aria-expanded": "false", "aria-controls": id, text: m.label });
+      var list = el("ul", { class: "drop", id: id }, arr(m.items).map(function (it) {
+        var a = pageLink(it[1], it[0]);
+        if (it[1] === SITE.navItem) a.classList.add("cur");
+        if (it[1] === SITE.path) a.setAttribute("aria-current", "page");
+        return el("li", null, [a]);
+      }));
+      var li = el("li", { class: "menu" + (m.key === SITE.navCur ? " cur" : "") }, [btn, list]);
+      btn.addEventListener("click", function () {
+        // A click on a menu the mouse already opened keeps it open instead of closing it again.
+        if (li._hover) { li._hover = false; return; }
+        setOpen(li, !li.classList.contains("open"));
+      });
+      btn.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowDown") { e.preventDefault(); setOpen(li, true); var f = list.querySelector("a"); if (f) f.focus(); }
+      });
+      li.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse" && wide.matches) { setOpen(li, true); li._hover = true; } });
+      li.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse" && wide.matches) setOpen(li, false); });
+      li.addEventListener("focusout", function (e) { if (wide.matches && !li.contains(e.relatedTarget)) setOpen(li, false); });
+      li.addEventListener("keydown", function (e) { if (e.key === "Escape" && li.classList.contains("open")) { setOpen(li, false); btn.focus(); } });
+      menus.appendChild(li);
+    });
+    var burger = el("button", { type: "button", class: "burger", "aria-expanded": "false", "aria-controls": "menus", text: "Menu" });
+    burger.addEventListener("click", function () {
+      var open = !bar.classList.contains("nav-open");
+      bar.classList.toggle("nav-open", open);
+      burger.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    var themeBtn = el("button", { type: "button", class: "theme-btn" });
+    function darkNow() {
+      var t = document.documentElement.getAttribute("data-theme");
+      return t ? t === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+    function paintThemeBtn() {
+      var dark = darkNow();
+      themeBtn.textContent = dark ? "Light" : "Dark";
+      themeBtn.setAttribute("aria-label", dark ? "切换到浅色" : "切换到深色");
+    }
+    themeBtn.addEventListener("click", function () {
+      var next = darkNow() ? "light" : "dark";
+      var system = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      // Choosing what the system already shows drops the override, so the page follows the system again.
+      if (next === system) document.documentElement.removeAttribute("data-theme");
+      else document.documentElement.setAttribute("data-theme", next);
+      try { if (next === system) localStorage.removeItem("atlas-theme"); else localStorage.setItem("atlas-theme", next); } catch (e) { /* storage unavailable */ }
+      paintThemeBtn();
+    });
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintThemeBtn);
+    paintThemeBtn();
+    bar.appendChild(el("div", { class: "bar-in" }, [pageLink("index.html", SITE.brand || "", "brand"), el("nav", { class: "site-nav", "aria-label": "站点导航" }, [menus]), themeBtn, burger]));
+    document.addEventListener("click", function (e) {
+      if (!bar.contains(e.target)) Array.prototype.forEach.call(menus.children, function (li) { setOpen(li, false); });
+    });
+  }
+
+  function finishPage() {
+    buildTopbar();
+    var foot = document.getElementById("site-foot");
+    if (foot) foot.appendChild(el("p", null, [pageLink("index.html", SITE.brand || ""), SITE.date ? " · 内容截至 " + SITE.date : ""]));
+    typeset(main);
+    // Deep links (#id): the page is rendered by script, so jump once it exists and again after fonts settle.
+    var h = window.location.hash ? window.location.hash.slice(1) : "";
+    if (h && /^[A-Za-z0-9._~-]+$/.test(h) && document.getElementById(h)) {
+      var moved = false;
+      ["wheel", "touchstart", "keydown", "mousedown"].forEach(function (ev) { window.addEventListener(ev, function () { moved = true; }, { once: true, passive: true }); });
+      var settle = function () { var t = document.getElementById(h); if (t && !moved) t.scrollIntoView({ block: "start" }); };
+      settle();
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { window.requestAnimationFrame(settle); });
+      [400, 1200, 2500].forEach(function (ms) { setTimeout(settle, ms); });
+    }
+  }
+
+  // ================= article: a page composed as blocks in routes.py =================
+  (function () {
+    var PG = DATA.page || {};
+    var H = PG.head || {};
+    if (PG.id) art.id = PG.id;
+
+    // A link dict from routes.py: {k} an entry with hover preview, {u, t} a page of this site, {url, t} an external page.
+    function part(x) {
+      if (x === null || x === undefined) return null;
+      if (typeof x === "string") return x;
+      if (x.k) return xlink(x.k, x.t || null);
+      if (x.u) return pageLink(x.u, x.t || x.u);
+      if (x.url) return link(x.t || x.url, x.url);
+      return x.t ? str(x.t) : null;
+    }
+    function noteNodes(n) {
+      var kids = [noteLabel(n.label)];
+      if (n.t) kids = kids.concat(rich(n.t));
+      arr(n.links).forEach(function (l, i) { if (i) kids.push(el("br")); kids.push(part(l)); });
+      return kids;
+    }
+    function runIn(label) { return el("b", { class: "run-in", text: label + "：" }); }
+    function multiline(text) {
+      var out = [];
+      str(text).split("\n").forEach(function (line, i) { if (i) out.push(el("br")); out = out.concat(rich(line)); });
+      return out;
+    }
+
+    // ---------- head ----------
+    var meta = [];
+    if (arr(H.prereqs).length) {
+      meta.push(marginnote([noteLabel("阅读前需要")].concat(arr(H.prereqs).map(function (p, i) {
+        var a = part(p);
+        return i ? el("span", null, ["；", a]) : a;
+      }))));
+    }
+    var sep = false;
+    arr(H.meta).concat(H.minutes > 1 ? ["约 " + H.minutes + " 分钟"] : []).forEach(function (x) {
+      var n = part(x);
+      if (!n || (typeof n === "string" && !n.trim())) return;
+      if (sep) meta.push(" · ");
+      meta.push(n);
+      sep = !(typeof x === "string" && /：$/.test(x));
+    });
+    articleHead({ title: H.title, subtitle: H.sub, meta: meta.length ? meta : null, epigraph: H.epigraph });
+    if (str(H.lede).trim()) art.appendChild(el("div", { class: "lede" }, paras(H.lede)));
+
+    // ---------- blocks ----------
+    function heading(tag, b) {
+      var title = b.url && safeUrl(b.url) ? link(b.t, b.url) : (b.k ? part({ k: b.k, t: b.t }) : str(b.t));
+      var h = el(tag, { id: b.id || null }, [title]);
+      if (b.sn) h.appendChild(sidenote(noteNodes(b.sn)));
+      if (b.en) h.appendChild(el("span", { class: "en", text: b.en }));
+      if (b.tag) h.appendChild(el("span", { class: "used", text: b.tag }));
+      return h;
+    }
+    function withNotes(nodes, b) {
+      if (nodes.length && b.mn) nodes[0].insertBefore(marginnote(noteNodes(b.mn)), nodes[0].firstChild);
+      if (nodes.length && b.label) nodes[0].insertBefore(runIn(b.label), nodes[0].firstChild);
+      return nodes;
+    }
+    function listItem(x) {
+      if (typeof x === "string") return el("li", null, rich(x));
+      return el("li", null, (x.label ? [runIn(x.label)] : []).concat(rich(x.t)));
+    }
+    function refsList(items, cls) {
+      var left = items.some(function (x) { return x.left; });
+      return el("ul", { class: "refs " + (cls || "") + (left ? "" : " noleft") }, items.map(function (x) {
+        var body = [x.k || x.u || x.url ? part(x) : el("span", { class: "plain-t", text: x.t })];
+        if (x.tag) body.push(el("span", { class: "used", text: x.tag }));
+        if (x.sub) body.push(el("div", { class: "en", text: x.sub }));
+        if (str(x.gloss).trim()) body.push(el("div", { class: "gloss" }, multiline(x.gloss)));
+        var kids = left ? [el("span", { class: /^\d{4}$/.test(str(x.left)) ? "yr" : "kind", text: str(x.left) })] : [];
+        return el("li", { id: x.id || null }, kids.concat([el("div", null, body)]));
+      }));
+    }
+    var TY = { book: "教材", course: "课程", paper: "论文", tutorial: "教程", code: "代码", video: "视频", blog: "文章" };
+    function tocGroups(groups, level) {
+      var out = [];
+      arr(groups).forEach(function (g) {
+        if (g.h) out.push(el(level, { class: "toc-h" }, [g.k || g.u ? part({ k: g.k, u: g.u, t: g.h }) : g.h]));
+        if (str(g.lede).trim()) out.push(el("p", { class: "toc-lede" }, rich(g.lede)));
+        out.push(el("ol", { class: "toc" }, arr(g.items).map(function (it) {
+          return el("li", null, [
+            el("div", { class: "toc-t" }, [part({ k: it.k, u: it.u, t: it.t }), it.en ? el("span", { class: "en", text: it.en }) : null,
+              it.meta ? el("span", { class: "toc-meta", text: it.meta }) : null]),
+            str(it.s).trim() ? el("p", { class: "toc-s", text: it.s }) : null
+          ]);
+        })));
+      });
+      return out;
+    }
+    function cell(tag, c) { return el(tag, null, c && typeof c === "object" ? [part(c)] : rich(c)); }
+
+    var box = null;
+    function cur() { if (!box) { box = el("section"); art.appendChild(box); } return box; }
+    function render(b) {
+      switch (b.b) {
+        case "p": return withNotes(paras(b.t), b);
+        case "lines": return withNotes(lines(b.t), b);
+        case "h3": return [heading("h3", b)];
+        case "note": return [el("p", { class: "note", text: b.t })];
+        case "ul": case "ol": return [el(b.b, null, arr(b.items).map(listItem))];
+        case "eqs": return [eqList(b.eqs)];
+        case "qa": return [el("p", { class: "quiz-h", text: "自测" }), el("ol", { class: "quiz" }, arr(b.items).map(function (q) {
+          return el("li", null, [el("p", null, rich(q.q)), el("details", null, [el("summary", { text: "答案" }), el("p", null, rich(q.a))])]);
+        }))];
+        case "res": return [refsList(arr(b.items).map(function (r) {
+          return { left: TY[r.type] || r.type || "", url: r.url, t: r.title, gloss: r.note_zh };
+        }))];
+        case "refs": return [refsList(arr(b.items), b.cls)];
+        case "toc": return tocGroups(b.groups, cur().querySelector("h2") ? "h3" : "h2");
+        case "table": return [el("div", { class: "table-wrap" + (b.wide ? " fullwidth" : "") }, [el("table", { class: "booktabs" + (b.cls ? " " + b.cls : "") }, [
+          el("thead", null, [el("tr", null, arr(b.head).map(function (h) { return el("th", { text: h }); }))]),
+          el("tbody", null, arr(b.rows).map(function (r) { return el("tr", null, arr(r).map(function (c) { return cell("td", c); })); }))
+        ])])];
+        case "timeline": return [el("ul", { class: "refs timeline" }, arr(b.items).map(function (x) {
+          return el("li", null, [el("span", { class: "yr", text: str(x[0]) }), el("div", null, rich(x[1]))]);
+        }))];
+        case "kv": return [el("table", { class: "kv" }, [el("tbody", null, arr(b.items).map(function (x) {
+          return el("tr", null, [el("th", { text: x[0] }), el("td", null, rich(x[1]))]);
+        }))])];
+        case "mtoc": return [marginToc(b.items)];
+        case "slot": return typeof SLOTS[b.name] === "function" ? [SLOTS[b.name](b)] : [];
+        default: return [];
+      }
+    }
+    // Long articles: a table of contents at the top of the margin (a folding list on phones).
+    function marginToc(items) {
+      var d = el("details", { class: "mtoc" }, [el("summary", { text: "本文目录" }), el("ol", null, arr(items).map(function (x) { return el("li", null, [part(x)]); }))]);
+      var wide = window.matchMedia("(min-width: 761px)");
+      d.open = wide.matches;
+      return d;
+    }
+    arr(PG.body).forEach(function (b) {
+      if (b.b === "sec") {
+        box = el("section", { id: b.id || null });
+        if (b.h) box.appendChild(heading("h2", { t: b.h, sn: b.sn }));
+        art.appendChild(box);
+        return;
+      }
+      render(b).forEach(function (n) { if (n) cur().appendChild(n); });
+    });
+
+    var S = PG.series || {};
+    if (S.prev || S.next || S.up) {
+      var nav = el("nav", { class: "series", "aria-label": "同系列" });
+      nav.appendChild(el("div", { class: "prev" }, S.prev ? [el("small", { text: "上一篇" }), part(S.prev)] : []));
+      nav.appendChild(el("div", { class: "up" }, S.up ? [part(S.up)] : []));
+      nav.appendChild(el("div", { class: "next" }, S.next ? [el("small", { text: "下一篇" }), part(S.next)] : []));
+      art.appendChild(nav);
+    }
+  })();
+
+  finishPage();
+})();
+</script>
+</body>
+</html>

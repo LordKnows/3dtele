@@ -20,7 +20,10 @@ SITE = Path(__file__).resolve().parent / "site"
 WIDTHS = [390, 1400]
 DEEP_LINKS = ["foundations.html#concept-g-pinhole", "guided.html#walk-ha-h3", "classics.html#classic-40",
               "roadmap.html#stage-2", "areas.html#area-avatars", "advanced.html#adv-a-geo-fm", "ideas.html#idea-C02",
-              "basics/foundations/g-epipolar.html#cases"]
+              "basics/foundations/g-epipolar.html#cases", "works/walkthrough/quark.html#walk-quark-q7",
+              "basics/classics/t-ibr-geometry.html#classic-1", "basics/glossary.html#term-homogeneous-coordinates",
+              "works/field-map.html#paradigms", "overview/how-to-use.html#method"]
+# The first seven are old urls: they go through the redirect pages to the new pages.
 
 HARNESS = """<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0"><pre id="out">running</pre>
 <script>
@@ -56,7 +59,7 @@ f.onload = function () {
         document.getElementById("out").textContent = JSON.stringify(res);
       }, 800);
     } else {
-      var id = job.src.split("#")[1], t = d.getElementById(id), bar = d.querySelector(".toc");
+      var id = job.src.split("#")[1], t = d.getElementById(id), bar = d.querySelector("nav.toc");
       res.top = t ? Math.round(t.getBoundingClientRect().top) : null;
       res.open = t && t.tagName === "DETAILS" ? t.open : null;
       res.barBottom = job.w < 1001 && bar ? Math.round(bar.getBoundingClientRect().bottom) : 0;

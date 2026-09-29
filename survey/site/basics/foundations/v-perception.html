@@ -1,0 +1,797 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>立体视觉感知与 3D 显示 · 3D 临场研究图谱</title>
+<meta name="description" content="人靠双眼视差、辐辏、调节和运动视差感知深度。">
+<meta name="color-scheme" content="light dark">
+
+<script>
+  // Apply a saved light/dark choice before first paint; without one the page follows the system setting.
+  try { var t = localStorage.getItem("atlas-theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) { /* storage unavailable */ }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Serif+SC:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/lxgwwenkai-regular.css">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]] },
+    options: { skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code", "input", "select", "button"] },
+    svg: { fontCache: "global" },
+    startup: {
+      typeset: false,
+      ready: function () {
+        window.MathJax.startup.defaultReady();
+        if (typeof window.__atlasMathReady === "function") window.__atlasMathReady();
+      }
+    }
+  };
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js"></script>
+<style>
+/* Tufte-style layout for Chinese long-form pages, after tufte-css (MIT, (c) 2014 Dave Liepmann; see LICENSE-tufte-css).
+   ET Book: MIT, (c) 2015 Dmitry Krasny, Bonnie Scranton, Edward Tufte (fonts/et-book/LICENSE).
+   ../../ is the page's path to the site root. */
+
+/* ---------- fonts: ET Book for Latin (self-hosted), Noto Serif SC for Chinese text, LXGW WenKai for notes ---------- */
+/* ET Book leaves curly quotes, dashes and ellipses to the Chinese font so they keep full width in Chinese prose,
+   and single guillemets (› ‹), which it lacks. */
+@font-face { font-family: "et-book"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-roman-line-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book"; font-weight: 400; font-style: italic; font-display: swap;
+  src: url("../../fonts/et-book/et-book-display-italic-old-style-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book"; font-weight: 700; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-bold-line-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+/* Notes pair Latin italic with upright Kai (the "italic ↔ 楷体" rule): the italic cut is registered as an upright
+   family so the browser never slants the Chinese glyphs. */
+@font-face { font-family: "et-book-note"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-display-italic-old-style-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book-osf"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-roman-old-style-figures.woff") format("woff"); }
+
+:root {
+  --bg: #fffff8;
+  --ink: #111111;
+  --ink-2: #3c3c36;
+  --muted: #74746a;
+  --rule: #d8d6c8;
+  --rule-2: #b9b6a4;
+  --accent: #a8322d;
+  --serif: "et-book", "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", Palatino, Georgia, serif;
+  --note: "et-book-note", "LXGW WenKai", "Kaiti SC", "STKaiti", "KaiTi", "et-book", serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --side: clamp(12rem, 21vw, 17rem);
+  --gap: 2.75rem;
+  --main: calc(100% - var(--side) - var(--gap));
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161614; --ink: #e2e0d6; --ink-2: #c3c1b6; --muted: #979589; --rule: #34332e; --rule-2: #4d4b44; --accent: #e8836f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161614; --ink: #e2e0d6; --ink-2: #c3c1b6; --muted: #979589; --rule: #34332e; --rule-2: #4d4b44; --accent: #e8836f;
+  color-scheme: dark;
+}
+
+/* ---------- base ---------- */
+* { box-sizing: border-box; }
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--serif); font-size: 1.15625rem; line-height: 1.85;
+  font-kerning: normal; font-variant-numeric: lining-nums;
+  /* Space between Chinese and Latin text where the source has none; squeeze adjacent CJK punctuation
+     (text-spacing-trim applies the fonts' halt / chws features). Browsers without them keep the source spacing. */
+  text-autospace: normal; text-spacing-trim: normal;
+  overflow-wrap: break-word;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+[hidden] { display: none !important; }
+a { color: inherit; text-decoration-line: underline; text-decoration-thickness: 1px; text-underline-offset: .18em; text-decoration-color: var(--rule-2); }
+a:hover { color: var(--accent); text-decoration-color: currentColor; }
+a:focus-visible, button:focus-visible, summary:focus-visible, label:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.skip { position: absolute; left: -999px; top: 0; }
+.skip:focus { left: 1rem; top: .5rem; background: var(--bg); padding: .2rem .5rem; z-index: 60; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+p { margin: 0; }
+p + p { margin-top: .9em; }
+
+/* ---------- top bar ---------- */
+.topbar { border-bottom: 1px solid var(--rule); }
+.bar-in { max-width: 67rem; margin: 0 auto; padding: 0 1.5rem; display: flex; align-items: center; gap: 2.2rem; min-height: 3.1rem; }
+.brand { font-size: 1rem; text-decoration: none; letter-spacing: .02em; white-space: nowrap; }
+.site-nav { flex: 1; }
+.menus { list-style: none; margin: 0; padding: 0; display: flex; gap: 1.6rem; }
+.menu { position: relative; }
+.menu-btn, .theme-btn, .burger {
+  font-family: "et-book", var(--serif); font-variant-caps: all-small-caps; letter-spacing: .08em; font-size: 1.12rem;
+  color: var(--ink-2); line-height: 3.1rem;
+}
+.menu-btn:hover, .theme-btn:hover, .burger:hover, .menu.open > .menu-btn { color: var(--accent); }
+.menu.cur > .menu-btn { color: var(--ink); box-shadow: inset 0 -1px 0 var(--ink); }
+.drop {
+  display: none; position: absolute; left: -1rem; top: 100%; z-index: 40; min-width: 13rem;
+  list-style: none; margin: 0; padding: .45rem 0; background: var(--bg); border: 1px solid var(--rule);
+}
+.menu.open > .drop { display: block; }
+.drop a { display: block; padding: .15rem 1rem; text-decoration: none; font-size: 1.02rem; color: var(--ink-2); white-space: nowrap; }
+.drop a:hover, .drop a:focus-visible { color: var(--accent); }
+.drop a.cur { color: var(--ink); }
+.drop a.cur::before { content: "›"; position: absolute; margin-left: -.7rem; color: var(--accent); }
+.theme-btn { margin-left: auto; }
+.burger { display: none; }
+
+/* ---------- article column + margin ---------- */
+main { display: block; }
+.art { max-width: 67rem; margin: 0 auto; padding: 2.6rem 1.5rem 3rem; counter-reset: sidenote-counter; }
+.art > *, .art section > * { width: var(--main); }
+.art > section { width: 100%; }
+.art .fullwidth { width: 100%; }
+section { padding-top: .6rem; }
+
+.crumbs { font-size: .86rem; color: var(--muted); letter-spacing: .01em; }
+.crumbs a { color: var(--muted); text-decoration: none; }
+.crumbs a:hover { color: var(--accent); }
+.crumbs .sep { margin: 0 .45em; color: var(--rule-2); }
+h1, h2, h3 { font-family: var(--serif); color: var(--ink); text-wrap: balance; }
+h1 { font-size: 2.3rem; font-weight: 400; line-height: 1.3; margin: .9rem 0 0; letter-spacing: .01em; }
+.subtitle { font-family: "et-book", var(--note); font-style: italic; font-size: 1.45rem; line-height: 1.3; color: var(--ink-2); margin-top: .35rem; }
+.meta { font-size: .92rem; color: var(--muted); margin-top: 1.1rem; }
+.meta a { color: var(--muted); }
+h2 { font-size: 1.42rem; font-weight: 600; line-height: 1.4; margin: 2.6rem 0 .9rem; }
+h3 { font-size: 1.12rem; font-weight: 600; line-height: 1.5; margin: 1.8rem 0 .5rem; }
+h3 .used { font-family: var(--note); font-weight: 400; font-size: .86rem; color: var(--muted); margin-left: .6em; }
+
+.epigraph { margin: 2.2rem 0 .6rem; }
+.epigraph blockquote { margin: 0; padding: 0 0 0 1.6rem; border-left: 1px solid var(--rule-2); }
+.epigraph p { font-family: var(--note); font-size: 1.12rem; line-height: 1.85; color: var(--ink-2); }
+
+.art ol, .art ul { margin: .6rem 0 0; padding-left: 1.6em; }
+.art li + li { margin-top: .45rem; }
+li::marker { font-family: "et-book-osf", var(--serif); color: var(--muted); }
+
+/* Equations: display math in the text column, scrolling sideways on narrow screens. */
+.eqs { display: block; }
+.eq + .eq { margin-top: 1.6rem; }
+.math-block { overflow-x: auto; overflow-y: hidden; margin: .4rem 0 .6rem; padding: .2rem 0; font-size: 1rem; }
+.math-block mjx-container { margin: 0 !important; }
+
+/* ---------- side notes & margin notes (floated into the right margin) ---------- */
+.sidenote, .marginnote {
+  float: right; clear: right; position: relative;
+  width: var(--side); margin-right: calc(-1 * (var(--side) + var(--gap))); margin-top: .3rem; margin-bottom: .6rem;
+  font-family: var(--note); font-size: .88rem; line-height: 1.6; color: var(--ink-2); text-align: left;
+  font-style: normal; font-weight: 400; letter-spacing: 0;
+}
+h3 .sidenote { margin-top: .2rem; }
+.sidenote-number { counter-increment: sidenote-counter; }
+.sidenote-number::after, .sidenote::before { font-family: "et-book-osf", var(--serif); position: relative; vertical-align: baseline; }
+.sidenote-number::after { content: counter(sidenote-counter); font-size: .75rem; top: -.55em; left: .08em; color: var(--ink-2); }
+.sidenote::before { content: counter(sidenote-counter) " "; font-size: .8rem; top: -.4em; }
+.note-label { font-family: var(--serif); font-weight: 600; font-size: .82rem; color: var(--muted); margin-right: .5em; }
+.marginnote .note-label { display: block; margin: 0 0 .1rem; }
+input.margin-toggle { display: none; }
+label.sidenote-number { display: inline; cursor: default; }
+label.margin-toggle:not(.sidenote-number) { display: none; }
+
+/* ---------- quiz, further reading, series ---------- */
+.quiz details { margin-top: .3rem; }
+.quiz summary { font-family: var(--note); font-size: .92rem; color: var(--muted); cursor: pointer; list-style: none; display: inline-block; }
+.quiz summary::-webkit-details-marker { display: none; }
+.quiz summary::before { content: "+ "; font-family: "et-book", var(--serif); }
+.quiz details[open] summary::before { content: "− "; }
+.quiz summary:hover { color: var(--accent); }
+.quiz details > p { margin-top: .3rem; padding-left: 1rem; border-left: 1px solid var(--rule); color: var(--ink-2); }
+
+/* Reference lists: a narrow label column (kind / year) and a hanging text column. */
+.art ul.refs { list-style: none; padding-left: 0; }
+.refs li { display: grid; grid-template-columns: 2.8rem minmax(0, 1fr); column-gap: .5rem; line-height: 1.6; }
+.refs li > :not(.kind):not(.yr) { grid-column: 2; }
+.refs .kind, .refs .yr { grid-column: 1; font-family: var(--note); font-size: .86rem; color: var(--muted); padding-top: .12rem; }
+.refs .yr { font-family: "et-book-osf", var(--serif); font-size: .95rem; padding-top: .05rem; }
+.refs .en { font-family: "et-book", var(--serif); font-style: italic; color: var(--muted); }
+.refs .gloss { font-family: var(--note); font-size: .88rem; color: var(--ink-2); margin-top: .1rem; }
+.art .refs li + li { margin-top: .75rem; }
+.art .papers li + li { margin-top: .35rem; }
+.refs.noleft li { grid-template-columns: minmax(0, 1fr); }
+.refs.noleft li > * { grid-column: 1; }
+.refs .used { font-family: var(--note); font-size: .82rem; color: var(--muted); margin-left: .5em; }
+.refs.terms .plain-t { font-weight: 600; }
+.refs.terms .en { display: inline; margin-left: .6em; }
+.timeline li { line-height: 1.7; }
+.art .timeline li + li { margin-top: .4rem; }
+
+/* ---------- blocks: lede, run-in labels, notes ---------- */
+.lede { margin-top: 1.6rem; color: var(--ink-2); }
+.run-in { font-weight: 600; color: var(--ink); }
+p.note { font-family: var(--note); font-size: .9rem; color: var(--muted); margin-top: .1rem; }
+h2 .en, h3 .en { font-family: "et-book", var(--serif); font-style: italic; font-weight: 400; color: var(--muted); margin-left: .6em; font-size: .92em; }
+h2 a, h3 a { text-decoration-color: var(--rule); }
+.quiz-h { font-family: var(--note); font-size: .88rem; color: var(--muted); margin-top: 1.4rem; }
+.quiz-h + ol.quiz { margin-top: .2rem; }
+
+/* Index pages: a table of contents instead of a card grid. */
+.art ol.toc { list-style: none; padding-left: 0; margin-top: .4rem; }
+.art ol.toc > li + li { margin-top: .85rem; }
+.toc-t { line-height: 1.55; }
+.toc-t .en { font-family: "et-book", var(--serif); font-style: italic; color: var(--muted); margin-left: .6em; font-size: .95em; }
+.toc-meta { font-family: var(--note); font-size: .82rem; color: var(--muted); margin-left: .7em; white-space: nowrap; }
+.toc-s { font-family: var(--note); font-size: .9rem; line-height: 1.65; color: var(--ink-2); margin-top: .1rem; }
+.toc-lede { font-family: var(--note); color: var(--ink-2); font-size: .95rem; }
+h2.toc-h, h3.toc-h { margin-bottom: .3rem; }
+
+/* Tables: booktabs rules (top, under the header, bottom), no vertical lines, no fills. */
+.table-wrap { overflow-x: auto; margin: 1rem 0; }
+table.booktabs { border-collapse: collapse; width: 100%; font-size: .9rem; line-height: 1.6; border-top: 1.5px solid var(--ink); border-bottom: 1.5px solid var(--ink); }
+table.booktabs th { text-align: left; font-weight: 600; padding: .45rem .7rem .35rem 0; border-bottom: 1px solid var(--ink); white-space: nowrap; vertical-align: bottom; }
+table.booktabs td { padding: .45rem .9rem .45rem 0; vertical-align: top; border-top: 1px solid var(--rule); }
+table.booktabs tbody tr:first-child td { border-top: 0; }
+table.rank td { white-space: nowrap; font-variant-numeric: tabular-nums; }
+table.rank td:nth-child(2) { white-space: normal; }
+table.kv { border-collapse: collapse; margin: .6rem 0; font-size: .95rem; }
+table.kv th { text-align: left; font-weight: 400; color: var(--muted); padding: .25rem 1.2rem .25rem 0; vertical-align: top; min-width: 5em; max-width: 12em; font-family: var(--note); }
+table.kv td { padding: .25rem 0; vertical-align: top; }
+
+/* Long articles: the table of contents sits at the top of the margin. */
+/* It sits in a full-width section, so it floats into the margin without a negative offset. */
+details.mtoc {
+  float: right; clear: right; width: var(--side); margin-right: 0; margin-bottom: 1rem;
+  font-family: var(--note); font-size: .86rem; line-height: 1.55; color: var(--ink-2);
+}
+details.mtoc summary { font-family: var(--serif); font-weight: 600; font-size: .82rem; color: var(--muted); list-style: none; cursor: default; }
+details.mtoc summary::-webkit-details-marker { display: none; }
+.art details.mtoc ol { list-style: none; padding: 0; margin: .3rem 0 0; }
+.art details.mtoc li + li { margin-top: .25rem; }
+details.mtoc a { text-decoration: none; }
+details.mtoc a:hover { text-decoration: underline; }
+
+/* Tools: search and filters with underlined inputs. */
+.tool { margin-top: 1rem; }
+.filters { display: flex; flex-wrap: wrap; gap: .6rem 1.6rem; align-items: baseline; font-family: var(--note); font-size: .92rem; color: var(--muted); }
+.filters label { display: inline-flex; gap: .5rem; align-items: baseline; }
+.filters input, .filters select {
+  font: inherit; color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid var(--rule-2); border-radius: 0;
+  padding: .15rem .1rem; min-width: 7rem;
+}
+.filters input[type="search"] { min-width: 14rem; }
+.filters select { max-width: 16rem; }
+.filters input:focus, .filters select:focus { outline: none; border-bottom-color: var(--accent); }
+.filters select option { background: var(--bg); color: var(--ink); }
+.filters .count { margin-left: auto; font-family: var(--mono); font-size: .8rem; }
+table.gl td.en { font-family: "et-book", var(--serif); width: 20%; }
+table.gl .abbr { color: var(--muted); }
+table.gl td.zh { white-space: nowrap; }
+table.gl td.def { color: var(--ink-2); min-width: 20rem; }
+table.gl td.c { font-size: .85rem; min-width: 9rem; padding-right: 0; }
+table.gl tr:target td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+table.db td.y { font-family: "et-book-osf", var(--serif); white-space: nowrap; }
+table.db td.t { min-width: 16rem; }
+table.db td.t small { display: block; color: var(--muted); font-size: .8rem; line-height: 1.45; margin-top: .15rem; }
+table.db td.tags { min-width: 7rem; font-family: var(--note); font-size: .8rem; color: var(--muted); }
+table.db td.tags span { display: block; }
+table.db .tier.milestone { color: var(--ink); font-weight: 600; }
+table.db td.s { min-width: 18rem; color: var(--ink-2); }
+table.db td.n { min-width: 12rem; font-size: .82rem; color: var(--ink-2); }
+
+/* Figures: the pipeline diagram and the timeline of classic papers, drawn in ink with one accent for interaction. */
+figure { margin: 1.4rem 0; }
+svg a { text-decoration: none; }
+.diagram-wrap, .lanes-wrap { position: relative; overflow-x: auto; }
+svg.diagram { width: 100%; min-width: 760px; height: auto; display: block; font-family: var(--note); }
+svg.diagram .dnode rect { fill: var(--bg); stroke: var(--ink-2); stroke-width: 1; }
+svg.diagram .dnode rect.data { stroke-dasharray: 4 3; }
+svg.diagram .dnode:hover rect, svg.diagram .dnode:focus rect { stroke: var(--accent); stroke-width: 1.5; }
+svg.diagram .dnode:focus { outline: none; }
+svg.diagram text { fill: var(--ink); }
+svg.diagram text.k { font-family: var(--mono); font-size: 10px; fill: var(--muted); }
+svg.diagram text.t { font-family: var(--serif); font-size: 13px; font-weight: 600; }
+svg.diagram text.s { font-size: 11px; fill: var(--ink-2); }
+svg.diagram .dedge { fill: none; stroke: var(--ink-2); stroke-width: 1; }
+svg.diagram .dedge.fb { stroke-dasharray: 4 3; }
+svg.diagram .dhead { fill: var(--ink-2); }
+svg.diagram .dloop { fill: none; stroke: var(--rule-2); stroke-dasharray: 2 3; }
+svg.diagram .dlabel { font-size: 12px; fill: var(--muted); }
+svg.diagram .dnote { font-size: 11px; fill: var(--muted); }
+svg.diagram a.dnode:hover .dnote { fill: var(--accent); }
+svg.lanes { width: 100%; min-width: 720px; height: auto; display: block; font-family: var(--note); }
+svg.lanes .grid { stroke: var(--rule); stroke-width: 1; }
+svg.lanes .axis { font-family: "et-book-osf", var(--serif); font-size: 12px; fill: var(--muted); }
+svg.lanes .lane-l { font-size: 12px; fill: var(--ink-2); }
+svg.lanes .brk { stroke: var(--muted); fill: none; }
+svg.lanes .hit { fill: transparent; }
+svg .dot { fill: var(--ink); }
+svg .dot.hollow { fill: var(--bg); stroke: var(--ink-2); stroke-width: 1.2; }
+svg.lanes a.m:hover .dot, svg.lanes a.m:focus .dot { fill: var(--accent); stroke: var(--accent); }
+svg.lanes a.m:focus { outline: none; }
+.vtip { position: absolute; z-index: 20; max-width: 20rem; padding: .45rem .7rem; background: var(--bg); border: 1px solid var(--rule-2); font-family: var(--note); font-size: .82rem; line-height: 1.5; pointer-events: none; }
+.vtip b { display: block; font-family: "et-book", var(--serif); font-weight: 400; font-size: .92rem; }
+.vtip small { display: block; color: var(--muted); }
+.vtip span { color: var(--accent); }
+figcaption { font-family: var(--note); font-size: .85rem; color: var(--muted); margin-top: .4rem; }
+figcaption svg { vertical-align: -1px; }
+
+.series { display: grid; grid-template-columns: 1fr auto 1fr; gap: 1rem; align-items: end; margin-top: 3.2rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: .98rem; }
+.series small { display: block; font-family: var(--note); font-size: .8rem; color: var(--muted); }
+.series .up { text-align: center; font-size: .88rem; }
+.series .up a { color: var(--muted); }
+.series .next { text-align: right; }
+
+.site-foot { max-width: 67rem; margin: 0 auto; padding: 1.2rem 1.5rem 2.5rem; font-size: .82rem; color: var(--muted); }
+.site-foot a { color: var(--muted); text-decoration: none; }
+
+/* ---------- hover preview ---------- */
+.xtip {
+  position: absolute; z-index: 50; max-width: min(22rem, calc(100vw - 16px)); padding: .55rem .8rem .6rem;
+  background: var(--bg); border: 1px solid var(--rule-2); color: var(--ink);
+  font-family: var(--note); font-size: .88rem; line-height: 1.6; pointer-events: none;
+}
+.xt-m { font-size: .76rem; color: var(--muted); }
+.xt-t { font-family: var(--serif); font-weight: 600; font-size: .95rem; line-height: 1.45; margin-top: .1rem; }
+.xt-e { font-family: "et-book", var(--serif); font-style: italic; color: var(--ink-2); line-height: 1.4; }
+.xt-s { margin-top: .35rem; color: var(--ink-2); }
+
+/* ---------- narrow screens: one column; notes fold behind their number or ⊕ ---------- */
+@media (max-width: 760px) {
+  body { font-size: 1.0625rem; line-height: 1.8; }
+  .bar-in { gap: 1rem; padding: 0 1rem; flex-wrap: wrap; }
+  .site-nav { order: 5; flex-basis: 100%; display: none; }
+  .topbar.nav-open .site-nav { display: block; }
+  .menus { flex-direction: column; gap: 0; padding-bottom: .6rem; }
+  .menu-btn { line-height: 2.4rem; width: 100%; text-align: left; }
+  .menu-btn::after { content: " +"; }
+  .menu.open > .menu-btn::after { content: " −"; }
+  .menu.cur > .menu-btn { box-shadow: none; }
+  .drop { position: static; border: 0; padding: 0 0 .4rem .9rem; min-width: 0; }
+  .drop a { padding: .2rem 0; white-space: normal; }
+  .burger { display: inline; }
+  .theme-btn { margin-left: auto; }
+  .art { padding: 1.6rem 1rem 2.4rem; }
+  .art > *, .art section > * { width: 100%; }
+  h1 { font-size: 1.85rem; }
+  .subtitle { font-size: 1.22rem; }
+  .epigraph blockquote { padding-left: 1rem; }
+  .epigraph p { font-size: 1.05rem; }
+  label.margin-toggle:not(.sidenote-number) { display: inline; cursor: pointer; color: var(--muted); font-family: "et-book", var(--serif); padding: 0 .15em; }
+  label.sidenote-number { cursor: pointer; }
+  .sidenote, .marginnote { display: none; }
+  .margin-toggle:checked + .sidenote, .margin-toggle:checked + .marginnote {
+    display: block; float: left; clear: both; width: 100%; margin: .6rem 0; padding-left: .8rem; border-left: 1px solid var(--rule-2);
+  }
+  .series { grid-template-columns: 1fr 1fr; }
+  .series .up { display: none; }
+  details.mtoc { float: none; width: 100%; margin: 0 0 1.2rem; padding-left: .8rem; border-left: 1px solid var(--rule-2); }
+  details.mtoc summary { cursor: pointer; }
+  details.mtoc summary::after { content: " +"; }
+  details.mtoc[open] summary::after { content: " −"; }
+  .filters { flex-direction: column; align-items: stretch; gap: .5rem; }
+  .filters label { justify-content: space-between; }
+  .filters input[type="search"], .filters input, .filters select { min-width: 0; flex: 1; }
+  .filters .count { margin-left: 0; }
+  .toc-meta { display: block; margin-left: 0; }
+  table.kv, table.kv tbody, table.kv tr, table.kv th, table.kv td { display: block; max-width: none; }
+  table.kv th { padding: .5rem 0 0; }
+}
+@media print {
+  .topbar, .site-foot, .series { display: none; }
+}
+
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<header class="topbar" id="topbar"></header>
+<main id="main"><article class="art"></article></main>
+<footer class="site-foot" id="site-foot"></footer>
+<script type="application/json" id="data">{"site": {"brand": "3D 临场研究图谱", "root": "../../", "path": "basics/foundations/v-perception.html", "nav": [{"key": "overview", "label": "Overview", "items": [["Introduction", "index.html"], ["Methodology", "overview/methodology.html"], ["How to use", "overview/how-to-use.html"]]}, {"key": "basics", "label": "Basics", "items": [["Routes", "basics/routes/index.html"], ["Foundations", "basics/foundations/index.html"], ["Advanced topics", "basics/advanced/index.html"], ["Classics", "basics/classics/index.html"], ["Glossary", "basics/glossary.html"]]}, {"key": "works", "label": "Works", "items": [["Papers", "works/papers/index.html"], ["Walkthrough", "works/walkthrough/index.html"], ["Field map", "works/field-map.html"], ["Sub areas", "works/areas/index.html"]]}, {"key": "future", "label": "Future", "items": [["Directions", "future/index.html"], ["Trends & Challenges", "future/trends.html"]]}], "navCur": "basics", "navItem": "basics/foundations/index.html", "crumbs": [["Basics", ""], ["Foundations", "basics/foundations/index.html"], ["M8 视频、时间一致性、评测与系统", "basics/foundations/m8.html"]], "date": "2026-09-28"}, "xref": {"adv-a-telepresence-sys": {"u": "basics/advanced/a-telepresence-sys.html", "t": "三维临场系统设计", "e": "3D telepresence system design", "m": "Advanced topics", "s": "三维临场（3D telepresence）要把远端参与者的外观和几何实时“搬”过来，并按本地观看者双眼的位置正确显示，使观看者获得立体视差、运动视差和目光接触。"}, "classic-100": {"u": "basics/classics/t-fusion-capture.html#classic-100", "t": "Project Starline: A High-Fidelity Telepresence System", "e": "", "m": "Classics · 2021", "s": "论文自称是第一个被证明明显优于 2D 视频会议的临场系统。"}, "classic-112": {"u": "basics/classics/t-fusion-capture.html#classic-112", "t": "VirtualCube: An Immersive 3D Video Communication System", "e": "", "m": "Classics · 2022", "s": "它把三维视频会议做成了标准化的积木：统一规格的隔间（VirtualCube）配 6 台 Azure Kinect 和三面环绕屏，全部用现成硬件，可以拼成各种虚…"}, "classic-12": {"u": "basics/classics/t-fusion-capture.html#classic-12", "t": "The Office of the Future: A Unified Approach to Image-Based Modeling and Spatially Immersive Displays", "e": "", "m": "Classics · 1998", "s": "它提出的愿景是：用天花板上的相机和投影仪实时获取整个办公室（墙面、家具、人）的逐像素深度与反射率，再把这种动态的 image-based 模型传到远端显示。"}, "classic-145": {"u": "basics/classics/t-fusion-capture.html#classic-145", "t": "Tele-Aloha: A Low-budget and High-authenticity Telepresence System Using Sparse RGB Cameras", "e": "", "m": "Classics · 2024", "s": "它证明高质量的双向临场可以只用 4 台 RGB 相机、1 块消费级 GPU（RTX 4090）和 1 块裸眼 3D 屏实现：2048×2048、30 fps…"}, "classic-31": {"u": "basics/classics/t-fusion-capture.html#classic-31", "t": "Encumbrance-free telepresence system with real-time 3D capture and display using commodity depth cameras", "e": "", "m": "Classics · 2011", "s": "它是最早用多台消费级 Kinect 搭出完整“免穿戴”三维临场系统的工作之一：动态场景实时采集，配合头部跟踪的裸眼立体显示，用户不用戴任何设备。"}, "classic-43": {"u": "basics/classics/t-fusion-capture.html#classic-43", "t": "Holoportation: Virtual 3D Teleportation in Real-time", "e": "", "m": "Classics · 2016", "s": "这是最早的端到端、实时、高质量 AR/VR 三维临场系统之一。"}, "classic-5": {"u": "basics/classics/t-ibr-geometry.html#classic-5", "t": "Light Field Rendering", "e": "", "m": "Classics · 1996", "s": "光场渲染证明：只要图像采样足够密，完全不需要深度或特征匹配，只靠查表和插值就能实时生成任意新视角。"}, "classic-62": {"u": "basics/classics/t-fusion-capture.html#classic-62", "t": "LookinGood: Enhancing Performance Capture with Real-time Neural Re-Rendering", "e": "", "m": "Classics · 2018", "s": "它较早把“神经重渲染”（论文称 neural (re-)rendering）用于实时表演捕捉。"}, "concept-g-depth": {"u": "basics/foundations/g-depth.html", "t": "深度、视差与逆深度采样", "e": "Depth, disparity & inverse-depth sampling", "m": "Foundations · M2 相机与多视几何", "s": "双目中深度与视差成反比（Z = f·b/d），所以固定的像素匹配误差会变成随 Z² 增长的深度误差。", "n": "深度、视差与逆深度采样"}, "concept-i-warping": {"u": "basics/foundations/i-warping.html", "t": "基于深度的渲染：前向/后向 warping、空洞与飞点", "e": "Depth-image-based rendering: forward/backward warping, holes & flying pixels", "m": "Foundations · M5 基于图像的渲染（IBR）", "s": "有了逐像素深度，就能把一张图“搬”到新视角。", "n": "基于深度的渲染"}, "concept-v-codec": {"u": "basics/foundations/v-codec.html", "t": "视频编码、传输与延迟预算", "e": "Video coding, transport & latency budgets", "m": "Foundations · M8 视频、时间一致性、评测与系统", "s": "远程临场要在约百毫秒内把多路彩色和深度视频送到对端并渲染出来。", "n": "视频编码、传输与延迟预算"}, "concept-v-perception": {"u": "basics/foundations/v-perception.html", "t": "立体视觉感知与 3D 显示", "e": "Stereo perception & 3D displays", "m": "Foundations · M8 视频、时间一致性、评测与系统", "s": "人靠双眼视差、辐辏、调节和运动视差感知深度。", "n": "立体视觉感知与 3D 显示"}, "concept-v-temporal": {"u": "basics/foundations/v-temporal.html", "t": "时间一致性、闪烁与时域滤波", "e": "Temporal consistency, flicker & temporal filtering", "m": "Foundations · M8 视频、时间一致性、评测与系统", "s": "逐帧独立预测时，每帧误差互不相关，这些误差会直接表现为闪烁。", "n": "时间一致性、闪烁与时域滤波"}, "module-M8": {"u": "basics/foundations/m8.html", "t": "M8 · 视频、时间一致性、评测与系统", "e": "Video, temporal consistency, evaluation & systems", "m": "Foundations", "s": "理解“闪烁”从哪来、如何度量，以及实时 3D 临场系统在延迟、带宽和人眼感知上的约束。"}}, "concept": {"id": "v-perception", "name_zh": "立体视觉感知与 3D 显示", "name_en": "Stereo perception & 3D displays", "tldr_zh": "人靠双眼视差、辐辏、调节和运动视差感知深度。3D 显示（头显、头部跟踪裸眼屏、光场屏）必须为每只眼睛或每个视点各渲染一幅图，并在几十毫秒内跟上头部运动，否则会出现重影、辐辏-调节冲突带来的不适和画面拖动。这些约束意味着，逐视角渲染的 Quark 和 Ha 一旦接上 3D 显示，成本要翻倍，甚至翻几十倍。", "intuition_zh": "先看双眼视差。两眼相距约 6.3 cm（瞳距，IPD），同一个点在左右视网膜上的位置不同，大脑把两幅略有差异的图融合成一个有深度的像，这就是立体视觉。落到屏幕上，它对应左右眼图像中同一点的水平位移，即屏幕视差 p：点在屏幕平面上时 p=0，在屏后为正（非交叉视差），在屏前为负（交叉视差）。这与立体匹配中的视差 d=f·b/Z 是同一套几何（见 g-depth），只是相机换成了眼睛。视差太大时两眼图像融合失败，出现重影（复视）。如果左右眼图像不一致，比如只有一只眼有伪影，或两眼的闪烁不同步，就会引起双眼竞争，比单眼伪影更扎眼，也更容易疲劳。\n\n再看辐辏-调节冲突（VAC）。看真实物体时，两眼的会聚角（辐辏）和晶状体的对焦距离（调节）指向同一个距离，两者在神经上是耦合的。在普通 3D 显示上，辐辏被视差驱动，指向虚拟物体；但所有光都来自一个固定的焦面（屏幕或头显的虚像面），调节只能对准这个焦面。两者的不一致常用屈光度（1/米）来衡量。Hoffman et al. 2008 的实验表明，这种冲突会降低立体视觉表现，并引起视觉疲劳。实践中的对策是把注意焦点放在显示平面附近：Starline 就把远端用户的脸放在屏幕平面附近，同时减小 VAC、串扰和跟踪延迟的影响。\n\n然后是运动到光子延迟（motion-to-photon）。观看者转头或平移时，画面必须立即按新视点更新，否则静止的虚拟物体会“跟着头走”，破坏稳定感并诱发晕动。画面错位的像素数约等于像素密度 × 角速度 × 延迟（LaValle《Virtual Reality》7.4 节）。据 LaValle，现代头显的延迟约 15–25 ms，再靠姿态预测把有效延迟压到接近零，最后用“渲染后图像 warp”兜底。ATW 只按最新的头部旋转对已渲染的图像做单应变换，对绕眼睛光心的纯旋转是精确的；但人转头时绕颈部转动，眼睛也会平移几厘米，这部分以及真正的位置移动需要逐像素深度（positional timewarp），而且会暴露原来被遮挡的区域，留下空洞（见 i-warping）。ASW 则在应用只能以半帧率渲染时，用前面两帧估计画面运动并外推出中间帧，能覆盖场景动画和位置移动，但在去遮挡处会拉伸。裸眼 3D 屏同样受延迟约束：它要按跟踪到的眼睛位置，把左右图分别“投”向两只眼，眼睛位置滞后会造成左右串扰，甚至立体反转。\n\n最后，3D 显示的类型决定了要渲染多少个视点。头显每只眼一幅，刷新率常见 72–120 Hz，高于常规视频。头部/眼睛跟踪的裸眼 3D 屏（Starline、Tele-Aloha）用柱镜阵列把不同像素送往左右眼，只需渲染跟踪到的两个视点，但依赖低延迟的眼睛跟踪。多视点光场屏不跟踪观看者，要同时显示几十个视点，每个视点都要渲染。还要区分两种“闪烁”：显示器刷新造成的亮度闪烁，只要刷新率高于临界闪烁融合频率就察觉不到；前面讲的“内容闪烁”（时间不一致）是另一回事。人眼对两者都在大面积、低空间频率的区域最敏感。", "analogy_zh": "立体显示像给两只眼睛各讲一个略有不同的故事，让大脑自己拼出 3D。两个故事的细节必须严丝合缝，否则“串供”会被识破，出现重影和不适。辐辏-调节冲突像让你盯着 1 米外的手指，却要求把焦点对在 1.25 米外的墙上。运动到光子延迟像在晃动的船舱里看一幅画：画面如果不能随你的头同步反向移动，整个世界就会“飘”起来。", "equations": [{"tex": "p = I_{\\text{pd}}\\,\\frac{Z - D}{Z}", "explain_zh": "屏幕视差，即左右眼图像中同一点的水平间距（由相似三角形得到）。I_pd 是瞳距（约 0.063 m），D 是眼睛到屏幕（或头显虚像面）的距离，Z 是希望观看者感知到的点的距离。Z=D 时 p=0，点在屏幕上；Z>D 时 p>0，Z→∞ 时 p→I_pd（非交叉视差，屏后）；Z<D 时 p<0（交叉视差，屏前）。它与 g-depth 中的 d=f·b/Z 同源：眼睛就是一台基线为 I_pd 的双目相机。"}, {"tex": "\\Delta_{\\text{VA}} = \\left|\\frac{1}{Z_{\\text{v}}} - \\frac{1}{Z_{\\text{a}}}\\right|", "explain_zh": "辐辏-调节冲突的大小，单位是屈光度 D（1/米）。Z_v 是视差驱动的辐辏距离（虚拟物体的距离），Z_a 是调节距离（屏幕或头显焦面的距离）。之所以用屈光度而不用米，是因为人眼的景深和对焦误差在屈光度尺度上近似均匀，这与逆深度采样（Quark 按等视差放置各层）是同一个道理。"}, {"tex": "\\Delta x = d\\,\\omega\\,\\ell", "explain_zh": "LaValle《Virtual Reality》7.4 节给出的延迟误差估计。d 是显示器的像素密度（像素/度），ω 是头部角速度（度/秒），ℓ 是运动到光子延迟（秒），Δx 是画面错位的像素数。它说明延迟的代价随显示分辨率和头动速度线性增长。"}, {"tex": "\\mathbf{x}' \\simeq K R_{\\Delta} K^{-1}\\mathbf{x},\\qquad \\mathbf{x}' \\simeq K\\big(R_{\\Delta}\\, z(\\mathbf{x})\\, K^{-1}\\mathbf{x} + \\mathbf{t}_{\\Delta}\\big)", "explain_zh": "渲染后重投影（timewarp）。x 是已渲染图像的齐次像素坐标，K 是内参，R_Δ、t_Δ 是从渲染时刻到显示时刻、以渲染相机为参考的旋转与平移增量，z(x) 是像素深度，≃ 表示齐次意义下相等。纯旋转时，映射是与深度无关的单应（ATW），结果精确；有平移时必须用逐像素深度（positional timewarp），而且会暴露原图中被遮挡的区域，出现空洞。这与 Ha 的前向 splatting、i-warping 面对的是同一个问题。"}], "worked_example_zh": "(1) Starline 的几何。观看距离 D=1.25 m，瞳距取 63 mm（Starline 的柱镜正是按 1.25 m 处 63 mm IPD 设计的）。远端人脸放在屏幕平面上：Z=1.25 m，p=0，Δ_VA=0。远端的人把手伸到 Z=0.95 m：p=63×(0.95−1.25)/0.95≈−19.9 mm（交叉视差），Δ_VA=|1/0.95−1/1.25|≈0.25 D。远端身后的墙在 Z=2.5 m：p=63×1.25/2.5=31.5 mm，Δ_VA=|0.4−0.8|=0.4 D。内容离显示平面越远，视差和冲突越大，这就是 Starline 把人脸放在屏幕平面附近的原因。\n(2) 延迟的像素代价。取头显约 20 像素/度（Starline 论文称多数常见 VR 头显低于 20 像素/度），头部以 50°/s 转动。延迟 ℓ=50 ms 时，Δx=20×50×0.05=50 像素；把 ℓ 压到 20 ms，是 20 像素。裸眼屏的情形：头部以 0.3 m/s 横向移动，跟踪延迟 33 ms，眼睛位置就滞后约 0.3×0.033≈1 cm，约为瞳距的 16%，足以引起左右串扰。因此 Starline 对跟踪点做外推，再用双指数平滑去抖。\n(3) 渲染成本。Quark 单视角 32.2 ms（A100，1024×768）。90 Hz 双目头显每帧预算 11.1 ms，要出两只眼，两次推理约 64.4 ms，需要约 5.8 倍加速；即使借助 ASW 以 45 Hz 渲染（预算 22.2 ms），也还需要约 2.9 倍。Ha 与目标视点相关的阶段每只眼约 39 ms（10+6+23，TensorRT），输入端的深度滤波（Eq. 1–2）可以两眼共享，所以两眼约 78 ms，约 12.8 fps。若换成多视点光场屏，假设需要 N=45 个视点（仅为示例值），Quark 约 45×32.2 ms≈1.45 s/帧，完全不可行，必须改用“一次重建、多次渲染”的持久表示（3DGS、持久 LDM 或网格）。相比之下，Starline 的头部跟踪裸眼屏只需 60 Hz 下的两个视点，每帧 16.6 ms 预算中基于图像的融合（含 4 张阴影图和两只眼的射线投射）只占 1.5 ms。", "pitfalls_zh": ["把单目指标当成立体质量。左右眼分别渲染时，两眼的伪影、闪烁以及所选的 K 近邻相机都可能不同（Ha 的目标视角 TSDF 对两只眼各算一次，最近 K 台相机可能不一样），从而引起双眼竞争。需要显式评测或约束左右一致性。", "以为更好的渲染能解决辐辏-调节冲突。VAC 由显示器的光学结构决定，渲染只能靠内容布局（把关注对象放在焦面附近）和限制视差预算来缓解；真正解决要靠变焦、多焦面、光场或全息显示。", "只看平均延迟，或以为 timewarp 能兜住一切。可变延迟比固定延迟更难适应（LaValle 7.4）；ATW 只对绕光心的纯旋转精确，转头时眼睛的平移和真正的位置移动都需要深度，而且会暴露遮挡空洞；发送端渲染方案中，头动延迟包含一次网络往返，接收端必须做重投影。", "混淆两种“闪烁”。显示器刷新带来的亮度闪烁（与刷新率、占空比有关）和渲染内容的时间不一致（v-temporal）是两个不同的问题；两篇锚点论文讨论的都是后者。"], "in_quark": {"used": false, "where": "全文未讨论立体或多视点显示（Fig. 1 称可为 dynamic viewpoint 按需渲染；Sec. 2.1 称每个新视角都重新生成 LDM）", "how_zh": "Quark 每次推理只为一个目标视点生成 LDM 并渲染，论文没有提到双目、头显或 3D 显示，也没有测量运动到光子延迟。接到 3D 显示上，左右眼需要两次完整推理：1024×768 下约 2×32.2≈64 ms，即约 15 fps 双目；光场屏的成本则按视点数线性增长。两眼之间能共享的只有与目标视点无关的输入图像特征编码；射线方向编码依赖目标 LDM 的视锥，Update & Fuse 依赖目标视锥中的 LDM，每只眼都要单独做一次。Sec. 2.1 提到 LDM 的历史缺点是不能从所有方向观看，Quark 靠为每个视角重新生成来规避。这意味着可以考虑用一只眼的 LDM 为另一只眼（相距约 6.3 cm）做近距离重投影或 ATW 式补偿，但论文没有验证。此外，IBR blend weights 在标定误差下会产生“错误的硬边”（Sec. 4.3），如果这种伪影只出现在一只眼里，在双目观看中会比单目更显眼。"}, "in_ha": {"used": false, "where": "全文未讨论（Sec. 1 以 VR/AR 中的 immersive 3D video 为动机；Sec. 4.5 Table 4 为单视角运行时间）", "how_zh": "Ha et al. 的一作在 Meta Reality Labs 实习期间完成本文，引言以 VR/AR 中的沉浸式 3D 视频为动机，但没有头显或立体实验，没有双目一致性指标，也没有测运动到光子延迟。它的一致性定义有两条：单目视点移动时不跳变（EPI），固定视点时不闪烁（x–t 切片）。这两条都是双目舒适的必要条件，但并不充分。计算上，Eq. (1)–(2) 的输入端深度滤波（以及 RAFT-Stereo 深度本身）与目标视点无关，可以由两只眼和多个观看者共享；而 splat（10 ms）、TSDF（6 ms）、融合网络（23 ms，TensorRT）都要按每只眼重复一遍，双目合计约 78 ms。两只眼各自选最近的 K 台相机、各自 ray-march TSDF，K 集合不同就会导致两眼深度不一致；论文在 Sec. 3.2 也承认，K 集合变化会让 TSDF 深度出现小幅变化。"}, "in_field_zh": "显示端决定了整个系统的渲染预算和表示选择。Starline 用的是 65 英寸 8K、60 Hz 的头部跟踪柱镜裸眼 3D 屏，每只眼约分到 5M 像素、约 45 像素/度；它用 4 台 120 Hz 单色相机三角化眼睛、嘴和耳朵的位置，测得跟踪延迟约 33 ms 并用外推补偿，还把远端人脸放在屏幕平面附近，以减轻 VAC 和串扰。Tele-Aloha 同样采用裸眼 3D 屏和低延迟虹膜跟踪，报告的端到端延迟低于 150 ms。头显方案（如基于 3DGS 的 GaussianNexus）受 72–120 Hz 双目刷新、运动到光子延迟和 ATW/ASW 的约束，更适合“一次重建、多次渲染”的持久表示。眼神接触、空间音频（Starline 用跟踪到的耳朵位置做双耳渲染）也属于感知层面的系统需求。进阶内容见 a-telepresence-sys。", "resources": [{"title": "Virtual Reality (Steven M. LaValle, Cambridge University Press 2023, free online)", "url": "http://lavalle.pl/vr/", "type": "book", "note_zh": "免费开放的教材。对应读：5.4 节中的“Vergence-accommodation mismatch”；6.1.2 节“Stereo depth cues”；6.2.2 节“Stroboscopic apparent motion”及其中的帧率与闪烁讨论；7.4 节“Improving Latency and Frame Rates”（运动到光子延迟、预测、post-rendering image warp 及其缺陷）。注意 7.4 节的数值例子（d=40 像素/度、ω=50°/s、ℓ=0.02 s）写成 4 像素，按公式 dωℓ 应为 40 像素（300°/s 时应为 240 像素而非 24）。"}, {"title": "Vergence–accommodation conflicts hinder visual performance and cause visual fatigue (Hoffman, Girshick, Akeley, Banks, Journal of Vision 8(3):33, 2008)", "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2879326/", "type": "paper", "note_zh": "辐辏-调节冲突的经典实验论文（PMC 免费全文）。用多焦面显示对比焦点线索正确与错误两种条件，量化 VAC 对立体融合时间、立体视锐度、深度感知失真和视觉疲劳的影响。"}, {"title": "Stanford EE267: Virtual Reality (Gordon Wetzstein)", "url": "https://stanford.edu/class/ee267/", "type": "course", "note_zh": "课程主页的 Syllabus 列出各讲主题与阅读材料：Lecture 5 讲人类视觉系统（深度、颜色、对比度、分辨率感知），Lecture 6 讲 Stereo Rendering，Lecture 7 讲头显光学与头显中的立体渲染；Lab 3 是立体渲染与景深练习。"}, {"title": "Asynchronous Spacewarp (Oculus/Meta developer blog, 2016)", "url": "https://developers.meta.com/horizon/blog/asynchronous-spacewarp/", "type": "blog", "note_zh": "说明 ATW 擅长处理头部旋转，而 ASW 在应用以刷新率一半（如 45 fps 对 90 Hz）渲染时，用前两帧估计运动并外推出中间帧，覆盖场景动画和位置移动；并列举亮度快速变化、去遮挡拉伸、重复纹理误预测等伪影，指出渲染帧率低于刷新率一半时效果变差。"}], "self_check": [{"q_zh": "观看距离 1.25 m、瞳距 63 mm，要让一个点显示在屏幕后方 1.25 m 处（即 Z=2.5 m），屏幕视差是多少？VAC 是多少屈光度？", "a_zh": "p=63×(2.5−1.25)/2.5=31.5 mm（非交叉视差）；Δ_VA=|1/2.5−1/1.25|=0.4 D。"}, {"q_zh": "ATW 为什么能精确修正头部旋转，却修正不了平移？这与 Ha 的前向 splatting 有什么共同点？", "a_zh": "绕光心的纯旋转不改变光心位置，射线只是换了方向，像素映射 x'≃K R K⁻¹ x 与深度无关。平移会引入视差，每个像素的位移量取决于自身深度，还会暴露原图中被遮挡的区域（真实转头时眼睛也有小幅平移，所以 ATW 只是近似）。带深度的平移 warp 与 Ha 用深度把输入像素 splat 到目标视角本质上是同一件事，都要处理空洞和飞点；Ha 靠多视角融合和背景图 I_BG 来补洞。"}, {"q_zh": "用 Quark 驱动一台 90 Hz 双目头显还差多少？哪些计算可以在两眼间共享？", "a_zh": "90 Hz 下每帧 11.1 ms 要出两只眼的图像。Quark 单视角 32.2 ms（A100，1024×768），两只眼约 64.4 ms，需要约 5.8 倍加速；借助 ASW 以 45 Hz 渲染也还差约 2.9 倍。两眼间能共享的只有输入图像的特征编码；每只眼的 Update & Fuse 和 IBR 渲染都必须重复。可行的方向有：接收端用 ATW 或位置重投影补帧；用一只眼的 LDM 重投影出另一只眼（未经验证）；或改用一次重建、多次渲染的持久表示。"}], "prereqs": ["g-depth"]}, "module": "module-M8", "walk": [], "classics": ["classic-5", "classic-12", "classic-31", "classic-43", "classic-62", "classic-100", "classic-112", "classic-145"], "adv": ["adv-a-telepresence-sys"], "prev": "concept-v-codec", "next": null, "readMin": 9}</script>
+<script>
+(function () {
+  "use strict";
+  // ================= lib: DOM, text and math helpers shared by every page =================
+  // A page script defines rich(text) (inline cross-links); paras() and eqList() call it.
+  var DATA;
+  try { DATA = JSON.parse(document.getElementById("data").textContent); } catch (e) { DATA = {}; }
+  var meta = DATA.meta || {};
+
+  // ---------- DOM helpers: all text goes through textContent; external links are https-only ----------
+  function safeUrl(u) { if (typeof u !== "string") return null; var s = u.trim(); return /^https:\/\/[^\s"'<>]+$/i.test(s) ? s : null; }
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "class") n.className = v;
+      else if (k === "text") n.textContent = String(v);
+      else if (k === "href") { var u = safeUrl(v); if (u) { n.setAttribute("href", u); n.setAttribute("target", "_blank"); n.setAttribute("rel", "noopener noreferrer"); } }
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c === null || c === undefined || c === false) return; n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return n;
+  }
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function sv(tag, attrs, kids) {
+    var n = document.createElementNS(SVGNS, tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "text") n.textContent = String(v);
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c) n.appendChild(c); });
+    return n;
+  }
+  function arr(x) { return Array.isArray(x) ? x : []; }
+  function str(x) { return typeof x === "string" ? x : (x === null || x === undefined ? "" : String(x)); }
+  function paras(text) { return str(text).split(/\n\s*\n/).map(function (t) { return t.trim(); }).filter(Boolean).map(function (t) { return el("p", null, rich(t)); }); }
+  function link(title, url) { return safeUrl(url) ? el("a", { href: url, text: title }) : el("span", { text: title }); }
+  function ul(items, map) { return el("ul", { class: "plain" }, arr(items).map(function (x) { return el("li", null, [map ? map(x) : str(x)]); })); }
+  function fmtCit(n) { n = Number(n); if (!(n >= 0)) return "—"; if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k"; return String(n); }
+
+  // ---------- math (MathJax, typeset lazily) ----------
+  var mathReady = false, mathQueue = [];
+  function mathUsable() { return !!(window.MathJax && typeof window.MathJax.typesetPromise === "function"); }
+  function flushMath() { mathReady = true; var q = mathQueue.slice(); mathQueue = []; q.forEach(typeset); }
+  window.__atlasMathReady = flushMath;
+  // MathJax may finish loading before this script runs (cached/async), so also poll for it.
+  var mathPoll = setInterval(function () { if (mathUsable()) { clearInterval(mathPoll); flushMath(); } }, 200);
+  setTimeout(function () { clearInterval(mathPoll); }, 30000);
+  function typeset(node) {
+    if (!node) return;
+    if (!mathReady && mathUsable()) mathReady = true;
+    if (!mathReady || !mathUsable()) { mathQueue.push(node); return; }
+    try { window.MathJax.typesetPromise([node]).catch(function () { /* leave raw TeX visible */ }); } catch (e) { /* leave raw TeX visible */ }
+  }
+  function eqList(eqs) {
+    eqs = arr(eqs).filter(function (q) { return q && str(q.tex).trim(); });
+    if (!eqs.length) return null;
+    return el("div", { class: "eqs" }, eqs.map(function (q) {
+      return el("div", { class: "eq" }, [el("div", { class: "math-block", text: "\\[" + str(q.tex) + "\\]" }), q.explain_zh ? el("p", null, rich(q.explain_zh)) : null]);
+    }));
+  }
+  document.addEventListener("toggle", function (e) { var t = e.target; if (t && t.tagName === "DETAILS" && t.open) typeset(t); }, true);
+
+  // ================= frame (Tufte site): links, notes, hover previews, top bar, theme =================
+  var SITE = DATA.site || {};
+  var ROOT = str(SITE.root);
+  var XREF = DATA.xref || {};
+  function hasX(key) { return Object.prototype.hasOwnProperty.call(XREF, key); }
+  // Custom page parts (search tools, diagrams, charts) register here; blocks.js calls them for {"b": "slot"} blocks.
+  var SLOTS = {};
+
+  // ---------- internal links: urls are relative to the site root; pages sit at different depths ----------
+  var SAFE_PATH = /^[A-Za-z0-9][A-Za-z0-9._\/-]*(\?[A-Za-z0-9=&._-]+)?(#[A-Za-z0-9._-]+)?$/;
+  function relHref(u) {
+    u = str(u);
+    if (/^#[A-Za-z0-9._-]+$/.test(u)) return u;
+    if (!SAFE_PATH.test(u)) return null;
+    var cut = u.indexOf("#"), path = cut < 0 ? u : u.slice(0, cut);
+    if (path === SITE.path) return cut < 0 ? "#" : u.slice(cut);
+    return ROOT + u;
+  }
+  function pageLink(u, text, cls) {
+    var h = relHref(u);
+    if (!h) return el("span", { class: cls || null, text: text });
+    var a = el("a", { class: cls || null, text: text });
+    a.setAttribute("href", h);
+    return a;
+  }
+  // A link to a known entry (concept, topic, paper, step...). data-xref drives the hover preview.
+  function xlink(key, text, cls) {
+    if (!hasX(key)) return text ? document.createTextNode(text) : null;
+    var x = XREF[key], a = pageLink(x.u, text || x.n || x.t, cls);
+    a.setAttribute("data-xref", key);
+    return a;
+  }
+
+  // Concept / topic ids mentioned in prose ("见 g-pinhole") become links labelled with the entry's short name.
+  var ID_RE = /(a-[a-z0-9]+(?:-[a-z0-9]+)*|[fgdrilnv]-[a-z0-9]+)/g;
+  var CJK = /[　-〿㐀-鿿＀-￯]/;
+  function rich(text) {
+    var s = str(text), out = [], last = 0, m;
+    ID_RE.lastIndex = 0;
+    while ((m = ID_RE.exec(s)) !== null) {
+      var id = m[1], prev = m.index > 0 ? s.charAt(m.index - 1) : "", next = s.charAt(m.index + id.length);
+      var key = hasX("concept-" + id) ? "concept-" + id : (hasX("adv-" + id) ? "adv-" + id : null);
+      if (!key || /[A-Za-z0-9_\-]/.test(prev) || /[A-Za-z0-9_]/.test(next)) continue;
+      // The prose spaces ids off from Chinese text; a Chinese label needs no such space.
+      var before = s.slice(last, m.index);
+      if (/ $/.test(before) && CJK.test(before.charAt(before.length - 2))) before = before.slice(0, -1);
+      if (before) out.push(document.createTextNode(before));
+      out.push(xlink(key, null, "xref"));
+      last = m.index + id.length;
+      if (s.charAt(last) === " " && CJK.test(s.charAt(last + 1))) last++;
+    }
+    if (last < s.length) out.push(document.createTextNode(s.slice(last)));
+    return out;
+  }
+  function lines(text) { return str(text).split(/\n+/).map(function (t) { return t.trim(); }).filter(Boolean).map(function (t) { return el("p", null, rich(t)); }); }
+
+  // ---------- side notes (numbered) and margin notes (unnumbered); on phones they fold behind a toggle ----------
+  var noteSeq = 0;
+  function sidenote(kids) {
+    var id = "sn-" + (++noteSeq);
+    return el("span", { class: "note-wrap" }, [
+      el("label", { for: id, class: "margin-toggle sidenote-number", "aria-label": "旁注" }),
+      el("input", { type: "checkbox", id: id, class: "margin-toggle" }),
+      el("span", { class: "sidenote" }, kids)
+    ]);
+  }
+  function marginnote(kids) {
+    var id = "mn-" + (++noteSeq);
+    return el("span", { class: "note-wrap" }, [
+      el("label", { for: id, class: "margin-toggle", "aria-label": "边注", text: "⊕" }),
+      el("input", { type: "checkbox", id: id, class: "margin-toggle" }),
+      el("span", { class: "marginnote" }, kids)
+    ]);
+  }
+  function noteLabel(text) { return el("span", { class: "note-label", text: text }); }
+
+  // ---------- article scaffolding ----------
+  var main = document.getElementById("main");
+  var art = main.querySelector("article");
+  function section(id, title, kids) {
+    var s = el("section", { id: id }, [title ? el("h2", { text: title }) : null].concat(kids));
+    art.appendChild(s);
+    return s;
+  }
+  function articleHead(o) {
+    var crumbs = el("nav", { class: "crumbs", "aria-label": "位置" });
+    arr(SITE.crumbs).forEach(function (c, i) {
+      if (i) crumbs.appendChild(el("span", { class: "sep", text: "›", "aria-hidden": "true" }));
+      crumbs.appendChild(c[1] ? pageLink(c[1], c[0]) : el("span", { text: c[0] }));
+    });
+    art.appendChild(el("header", { class: "art-head" }, [
+      crumbs,
+      el("h1", { text: o.title }),
+      o.subtitle ? el("p", { class: "subtitle", text: o.subtitle }) : null,
+      o.meta ? el("p", { class: "meta" }, o.meta) : null
+    ]));
+    if (o.epigraph) art.appendChild(el("div", { class: "epigraph" }, [el("blockquote", null, [el("p", null, rich(o.epigraph))])]));
+  }
+  // Previous / next in the series, each with its hover preview.
+  function seriesNav(prevKey, nextKey, indexUrl, indexLabel) {
+    var nav = el("nav", { class: "series", "aria-label": "同系列" });
+    nav.appendChild(el("div", { class: "prev" }, prevKey && hasX(prevKey) ? [el("small", { text: "上一篇" }), xlink(prevKey)] : []));
+    nav.appendChild(el("div", { class: "up" }, indexUrl ? [pageLink(indexUrl, indexLabel)] : []));
+    nav.appendChild(el("div", { class: "next" }, nextKey && hasX(nextKey) ? [el("small", { text: "下一篇" }), xlink(nextKey)] : []));
+    art.appendChild(nav);
+  }
+
+  // ---------- hover preview for internal links: mouse (after 300 ms) or keyboard focus; never on touch ----------
+  var tip = null, tipTimer = 0, tipFor = null;
+  function hideTip() {
+    clearTimeout(tipTimer);
+    if (tip) tip.hidden = true;
+    if (tipFor) { tipFor.removeAttribute("aria-describedby"); tipFor = null; }
+  }
+  function showTip(a) {
+    var key = a.getAttribute("data-xref");
+    if (!hasX(key)) return;
+    var x = XREF[key];
+    if (!tip) { tip = el("div", { class: "xtip", id: "xtip", role: "tooltip" }); document.body.appendChild(tip); }
+    tip.textContent = "";
+    if (x.m) tip.appendChild(el("div", { class: "xt-m", text: x.m }));
+    tip.appendChild(el("div", { class: "xt-t", text: x.t }));
+    if (x.e) tip.appendChild(el("div", { class: "xt-e", text: x.e }));
+    if (x.s) tip.appendChild(el("p", { class: "xt-s", text: x.s }));
+    tip.hidden = false;
+    var r = a.getClientRects()[0] || a.getBoundingClientRect(), vw = document.documentElement.clientWidth;
+    var w = tip.offsetWidth, h = tip.offsetHeight;
+    var left = Math.max(8, Math.min(r.left, vw - w - 8));
+    var top = r.bottom + 6;
+    if (top + h > window.innerHeight - 8 && r.top - h - 6 > 8) top = r.top - h - 6;
+    tip.style.left = Math.round(left + window.pageXOffset) + "px";
+    tip.style.top = Math.round(top + window.pageYOffset) + "px";
+    a.setAttribute("aria-describedby", "xtip");
+    tipFor = a;
+  }
+  function xrefTarget(e) { return e.target && e.target.closest ? e.target.closest("a[data-xref]") : null; }
+  document.addEventListener("pointerover", function (e) {
+    var a = xrefTarget(e);
+    if (!a || e.pointerType !== "mouse" || a === tipFor) return;
+    clearTimeout(tipTimer);
+    tipTimer = setTimeout(function () { showTip(a); }, 300);
+  });
+  document.addEventListener("pointerout", function (e) {
+    var a = xrefTarget(e);
+    if (!a || (e.relatedTarget && a.contains(e.relatedTarget))) return;
+    hideTip();
+  });
+  document.addEventListener("focusin", function (e) {
+    var a = xrefTarget(e);
+    if (a && a.matches(":focus-visible")) showTip(a);
+  });
+  document.addEventListener("focusout", function (e) { if (xrefTarget(e)) hideTip(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") hideTip(); });
+  window.addEventListener("scroll", function () { if (tipFor && !tipFor.matches(":focus-visible")) hideTip(); }, { passive: true });
+
+  // ---------- top bar: four menus with dropdowns (hover or click on desktop, a folding list on phones) ----------
+  var wide = window.matchMedia("(min-width: 761px)");
+  function setOpen(li, open) {
+    var btn = li.querySelector(".menu-btn");
+    if (open) Array.prototype.forEach.call(li.parentNode.children, function (o) { if (o !== li) setOpen(o, false); });
+    li.classList.toggle("open", open);
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (!open) li._hover = false;
+  }
+  function buildTopbar() {
+    var bar = document.getElementById("topbar");
+    var menus = el("ul", { class: "menus", id: "menus" });
+    arr(SITE.nav).forEach(function (m) {
+      var id = "menu-" + m.key;
+      var btn = el("button", { type: "button", class: "menu-btn", "aria-expanded": "false", "aria-controls": id, text: m.label });
+      var list = el("ul", { class: "drop", id: id }, arr(m.items).map(function (it) {
+        var a = pageLink(it[1], it[0]);
+        if (it[1] === SITE.navItem) a.classList.add("cur");
+        if (it[1] === SITE.path) a.setAttribute("aria-current", "page");
+        return el("li", null, [a]);
+      }));
+      var li = el("li", { class: "menu" + (m.key === SITE.navCur ? " cur" : "") }, [btn, list]);
+      btn.addEventListener("click", function () {
+        // A click on a menu the mouse already opened keeps it open instead of closing it again.
+        if (li._hover) { li._hover = false; return; }
+        setOpen(li, !li.classList.contains("open"));
+      });
+      btn.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowDown") { e.preventDefault(); setOpen(li, true); var f = list.querySelector("a"); if (f) f.focus(); }
+      });
+      li.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse" && wide.matches) { setOpen(li, true); li._hover = true; } });
+      li.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse" && wide.matches) setOpen(li, false); });
+      li.addEventListener("focusout", function (e) { if (wide.matches && !li.contains(e.relatedTarget)) setOpen(li, false); });
+      li.addEventListener("keydown", function (e) { if (e.key === "Escape" && li.classList.contains("open")) { setOpen(li, false); btn.focus(); } });
+      menus.appendChild(li);
+    });
+    var burger = el("button", { type: "button", class: "burger", "aria-expanded": "false", "aria-controls": "menus", text: "Menu" });
+    burger.addEventListener("click", function () {
+      var open = !bar.classList.contains("nav-open");
+      bar.classList.toggle("nav-open", open);
+      burger.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    var themeBtn = el("button", { type: "button", class: "theme-btn" });
+    function darkNow() {
+      var t = document.documentElement.getAttribute("data-theme");
+      return t ? t === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+    function paintThemeBtn() {
+      var dark = darkNow();
+      themeBtn.textContent = dark ? "Light" : "Dark";
+      themeBtn.setAttribute("aria-label", dark ? "切换到浅色" : "切换到深色");
+    }
+    themeBtn.addEventListener("click", function () {
+      var next = darkNow() ? "light" : "dark";
+      var system = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      // Choosing what the system already shows drops the override, so the page follows the system again.
+      if (next === system) document.documentElement.removeAttribute("data-theme");
+      else document.documentElement.setAttribute("data-theme", next);
+      try { if (next === system) localStorage.removeItem("atlas-theme"); else localStorage.setItem("atlas-theme", next); } catch (e) { /* storage unavailable */ }
+      paintThemeBtn();
+    });
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintThemeBtn);
+    paintThemeBtn();
+    bar.appendChild(el("div", { class: "bar-in" }, [pageLink("index.html", SITE.brand || "", "brand"), el("nav", { class: "site-nav", "aria-label": "站点导航" }, [menus]), themeBtn, burger]));
+    document.addEventListener("click", function (e) {
+      if (!bar.contains(e.target)) Array.prototype.forEach.call(menus.children, function (li) { setOpen(li, false); });
+    });
+  }
+
+  function finishPage() {
+    buildTopbar();
+    var foot = document.getElementById("site-foot");
+    if (foot) foot.appendChild(el("p", null, [pageLink("index.html", SITE.brand || ""), SITE.date ? " · 内容截至 " + SITE.date : ""]));
+    typeset(main);
+    // Deep links (#id): the page is rendered by script, so jump once it exists and again after fonts settle.
+    var h = window.location.hash ? window.location.hash.slice(1) : "";
+    if (h && /^[A-Za-z0-9._~-]+$/.test(h) && document.getElementById(h)) {
+      var moved = false;
+      ["wheel", "touchstart", "keydown", "mousedown"].forEach(function (ev) { window.addEventListener(ev, function () { moved = true; }, { once: true, passive: true }); });
+      var settle = function () { var t = document.getElementById(h); if (t && !moved) t.scrollIntoView({ block: "start" }); };
+      settle();
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { window.requestAnimationFrame(settle); });
+      [400, 1200, 2500].forEach(function (ms) { setTimeout(settle, ms); });
+    }
+  }
+
+  // ================= article: one Foundations concept =================
+  (function () {
+    var c = DATA.concept || {};
+    if (!c.id) return;
+    art.id = "concept-" + c.id;
+    var mod = XREF[DATA.module] || {};
+
+    var prereqs = arr(c.prereqs).map(function (p) { return xlink("concept-" + p, XREF["concept-" + p] ? XREF["concept-" + p].t : p); }).filter(Boolean);
+    var metaLine = [];
+    if (prereqs.length) metaLine.push(marginnote([noteLabel("阅读前需要")].concat(joinNodes(prereqs, "；"))));
+    metaLine.push(xlink(DATA.module, mod.t), " · 约 " + (DATA.readMin || 1) + " 分钟");
+    articleHead({ title: c.name_zh, subtitle: c.name_en, meta: metaLine, epigraph: c.tldr_zh });
+
+    function joinNodes(nodes, sep) {
+      var out = [];
+      nodes.forEach(function (n, i) { if (i) out.push(sep); out.push(n); });
+      return out;
+    }
+
+    // 直觉: the analogy sits in the margin beside the first paragraph.
+    var intuition = paras(c.intuition_zh);
+    if (str(c.analogy_zh).trim() && intuition.length) intuition[0].insertBefore(marginnote([noteLabel("类比")].concat(rich(c.analogy_zh))), intuition[0].firstChild);
+    if (intuition.length) section("intuition", "直觉", intuition);
+
+    var eqs = eqList(c.equations);
+    if (eqs) section("equations", "公式", [eqs]);
+    if (str(c.worked_example_zh).trim()) section("example", "例子", lines(c.worked_example_zh));
+    if (arr(c.pitfalls_zh).length) section("pitfalls", "易错点", [el("ol", null, arr(c.pitfalls_zh).map(function (t) { return el("li", null, rich(t)); }))]);
+    if (str(c.in_field_zh).trim()) section("in-field", "在 3D 临场系统中", paras(c.in_field_zh));
+
+    // 案例: where each key paper uses the concept; the paper location is a side note, guide steps a margin note.
+    var steps = arr(DATA.walk);
+    var cases = [];
+    [["quark", c.in_quark], ["ha", c.in_ha]].forEach(function (pair) {
+      var anchor = pair[0], u = pair[1] || {};
+      var head = el("h3", null, [anchorName(anchor),
+        str(u.where).trim() ? sidenote([noteLabel("论文位置")].concat(rich(u.where))) : null,
+        el("span", { class: "used", text: u.used ? "用到" : "未用" })]);
+      cases.push(head);
+      var body = paras(u.how_zh);
+      var mine = steps.filter(function (k) { return k.indexOf("walk-" + anchor + "-") === 0 && hasX(k); });
+      if (mine.length && body.length) {
+        var links = [];
+        mine.forEach(function (k, i) { if (i) links.push(el("br")); links.push(xlink(k, XREF[k].n + " " + XREF[k].t)); });
+        body[0].insertBefore(marginnote([noteLabel("导读步骤")].concat(links)), body[0].firstChild);
+      }
+      cases = cases.concat(body);
+    });
+    section("cases", "案例：Quark 与 Ha 如何使用", cases);
+    function anchorName(a) { return a === "quark" ? "Quark" : "Ha et al."; }
+
+    if (arr(c.self_check).length) {
+      section("self-check", "自测", [el("ol", { class: "quiz" }, arr(c.self_check).map(function (q) {
+        return el("li", null, [el("p", null, rich(q.q_zh)), el("details", null, [el("summary", { text: "答案" }), el("p", null, rich(q.a_zh))])]);
+      }))]);
+    }
+
+    // 延伸阅读: resources with their notes, then topics and classic papers that build on this concept.
+    var further = [];
+    var ty = { book: "教材", course: "课程", paper: "论文", tutorial: "教程", code: "代码", video: "视频", blog: "文章" };
+    if (arr(c.resources).length) {
+      further.push(el("h3", { text: "学习资源" }));
+      further.push(el("ul", { class: "refs" }, arr(c.resources).map(function (r) {
+        return el("li", null, [el("span", { class: "kind", text: ty[r.type] || r.type || "" }),
+          el("div", null, [link(r.title, r.url), str(r.note_zh).trim() ? el("div", { class: "gloss", text: r.note_zh }) : null])]);
+      })));
+    }
+    var adv = arr(DATA.adv).filter(hasX);
+    if (adv.length) {
+      further.push(el("h3", { text: "进阶专题" }));
+      further.push(el("ul", { class: "refs" }, adv.map(function (k) {
+        return el("li", null, [el("span", { class: "kind", text: "专题" }), el("div", null, [xlink(k, XREF[k].t), XREF[k].e ? el("div", { class: "en", text: XREF[k].e }) : null])]);
+      })));
+    }
+    var cls = arr(DATA.classics).filter(hasX);
+    if (cls.length) {
+      further.push(el("h3", { text: "经典论文" }));
+      further.push(el("ul", { class: "refs papers" }, cls.map(function (k) {
+        return el("li", null, [el("span", { class: "yr", text: str(XREF[k].m).replace(/^Classics · /, "") }), xlink(k, XREF[k].t)]);
+      })));
+    }
+    if (further.length) section("further", "延伸阅读", further);
+
+    seriesNav(DATA.prev, DATA.next, "basics/foundations/index.html", "Foundations 目录");
+  })();
+
+  finishPage();
+})();
+</script>
+</body>
+</html>
