@@ -1,0 +1,32 @@
+{
+  // Static site served by Cloudflare Workers static assets: no Worker script, just files.
+  // The site is built by `python survey/build.py` into survey/site (the deploy workflow runs that first).
+  //
+  // The custom domain (3dv.zyhu.dev) is attached once in the Cloudflare dashboard, so there is
+  // deliberately no "routes" key here: Wrangler leaves a dashboard-attached domain alone as long
+  // as the config has no routes. See .github/workflows/deploy.yml for how deploys are triggered.
+
+  // The dashboard binds the custom domain to the Worker by this name, so don't rename it later.
+  // Keep it short: branch previews are served at <preview-name>-<name>.<account>.workers.dev.
+  "name": "telepresence-atlas",
+
+  // Pins the Workers runtime behavior. Only worth bumping if you start using new runtime features.
+  "compatibility_date": "2026-09-29",
+
+  "assets": {
+    // Resolved relative to this file, i.e. the repo root. No "main" needed (assets only).
+    // Defaults: html_handling "auto-trailing-slash" (/roadmap.html redirects to /roadmap),
+    //           not_found_handling "none" (unknown paths return a plain 404).
+    "directory": "./survey/site"
+  },
+
+  // Production is reachable only through the custom domain. This must be explicit: without it,
+  // every `wrangler deploy` turns the <name>.<account>.workers.dev URL back on.
+  "workers_dev": false,
+
+  // Keeps workers.dev URLs on for previews even though workers_dev is off. Applied by `wrangler deploy`.
+  "preview_urls": true,
+
+  // Required by `wrangler preview` (branch previews); may be empty. Needs Wrangler >= 4.136.3.
+  "previews": {}
+}

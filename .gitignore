@@ -2,3 +2,7 @@
 __pycache__/
 *.pyc
 survey/.artifact/
+
+# Wrangler / Node (only if you run wrangler locally)
+.wrangler/
+node_modules/
