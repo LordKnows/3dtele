@@ -1,0 +1,1284 @@
+{
+ "story_zh": "先看任务。给你同一个房间的两张照片，以及拍这两张照片时相机的内参和位姿，要求在一次前向计算里重建出整个场景的 3D 表示，之后从任意新位置渲染出照片级的图像。NeRF 和 3DGS 能把渲染做得又快又好，但它们要对每个场景做几分钟到几小时的优化，而且需要几十上百张图。“前馈式”方法反过来：在成千上万个场景上训练一个网络，测试时对新场景只跑一次前向。2023 年底的 pixelSplat 把这条路线和 3DGS 结合起来：网络为每个像素预测若干个 3D 高斯，渲染用光栅化，速度比逐像素体渲染的方法快几个数量级。\n\n问题出在高斯放在哪里。一个像素对应一条射线，高斯中心必须落在这条射线上的某个深度。pixelSplat 的做法是让网络看着经过极线 Transformer 增强的特征，直接输出这条射线上每个深度桶的概率，再从这个分布里采样深度。这等于要求网络从单个像素的特征“猜”出它离相机多远。MVSplat 的作者认为这件事本质上含糊：特征里并没有显式写着“我在 2.3 米处”。结果是 pixelSplat 的渲染图看着还行，底下的 3D 高斯却漂浮得到处都是，深度图满是噪点；原论文要额外做 5 万步带深度正则的微调才能得到像样的几何。\n\nMVSplat 的核心直觉来自多视角立体（MVS）这门老手艺：深度不该靠猜，而该靠“对”。假设某个像素的真实深度是 d，把另一张图的内容按深度 d 投影回来，两边应该长得一样；深度错了，就会对到别的东西上。所以作者在 1/4 分辨率的特征图上做平面扫描：在 near=1 到 far=100 之间按逆深度均匀取 128 个候选深度，对每个候选把另一视角的特征 warp 过来，与本视角特征做点积。这样得到一个“代价体”，每个像素有 128 个相似度分数，峰值所在就是最可能的表面位置。网络的任务从“回归深度”变成了“在 128 个候选里挑出匹配最好的”，这正是神经网络擅长、也更容易泛化的事。\n\n整条流水线是这样的。浅层 CNN 把两张 256×256 图变成 64×64×128 的特征，再过 6 层带自注意力和跨视角注意力的 Swin 窗口 Transformer，让两张图的特征互相“知道”对方。接着构建代价体，与特征拼在一起送进一个 2D U-Net 细化，U-Net 最低分辨率处的跨视角注意力帮助处理弱纹理和只在一个视角可见的区域。然后在深度维上做 softmax：加权平均给出深度，最大值给出“匹配置信度”。深度上采样到全分辨率后，一个很小的 U-Net 预测残差并输出不透明度，两层卷积再给出协方差和球谐颜色。两个视角的高斯直接合并，送进 3DGS 光栅化器。训练只用渲染图的 MSE 加 0.05 倍 LPIPS，从不看深度真值。\n\n结果很干脆。在 RealEstate10K（2 张输入、3 张目标、256×256）上 PSNR 26.39，比论文所引的 pixelSplat 高 0.5 dB，LPIPS 从 0.142 降到 0.128（pixelSplat 后来的 camera-ready 版为 26.09 / 0.136，按新版差距约 0.3 dB）；参数从 125.4M 降到 12.0M，编码加渲染从 0.104 秒降到 0.044 秒，约 22 fps；深度图平滑，点云干净。只在室内视频上训练的模型直接用到户外航拍的 ACID 上，与在 ACID 上专门训练的 pixelSplat 旧版结果相当（28.15 对 28.14；pixelSplat 新版为 28.27）；用到物体中心的 DTU 上也好一截，多给一张输入图时继续变好。去掉代价体，PSNR 掉 3.3 dB，渲染结果像两张输入图叠在一起。\n\n也要带着几分警惕去读。DTU 上约 14 dB 的图像并不能用，而且测试时 near/far 直接用了数据集提供的深度范围。表 1 里 pixelSplat 的数字是它的旧版结果，按 pixelSplat camera-ready 版比较，RE10K 上的差距缩小到约 0.3 dB，ACID 上基本持平。官方代码与论文有好几处出入：softmax 在 1/4 分辨率上做，求的是视差而不是深度的期望；默认模型的不透明度来自细化网络，并不直接等于匹配置信度；训练输入帧间隔被一个刻意保留的 bug 固定为 25→45 帧；渲染器只算到 3 阶球谐。它还是一个静态、单帧、低分辨率的方法。\n\n对学 3D 临场的人来说，MVSplat 是把经典几何与前馈 3DGS 接起来的枢纽：背后是针孔投影、平面诱导单应、逆深度采样、MVS 代价体与注意力；之后，DepthSplat 加入单目深度基础模型，FreeSplat 与 Fuse-and-Refine 处理多视角冗余，NoPoSplat 与 AnySplat 去掉位姿，LVSM 则扔掉所有 3D 偏置。把它和 Quark（逐视角分层深度 + IBR）、Ha et al.（TSDF 引导的时间一致融合）对照，就能看清“一次重建、任意渲染”的 3DGS 路线在多观看者、双目显示上的优势，以及它在时间稳定性和高分辨率上还欠缺什么。",
+ "before_you_read": [
+  {
+   "concept_id": "g-pinhole",
+   "why_zh": "代价体构建、高斯中心反投影、渲染时的投影全都建立在 x ≃ K[R|t]X 上。代码里的内参是按图像宽高归一化的（第一行除以宽、第二行除以高），构建代价体时要再乘回 64 这样的特征图尺寸，不熟悉内参的含义就看不懂这些换算。"
+  },
+  {
+   "concept_id": "g-epipolar",
+   "why_zh": "把另一视角的特征按某个正对平面 warp 过来，等价于用平面诱导单应 H = K_j(R + t nᵀ/d)K_i^{-1} 做变换；同一个像素在不同候选深度下的对应点连成一条极线。pixelSplat 的“极线 Transformer”和 MVSplat 的“平面扫描”是在同一条极线上取样的两种方式。"
+  },
+  {
+   "concept_id": "g-depth",
+   "why_zh": "MVSplat 在 [1/far, 1/near] 上均匀取 128 个视差候选，而不是在深度上均匀取；softmax 期望也是在视差上求的。要理解“近处采样密、远处稀”以及“视差期望的倒数不等于深度期望”，必须先熟悉逆深度。"
+  },
+  {
+   "concept_id": "d-stereo",
+   "why_zh": "代价体、相关（correlation）、softmax 回归（soft-argmin）都是学习式双目匹配的标准部件。MVSplat 的骨干与 warp 代码直接来自统一光流、双目与深度的 UniMatch。"
+  },
+  {
+   "concept_id": "d-mvs",
+   "why_zh": "MVSplat 的几何核心就是一个“去掉 3D CNN、不用深度真值”的 MVSNet：平面扫描、代价体、代价体正则、深度回归。论文 §2 也专门讨论了它与 MVS 流水线的异同（不做点云融合、直接取并集）。"
+  },
+  {
+   "concept_id": "i-psv",
+   "why_zh": "平面扫描体是学习式视图合成里反复出现的结构。MVSplat 存的不是 warp 后的颜色，而是 warp 后特征与参考特征的点积，这是 PSV 的“匹配代价”版本。"
+  },
+  {
+   "concept_id": "l-attention",
+   "why_zh": "特征骨干有 6 层 self-attention + cross-attention，两个 U-Net 的最低分辨率处还有跨视角 self-attention。需要理解 Q/K/V、softmax(QKᵀ/√d)，以及 Swin 的局部窗口和 shifted window。"
+  },
+  {
+   "concept_id": "l-cnn",
+   "why_zh": "代价体细化和深度细化都是 2D U-Net（带跳连的编码器-解码器），特征提取是残差 CNN。把 128 个深度候选当作“通道”交给 2D U-Net，是 MVSplat 省掉 3D 卷积的关键。"
+  },
+  {
+   "concept_id": "n-3dgs",
+   "why_zh": "输出是一组 3D 高斯：中心、协方差（尺度 + 四元数）、不透明度、球谐颜色，用可微光栅化渲染。要看懂高斯头的 84 个输出通道各是什么，以及为什么 4 阶球谐实际只渲染到 3 阶，需要熟悉 3DGS 的参数化和渲染器。"
+  },
+  {
+   "concept_id": "r-alpha",
+   "why_zh": "光栅化时高斯按深度排序后做前到后的 alpha 合成；不透明度与匹配置信度挂钩、“w/o cost volume”时两张图的叠影，都要用 alpha 合成来理解。"
+  },
+  {
+   "concept_id": "n-generalizable",
+   "why_zh": "MVSplat 属于跨场景训练、测试时只前向一次的可泛化新视角合成。论文 Table 1 的对手（pixelNeRF、GPNR、AttnRend、MuRF、pixelSplat）覆盖了这一领域的几条主要技术路线。"
+  },
+  {
+   "concept_id": "v-metrics",
+   "why_zh": "结果以 PSNR、SSIM、LPIPS 报告，LPIPS 也是训练损失的一部分。要能把 0.5 dB 换算成 MSE 比例，并理解为什么作者强调 LPIPS 的改善“更符合人眼感知”。"
+  }
+ ],
+ "walkthrough": [
+  {
+   "id": "mv1",
+   "title_zh": "问题设定：2 张带位姿的 256×256 图像 → H×W×K 个像素对齐的 3D 高斯",
+   "paper_ref": "§3 开头，Eq. (1)；§4.1 Datasets / Metrics；附录 C 末段（near/far）；src/dataset/dataset_re10k.py；src/dataset/shims/crop_shim.py；config/experiment/re10k.yaml",
+   "what_zh": "输入：K 张 RGB 图 I_i∈ℝ^{H×W×3}（默认 K=2，H=W=256），每张的内参 K_i（代码中按宽高归一化）与外参（代码中为 4×4 的相机到世界矩阵，OpenCV 约定），以及固定的 near/far（RE10K、ACID 为 1 与 100）。输出：H×W×K 个 3D 高斯 {(μ_j, α_j, Σ_j, c_j)}，之后可在任意目标位姿下光栅化成图像。",
+   "plain_zh": "Eq. (1) 把整个方法写成一个映射 f_θ：输入若干张带相机参数的图像，输出一组高斯。关键词有三个。第一是“前馈”：θ 在大量场景上训练好后固定不变，测试时新场景只跑一次网络，不做逐场景优化（n-generalizable）。第二是“像素对齐”：每个输入像素恰好产生一个高斯，高斯中心被约束在这个像素的射线上，网络只需要决定“沿射线走多远”（g-pinhole）。所以高斯总数是固定的 H×W×K，2 张 256² 图就是 131,072 个。第三是“已知位姿”：相机参数由数据集给出，MVSplat 不估计位姿，这是它能做平面扫描的前提（g-sfm）。\n\n数据方面，RealEstate10K 是 YouTube 上的房产漫游视频，67,477 个训练场景、7,289 个测试场景；ACID 是无人机航拍的自然场景，11,075 与 1,972 个。原始帧 360×640，代码先按短边缩放到 256×455，再中心裁剪成 256×256，同时修改内参。训练样本从同一段视频里取两帧作为输入，再取 4 帧作为要渲染的目标；测试时每个场景 2 个输入、3 个目标，目标帧都夹在两个输入帧之间，所以本质上是“插值”而不是“外推”。\n\nnear/far 看似不起眼，却决定了代价体的深度候选范围。RE10K 与 ACID 的相机尺度来自数据集的估计，作者按经验把深度范围固定为 1 到 100；DTU 则使用数据集给出的 2.125 到 4.525。对固定的 3D 临场阵列，这一对数可以直接由舱体几何给定。",
+   "analogy_zh": "像给一位建模师两张不同角度拍的房间照片，并告诉他每张照片是在哪儿、用什么镜头拍的。他的工作不是凭空雕一个房间，而是给每张照片的每个像素钉一颗彩色小球，只需决定这颗球沿视线钉多深、多大、多透明。",
+   "equations": [
+    {
+     "tex": "f_{\\theta}:\\ \\{(\\mathbf{I}^i,\\mathbf{P}^i)\\}_{i=1}^{K}\\ \\mapsto\\ \\{(\\boldsymbol{\\mu}_j,\\alpha_j,\\boldsymbol{\\Sigma}_j,\\mathbf{c}_j)\\}_{j=1}^{H\\times W\\times K}",
+     "explain_zh": "论文 Eq. (1)。I^i 是第 i 张图，P^i=K^i[R^i|t^i] 是它的投影矩阵；μ_j 是高斯中心，α_j 是不透明度，Σ_j 是 3×3 协方差，c_j 是用球谐系数表示的颜色；θ 是网络参数；右侧下标说明每个像素一个高斯，共 H×W×K 个。"
+    },
+    {
+     "tex": "\\boldsymbol{\\mu}_{i,uv}=\\mathbf{o}_i+z_{i,uv}\\,\\hat{\\mathbf{r}}_{i,uv},\\qquad \\hat{\\mathbf{r}}_{i,uv}=\\frac{\\mathbf{R}_i^{c2w}\\,\\mathbf{K}_i^{-1}[u,v,1]^{\\top}}{\\lVert \\mathbf{K}_i^{-1}[u,v,1]^{\\top}\\rVert}",
+     "explain_zh": "按代码改写（gaussian_adapter.py、geometry/projection.py）。o_i 是相机光心，R_i^{c2w} 是相机到世界的旋转，r̂ 是经过像素 (u,v) 的单位射线方向，z 是网络预测的“深度”。注意代码把 z 乘在单位方向上，即当作沿射线的距离（见 mv8 的易错点）。"
+    }
+   ],
+   "numbers_zh": "默认 K=2，H=W=256，高斯数 131,072（代码 probe：means 形状 [1,131072,3]）。RE10K：67,477 训练 / 7,289 测试场景；ACID：11,075 / 1,972（论文 §4.1）。评测索引中 RE10K 有 6,474 个有效场景、ACID 1,595 个，每个 2 输入 + 3 目标，输入帧间隔 45–136 帧（assets/*.json 统计）。near/far：RE10K、ACID 1/100，DTU 2.125/4.525（附录 C、config/experiment）。",
+   "why_design_zh": "像素对齐把 3D 问题降为“每像素一个深度 + 若干属性”的 2D 预测，可以直接用 2D 网络；已知位姿让几何线索能通过显式投影获得。没有采用：单图重建（Splatter Image、Flash3D，§2 认为场景级单图重建本质上病态）、逐场景优化（慢）、无位姿输入（后来的 NoPoSplat 才去掉）。",
+   "pitfalls_zh": "（1）“稀疏视角”在这里指 2 张相隔几十帧的视频帧，重叠度通常很高，不是 2 台相距几米的相机。（2）测试目标都位于两个输入帧之间（RE10K 的 19,422 个目标中还有 583 个就是输入帧本身），论文没有外推评测，而头显观看者经常会走到阵列外侧。（3）near/far 是按数据集固定的超参数，换场景时要重新设；DTU 的零样本测试使用了数据集提供的深度范围（2.125–4.525）。（4）所有实验都在 256×256 下进行，没有高分辨率结果。",
+   "concept_ids": [
+    "g-pinhole",
+    "g-sfm",
+    "n-generalizable",
+    "n-3dgs",
+    "a-ff-3dgs"
+   ],
+   "check_q_zh": "如果把输入视角从 2 张增加到 3 张，MVSplat 输出的高斯数量怎么变？渲染一张目标图的时间大致怎么变？",
+   "check_a_zh": "高斯数 = H×W×K，从 131,072 增加到 196,608（代码 probe 在 3 视角时 means 为 [1,196608,3]），线性增长。光栅化时间大致随高斯数增长，所以渲染会稍慢，但仍在毫秒量级；编码时间也会增加，因为每个视角都要算一次代价体，且注意力的 key 数随 V−1 增长。"
+  },
+  {
+   "id": "mv2",
+   "title_zh": "逐视角 CNN 特征：UniMatch 式浅层 ResNet，1/4 分辨率、128 通道",
+   "paper_ref": "§3.1 “Multi-view feature extraction”；附录 C “Network architectures”；src/model/encoder/backbone/unimatch/backbone.py（CNNEncoder）；src/model/encoder/backbone/backbone_multiview.py（normalize_images、extract_feature）",
+   "what_zh": "输入：K 张 256×256 RGB（取值 [0,1]，先按 ImageNet 均值方差归一化）。输出：每张图一个 [128, 64, 64] 的特征图 F_i^{cnn}。这份 CNN 特征既送进 Transformer，也在深度细化阶段作为高分辨率细节的来源再次使用。",
+   "plain_zh": "第一步是把像素变成适合做匹配的描述子（l-cnn、f-image）。直接比较 RGB 很脆弱：光照、噪声、重复纹理都会让“看起来一样”的像素其实不是同一点。卷积特征把每个位置周围的局部结构编码成 128 维向量，比单个像素颜色更有区分度。\n\n网络很浅：一层 7×7、步长 2 的卷积（64 通道），然后三组各两个残差块，通道数依次为 64、96、128，只有 96 通道那组做一次步长 2 的下采样，最后用 1×1 卷积投到 128 维。归一化用 InstanceNorm，它对每张图单独归一化，可以抵消不同数据集之间整体亮度和对比度的差异。总下采样倍数是 4，256² 输入得到 64² 特征。代码里通过把 UniMatch 的 num_output_scales 设为 0 来让第三组不再下采样（注释写着“hack to get 1/4 features”）；UniMatch 原本用于光流时是 1/8。\n\n为什么是 1/4 而不是全分辨率？后面要在每个像素上对 128 个深度候选做 warp 和点积，计算量和显存都与像素数成正比；1/4 分辨率把这部分开销降为 1/16。细节损失由后面的上采样和全分辨率深度细化来补。这一部分的参数只有约 1.05M（代码实测），训练前从 UniMatch 的 GMDepth 模型载入。",
+   "analogy_zh": "像先把两张照片各自缩成 1/4 大小的“素描”，但每个素描点不只记颜色，还记下周围一小块的纹理特点，方便之后在两张素描之间找对应。",
+   "equations": [
+    {
+     "tex": "\\tilde{\\mathbf{I}}=\\frac{\\mathbf{I}-\\boldsymbol{m}}{\\boldsymbol{s}},\\quad \\boldsymbol{m}=(0.485,0.456,0.406),\\ \\boldsymbol{s}=(0.229,0.224,0.225)",
+     "explain_zh": "按代码改写（backbone_multiview.py normalize_images）。I 是 [0,1] 范围的 RGB；m、s 是 ImageNet 的逐通道均值与标准差，与 UniMatch 预训练时一致。"
+    },
+    {
+     "tex": "\\mathbf{F}^{cnn}_i=\\mathrm{Conv}_{1\\times1}\\Big(\\mathcal{B}_{128}\\big(\\mathcal{B}_{96}^{\\downarrow2}(\\mathcal{B}_{64}(\\mathrm{Conv}_{7\\times7}^{\\downarrow2}(\\tilde{\\mathbf{I}}_i)))\\big)\\Big)\\in\\mathbb{R}^{128\\times\\frac{H}{4}\\times\\frac{W}{4}}",
+     "explain_zh": "按代码改写（unimatch/backbone.py）。B_c 表示两个输出通道为 c 的残差块（conv3×3–IN–ReLU 两次加跳连），上标 ↓2 表示该组第一个块步长为 2；H/4×W/4 为 64×64。"
+    }
+   ],
+   "numbers_zh": "输出 [B·V,128,64,64]，默认推理时为 [2,128,64,64]（代码 probe）。参数 1,049,120（probe）。附录 C 说“6 个残差块，最后 4 个块每 2 块下采样一半”，代码实际是 stem 卷积与 96 通道组各下采样一次，第三组不下采样；总倍数都是 4。",
+   "why_design_zh": "论文强调深度模型“纯 2D 卷积和注意力”；复用 UniMatch 的结构可以直接加载它在光流与 ScanNet 深度上预训练的匹配特征（Table D：随机初始化要 450K 步才追平）。没有采用：pixelSplat 的 DINO ViT-B/8 骨干（参数大）、全分辨率特征。",
+   "pitfalls_zh": "（1）CNN 特征本身不跨视角，两张图各自独立编码；跨视角交互从下一步 Transformer 才开始。（2）附录 C 对下采样位置的文字描述与代码不一致，以代码为准。（3）CNN 特征在深度细化阶段会被再次使用（与 Transformer 特征拼接后上采样），不要以为它只是 Transformer 的输入。",
+   "concept_ids": [
+    "l-cnn",
+    "f-image",
+    "d-stereo",
+    "a-learned-stereo"
+   ],
+   "check_q_zh": "为什么这里用 InstanceNorm 而不是 BatchNorm？这对跨数据集泛化可能有什么帮助？",
+   "check_a_zh": "InstanceNorm 对每张图、每个通道单独做均值方差归一化，不依赖 batch 统计，也不保留训练集的全局统计量；于是一张整体偏暗或对比度不同的图（例如户外航拍）会被拉回相似的分布。UniMatch 原本就用 InstanceNorm，MVSplat 沿用它。论文把泛化优势主要归因于代价体只看“相对相似度”，InstanceNorm 可以看作同一方向上的辅助因素（这是合理的解读，论文未单独验证）。"
+  },
+  {
+   "id": "mv3",
+   "title_zh": "多视角 Transformer：6 层 Swin 窗口 self + cross attention，每个视角对其余所有视角做交叉注意力",
+   "paper_ref": "§3.1 “Multi-view feature extraction”；附录 C；附录 Table B；src/model/encoder/backbone/multiview_transformer.py（TransformerLayer、TransformerBlock、batch_features、single_head_split_window_attention）；backbone_multiview.py（feature_add_position_list）；config/model/encoder/costvolume.yaml（multiview_trans_attn_split: 2）",
+   "what_zh": "输入：K 个 CNN 特征 [128,64,64]。输出：跨视角感知的 Transformer 特征 F_i∈ℝ^{128×64×64}，用于构建代价体，也与 CNN 特征一起用于后续上采样。",
+   "plain_zh": "代价体要比较的是“同一个 3D 点在两张图里的特征”，如果两张图的特征是各自独立算出来的，同一点在两边可能被编码得不太一样（视角不同、局部遮挡不同）。UniMatch/GMFlow 的经验是：在匹配之前让两张图的特征互相看一眼，特征会变得更“可对应”（l-attention）。\n\n每个 Transformer 块有两层。第一层是 self-attention：每张图内部的像素互相交流，扩大感受野，弱纹理区域可以借用周围的上下文。第二层是 cross-attention：query 来自当前视角，key/value 来自其他视角，于是每个像素的特征里混入了“另一张图里与我相似的地方长什么样”。只有 cross-attention 层后面接 FFN，FFN 的输入是原特征与注意力输出的拼接。代码里 LayerNorm 作用在注意力分支和 FFN 分支的输出上，再与输入做残差相加（x + LN(f(x))），既不是标准的 pre-norm，也不是 post-norm。\n\n在 64×64=4,096 个 token 上做全局注意力代价太高，所以用 Swin 的局部窗口：把特征切成 2×2 个 32×32 的窗口，每个窗口 1,024 个 token 只在窗口内做注意力；奇数层把窗口平移半个窗口（shifted window），让相邻窗口之间也能交换信息。多于 2 个视角时，代码把其余 V−1 个视角在同一窗口里的 token 拼起来当 key/value，做一次 softmax，参数和 2 视角时完全相同，所以训练用 2 视角、测试用 3 视角可以直接运行。\n\n位置编码是正弦编码，在每个窗口内部加。单头注意力，通道 128，共 6 块，约 3.15M 参数，训练前从 UniMatch 载入。",
+   "analogy_zh": "像两位侦探各自拿着一张现场照片，先各自在自己的照片上来回看（self-attention），再隔着桌子互相描述“我这里有个红色门把手，你那边在哪”（cross-attention）。为了省时间，他们把照片切成四块，每次只对照同一块区域，下一轮再把切块位置错开半格。",
+   "equations": [
+    {
+     "tex": "\\mathrm{Attn}(\\mathbf{Q},\\mathbf{K},\\mathbf{V})=\\mathrm{softmax}\\!\\left(\\frac{\\mathbf{Q}\\mathbf{K}^{\\top}}{\\sqrt{C}}\\right)\\mathbf{V},\\quad \\mathbf{Q}=\\mathbf{X}_i\\mathbf{W}_q,\\ \\mathbf{K}=[\\mathbf{X}_j]_{j\\neq i}\\mathbf{W}_k,\\ \\mathbf{V}=[\\mathbf{X}_j]_{j\\neq i}\\mathbf{W}_v",
+     "explain_zh": "cross-attention。X_i 是视角 i 在某个 32×32 窗口里的 1,024 个 token（每个 128 维），[X_j]_{j≠i} 是其余所有视角同一窗口的 token 拼接（(V−1)×1,024 个）；W_q、W_k、W_v 是 128×128 的无偏置线性层；C=128 是缩放因子；单头。self-attention 时 K、V 也来自 X_i。"
+    },
+    {
+     "tex": "\\mathbf{m}=\\mathrm{LN}\\big(\\mathbf{W}_o\\,\\mathrm{Attn}(\\cdot)\\big),\\qquad \\mathbf{m}\\leftarrow\\mathrm{LN}\\big(\\mathrm{MLP}([\\mathbf{X}_i,\\mathbf{m}])\\big),\\qquad \\mathbf{X}_i\\leftarrow\\mathbf{X}_i+\\mathbf{m}",
+     "explain_zh": "按代码改写（TransformerLayer.forward）。W_o 是输出投影（代码里叫 merge），LN 是 LayerNorm；MLP 为 256→1024→128，带 GELU，只在 cross-attention 层使用（self-attention 层 no_ffn=True）。最后一步是残差相加。"
+    },
+    {
+     "tex": "N_{\\text{tok}}^{\\text{win}}=\\frac{H}{4s}\\cdot\\frac{W}{4s}=\\frac{256}{8}\\cdot\\frac{256}{8}=1024,\\qquad N_{\\text{key}}=(V-1)\\,N_{\\text{tok}}^{\\text{win}}",
+     "explain_zh": "窗口大小。s=2 是每个方向的切分数（attn_splits），H/4=64；一个窗口 1,024 个 query token，cross-attention 的 key 数随其他视角数 V−1 线性增长。"
+    }
+   ],
+   "numbers_zh": "6 块（每块 self + cross），单头，d_model=128，FFN 扩展 4 倍，2×2 窗口，奇数层 shifted window（multiview_transformer.py 第 552–553 行）；参数 3,150,336（probe）。Table B：换成 Epipolar Transformer 后 base 编码 0.038→0.055 s、PSNR 26.12→26.09；Table 3：去掉 cross-attention 26.12→25.19 并过拟合。",
+   "why_design_zh": "作者的证据是 Table B：窗口注意力不需要沿极线采样，质量相同而更快。合理的解读是：32×32 的窗口相当于原图 128×128 像素，足以覆盖多数视差，真正的几何约束再交给代价体。没有采用：pixelSplat/GPNR 的 Epipolar Transformer（沿极线采 32 个点，较慢）、全局注意力（4,096² 的注意力矩阵）、不做跨视角交互（掉 0.9 dB 并过拟合）。",
+   "pitfalls_zh": "（1）窗口注意力不利用极线几何：视差大到对应点跨出窗口（约 32 个 1/4 分辨率像素）时，cross-attention 找不到它，几何约束要到代价体才真正用上。（2）多视角时把其他视角 token 拼起来做一次 softmax，而不是逐视角注意再平均。（3）Table 3 的“w/o cross-view attention”只去掉骨干里的 cross-attention，U-Net 里的跨视角注意力仍保留。",
+   "concept_ids": [
+    "l-attention",
+    "l-encoding",
+    "d-stereo",
+    "g-epipolar",
+    "a-learned-stereo"
+   ],
+   "check_q_zh": "训练时只有 2 个视角，测试时给 3 个视角，cross-attention 层的参数够用吗？它的计算有什么变化？",
+   "check_a_zh": "够用。W_q、W_k、W_v 是作用在单个 token 上的线性层，与 token 数量无关；3 视角时每个视角的 key/value 由另外两个视角同一窗口的 2,048 个 token 组成，softmax 在更长的序列上归一化。变化在于计算量与 key 数成正比，并且注意力权重的分布与训练时不同（分母里多了一个视角的 token），这可能带来一定的分布偏移，但论文的 DTU 3 视角实验显示 MVSplat 仍然变好（14.30 对 2 视角的 13.94 dB）。"
+  },
+  {
+   "id": "mv4",
+   "title_zh": "代价体：在逆深度上均匀取 128 个候选，warp 另一视角特征并与本视角做点积相关",
+   "paper_ref": "§3.1 “Cost volume construction”，Eq. (2)–(4)；§4.1（128 个候选）；附录 C（near/far）；src/model/encoder/costvolume/depth_predictor_multiview.py（warp_with_pose_depth_candidates 第 10–70 行、prepare_feat_proj_data_lists 第 73–123 行、forward 第 292–318 行）",
+   "what_zh": "输入：各视角 Transformer 特征 F_i [128,64,64]、归一化内参（乘以 64 还原为特征图像素单位）、相对位姿、near/far。输出：每个视角一个代价体 C^i∈ℝ^{128(D)×64×64}，与 F_i 拼接成 256 通道送入下一步。",
+   "plain_zh": "这是全文的核心（d-mvs、i-psv）。以视角 i 为参考，想象在它前方放 128 块与像平面平行的“玻璃板”，第 m 块离相机 d_m。对每块板，把视角 i 每个像素的射线与板的交点投影到视角 j，在 j 的特征图上双线性采样，得到“假设这里深度为 d_m 时，另一张图在对应位置的特征”F^{j→i}_{d_m}。如果 d_m 恰好是真实深度，两边看到的是同一个 3D 点，特征应当相似，点积大；否则对到的是别的东西，点积小。把 128 个点积排起来，就是这个像素的匹配曲线，峰值就是表面。对一块平面来说，这个 warp 正好是平面诱导单应（g-epipolar）；随 d_m 变化，对应点在视角 j 中沿极线滑动。\n\n候选深度怎么取？代码在 [1/far, 1/near]=[0.01, 1] 上用 linspace 均匀取 128 个视差，也就是逆深度均匀采样（g-depth）。这样近处候选很密、远处很稀，符合“视差误差大致恒定、深度误差随 Z² 增长”的立体测量规律：深度约 2 处相邻候选相差约 0.03（数据集单位），深度约 10 处相差约 0.8，深度约 50 处相差几十。\n\n相关函数是点积再除以 √C（C=128），与注意力里的缩放同理，让数值范围不随通道数变化。越界的投影补零。多于 2 个视角时，对每个其他视角各算一个代价体，再逐像素取平均，所以输入视角数可以任意。最后把代价体（128 通道）和本视角的 Transformer 特征（128 通道）拼接：前者告诉网络“哪里匹配”，后者告诉网络“这里长什么样”，弱纹理处匹配不可靠时可以依赖语义与上下文。",
+   "analogy_zh": "像拿一把 128 格的刻度尺去量深度：每一格都假设“东西就在这儿”，然后看另一张照片在对应位置的内容是否对得上，对得最好的那一格就是答案。刻度在近处刻得密、远处刻得疏。",
+   "equations": [
+    {
+     "tex": "\\frac{1}{d_m}=\\frac{1}{d_{far}}+\\frac{m-1}{D-1}\\left(\\frac{1}{d_{near}}-\\frac{1}{d_{far}}\\right),\\quad m=1,\\dots,D",
+     "explain_zh": "按代码改写（prepare_feat_proj_data_lists）。D=128 个候选；d_near=1、d_far=100（RE10K/ACID）；候选在视差 1/d 上等间距，间距 (1−0.01)/127≈0.0078。"
+    },
+    {
+     "tex": "\\mathbf{F}^{j\\to i}_{d_m}(\\mathbf{p})=\\mathbf{F}^j\\Big(\\pi\\big(\\mathbf{K}_j(\\mathbf{R}_{ji}\\,d_m\\,\\mathbf{K}_i^{-1}\\tilde{\\mathbf{p}}+\\mathbf{t}_{ji})\\big)\\Big)",
+     "explain_zh": "论文 Eq. (2) 中 warp 算子 W 的具体形式（按代码改写）。p̃=[u,v,1]ᵀ 是视角 i 的像素齐次坐标；K_i^{-1}p̃ 是 z=1 平面上的射线，乘 d_m 得到候选 3D 点；R_{ji}、t_{ji} 是视角 i 到 j 的相对位姿；K_j 投影到视角 j，π 是透视除法；F^j(·) 表示双线性采样（grid_sample，越界补零）。"
+    },
+    {
+     "tex": "C^i_{d_m}(\\mathbf{p})=\\frac{\\mathbf{F}^i(\\mathbf{p})\\cdot\\mathbf{F}^{j\\to i}_{d_m}(\\mathbf{p})}{\\sqrt{C}},\\qquad \\mathbf{C}^i=\\big[C^i_{d_1},\\dots,C^i_{d_D}\\big]\\in\\mathbb{R}^{\\frac{H}{4}\\times\\frac{W}{4}\\times D}",
+     "explain_zh": "论文 Eq. (3)–(4)。F^i(p) 是参考视角 128 维特征，· 是点积，C=128；把 D 个候选的相关拼起来得到代价体。多于 2 个视角时，对不同 j 的 C^i 逐像素取平均。"
+    },
+    {
+     "tex": "\\mathbf{H}_{ji}(d)=\\mathbf{K}_j\\left(\\mathbf{R}_{ji}+\\frac{\\mathbf{t}_{ji}\\,\\mathbf{n}^{\\top}}{d}\\right)\\mathbf{K}_i^{-1},\\quad \\mathbf{n}=(0,0,1)^{\\top}",
+     "explain_zh": "等价的平面诱导单应。对正对视角 i 的平面 z=d，上一式的逐点投影可以写成 3×3 矩阵 H 对整张图的变换；n 是平面法向（在视角 i 坐标系中）。这就是经典平面扫描（Collins 1996，MVSNet）。"
+    }
+   ],
+   "numbers_zh": "D=128（experiment 配置；costvolume.yaml 默认值是 32，不加 +experiment 时会得到一个不同的模型）。视差间距 0.0078；实际候选中，深度 2 附近依次为 1.965、1.996、2.027，深度 10 附近为 8.98、9.66、10.44，深度 50 附近为 39.1、56.2、100（数据集单位，按 linspace 计算）。warp 特征张量 [2,128(C),128(D),64,64]，约 1.34 亿个 float32，约 537 MB（按形状计算）；代价体 [2,128,64,64]；拼接后 [2,256,64,64]（probe）。",
+   "why_design_zh": "论文的理由：把问题从“从图像特征回归 3D”变成“学做特征匹配”，降低学习难度，模型又小又快（§1）；相关性是相对量，跨数据集不受特征绝对尺度影响（§4.2）。逆深度均匀采样是 MVS 与双目的通行做法（论文未单独解释）。没有采用：pixelSplat 从特征直接预测深度分布（Table 3 掉 3.3 dB）、MVSNet 的方差代价、全分辨率代价体（显存 16 倍）。",
+   "pitfalls_zh": "（1）代价体按“正对平面”（相机 z 深度）构建，而后面放高斯时却把深度当作沿单位射线的距离，两者在图像边角不一致（见 mv8）。（2）near/far 直接决定候选范围：真实表面若在 near 之内或 far 之外，代价体里根本没有正确答案；far=100 时约一半的候选（65 个）落在深度 2 以内，远景非常粗。（3）代价体只在 1/4 分辨率上计算，细小结构（栏杆、发丝）可能在这一步就丢失。（4）遮挡区域与只有一个视角可见的区域不存在正确匹配，代价曲线是平的，必须靠后面的 U-Net 与上下文补全。",
+   "concept_ids": [
+    "d-mvs",
+    "i-psv",
+    "g-epipolar",
+    "g-depth",
+    "d-stereo",
+    "a-learned-mvs"
+   ],
+   "check_q_zh": "如果把 near/far 从 1/100 改成 0.5/200，候选总数不变，深度 2 附近相邻候选的间距会变大还是变小？这对预训练模型有什么影响？",
+   "check_a_zh": "视差区间从 [0.01,1] 变成 [0.005,2]，间距从 0.99/127≈0.0078 变为 1.995/127≈0.0157，约翻倍；深度 2 附近相邻候选的深度间距也约翻倍，匹配变粗。对预训练模型来说，代价体第 m 个通道对应的物理深度全部改变了，而 U-Net 与 softmax 头是按原来的“通道 ↔ 深度”关系训练的，softmax 期望会给出错位的深度，画质通常会下降。这正是练习 3 要验证的敏感性。"
+  },
+  {
+   "id": "mv5",
+   "title_zh": "代价体细化：128 通道 2D U-Net，16×16 处 3 层跨视角注意力，外加 1×1 残差",
+   "paper_ref": "§3.1 “Cost volume refinement”，Eq. (5)；附录 C；Table 3 “w/o U-Net”与 Fig. 6；src/model/encoder/costvolume/depth_predictor_multiview.py 第 161–191、320–328 行；src/model/encoder/costvolume/ldm_unet/unet.py（UNetModel、AttentionBlock、QKVAttentionLegacy）",
+   "what_zh": "输入：拼接后的 [C^i, F_i]，每个视角 [256,64,64]。输出：细化后的代价体 C̃^i∈ℝ^{128(D)×64×64}。代码中所有视角沿 batch 维排成 (v b) 顺序，一起送入 U-Net。",
+   "plain_zh": "原始代价体在两类地方靠不住：一是弱纹理或重复纹理区域，匹配曲线平坦或多峰；二是只有一个视角能看到的区域（画面左右两侧、被遮挡处），根本不存在正确匹配。解决办法是让网络看到更大范围的上下文，把可靠区域的深度“传播”过去（l-cnn、a-learned-mvs）。\n\n传统 MVSNet 用 3D CNN 在 (D,H,W) 上正则化代价体，计算量大。MVSplat 把 128 个深度候选直接当作 2D 卷积的通道：先用 3×3 卷积把 256 通道压到 128，经 GroupNorm 与 GELU，送入一个通道数始终为 128 的 2D U-Net（来自 latent diffusion 的实现），它做两次 2× 下采样，在最低的 16×16 分辨率处共有 3 个注意力层（下采样路径 1 个，上采样路径 2 个），最后再用 3×3 卷积输出 128 个通道。代码还加了一条 1×1 卷积把输入直接映射到 128 通道，与 U-Net 输出相加，作为残差捷径。\n\n这里的注意力是“跨视角 self-attention”：代码把所有视角 16×16=256 个 token 拼成一条 512 长的序列（2 视角时）一起做注意力，于是视角 i 的代价体可以参考视角 j 的代价体。这对遮挡特别有用：视角 i 中被挡住的地方，视角 j 可能看得很清楚。这种“把多视角特征展平后做 self-attention”的做法，附录 C 说是借鉴了 MVDream、LGM 等多视角生成模型。\n\n消融（Table 3）：把整个 U-Net 换成一层卷积，base 模型的 PSNR 从 26.12 掉到 25.45，退化集中在只有一张图能看到的两侧（Fig. 6）。这个 U-Net 约 5.86M 参数，占整个模型的一半左右。",
+   "analogy_zh": "像一群人各自给自己面前的地板量了深度，有些人站在阴影里量不准。U-Net 让每个人参考旁边人的读数（空间传播），最低分辨率的注意力层则相当于把两个房间的记录员叫到一起对账（跨视角交流）。",
+   "equations": [
+    {
+     "tex": "\\tilde{\\mathbf{C}}^i=\\mathbf{C}^i+\\Delta\\mathbf{C}^i\\quad(\\text{论文 Eq. 5})",
+     "explain_zh": "论文写法：U-Net 输出残差 ΔC^i，加到初始代价体上。C^i、ΔC^i 都是 H/4×W/4×D。"
+    },
+    {
+     "tex": "\\tilde{\\mathbf{C}}^i=\\mathrm{Conv}_{3\\times3}\\Big(\\mathrm{UNet}\\big(\\mathrm{GELU}(\\mathrm{GN}(\\mathrm{Conv}_{3\\times3}[\\mathbf{C}^i,\\mathbf{F}^i]))\\big)\\Big)+\\mathrm{Conv}_{1\\times1}[\\mathbf{C}^i,\\mathbf{F}^i]",
+     "explain_zh": "按代码改写（第 167–191、324–328 行）。[·,·] 是通道拼接（128+128=256）；GN 为 8 组 GroupNorm；UNet 通道 128、channel_mult [1,1,1]、每级 1 个残差块；最后的 3×3 卷积输出 D=128 通道；1×1 卷积（256→128）是可学习的残差捷径，而不是论文所写的恒等加 C^i。"
+    },
+    {
+     "tex": "\\mathbf{A}=\\mathrm{softmax}\\!\\left(\\frac{\\mathbf{Q}\\mathbf{K}^{\\top}}{\\sqrt{d_h}}\\right),\\quad \\mathbf{Q},\\mathbf{K}\\in\\mathbb{R}^{(V\\cdot 256)\\times d_h},\\ d_h=32,\\ 4\\ \\text{heads}",
+     "explain_zh": "U-Net 最低分辨率处的跨视角注意力（按代码改写）。每个视角 16×16=256 个 token，V 个视角拼成一条序列（QKVAttentionLegacy 中 (v b) n t → b n (v t)）；通道 128 按每头 32 维分成 4 个头；代码把 1/√d_h 拆成对 Q、K 各乘 d_h^{-1/4}，数值上等价。"
+    }
+   ],
+   "numbers_zh": "输入 [2,256,64,64]，输出 [2,128,64,64]（probe）。U-Net 内部分辨率 64→32→16，16×16 处 3 个 AttentionBlock（4 头 × 32 通道），probe 计数确认；论文 §3.1 “three cross-view attention layers at the lowest resolution” 一致。参数：U-Net 含首尾卷积 5,862,144，1×1 残差 32,896。Table 3：w/o U-Net 25.45 / 0.847 / 0.150，base 26.12 / 0.864 / 0.133。",
+   "why_design_zh": "论文强调不用 3D 卷积以保证效率，且跨视角注意力与视角数无关（§3.1）。把特征 F 与代价体拼接的理由论文没有单独说明，合理的解读是：匹配失效时网络还能依据外观与语义推断深度。没有采用：3D CNN 正则（MVSNet、MVSNeRF、MuRF 的 (2+1)D CNN）、不细化直接 softmax（Table 3 掉 0.7 dB）。",
+   "pitfalls_zh": "（1）把 D 当通道意味着 U-Net 的卷积核在深度维上是“全连接”的：第 m 个输出通道可以任意组合 128 个输入候选，这比 3D 卷积自由，但也把网络与“候选数、候选深度含义”绑死，训练后不能随意改 D 或 near/far。（2）注意力只在 16×16 上做，跨视角交流的粒度很粗（每个 token 对应原图 16×16 个像素）。（3）论文 Eq. 5 的“恒等残差”在代码里是可学习的 1×1 卷积。",
+   "concept_ids": [
+    "l-cnn",
+    "l-attention",
+    "d-mvs",
+    "a-learned-mvs"
+   ],
+   "check_q_zh": "为什么说“w/o U-Net”的退化集中在画面两侧，而不是中间？",
+   "check_a_zh": "两张图有重叠也有各自独有的部分。中间区域两个视角都能看到，代价体有清晰峰值，一层卷积加 softmax 就能得到不错的深度；画面左右两侧往往只在一张图里出现，warp 到另一视角时落在图外（补零）或对到错误内容，匹配曲线没有可信峰值。这时只能靠 U-Net 的大感受野从邻近可靠区域传播深度、并借助特征猜测，去掉 U-Net 后这些区域的高斯位置就会乱，渲染出现伪影（Fig. 6）。"
+  },
+  {
+   "id": "mv6",
+   "title_zh": "softmax 深度：在 1/4 分辨率上对 128 个视差候选求期望，最大概率作为匹配置信度",
+   "paper_ref": "§3.1 “Depth estimation”，Eq. (6)；§3.2 “Opacity α”；src/model/encoder/costvolume/depth_predictor_multiview.py 第 193–198、330–344 行",
+   "what_zh": "输入：细化代价体 C̃^i [128,64,64]。输出：粗视差图 [1,64,64]、匹配分布 p [128,64,64]、置信度 max_m p_m [1,64,64]；随后粗视差双线性、置信度最近邻上采样到 [1,256,256]。",
+   "plain_zh": "代价体给的是 128 个分数，要变成一个连续的深度值，经典做法是 soft-argmin（d-stereo、a-learned-stereo）：先用 softmax 把分数变成一个概率分布，再对候选值求加权平均。它可微，能给出比候选间距更细的亚格点精度，比取 argmax 更适合端到端训练。\n\n代码先把 C̃ 再过两层卷积（128→256→128）得到 logits，然后在深度维做 softmax，得到每个像素的分布 p。注意两点与论文 Eq. (6) 不同：（1）softmax 在 1/4 分辨率（64×64）上做，而不是在“上采样到全分辨率的代价体”上做；上采样的对象是得到的粗视差图，用双线性插值放大 4 倍。（2）加权平均的对象是视差候选 1/d_m，不是深度候选 d_m，最终深度取期望视差的倒数。分布单峰且尖锐时两者几乎相同；分布多峰时差别很大（见数值例）。在视差上平均会偏向近处的峰；这对画质是好是坏，论文没有讨论，也没有做对比实验。\n\n同一个分布还给出一个副产品：最大概率 max_m p_m，论文称为匹配置信度。p 越尖锐，说明这个像素越确定地落在某个表面上；在遮挡、弱纹理、天空这类地方，p 很平，最大值接近 1/128。论文认为它与不透明度的物理含义相近（§3.2），代码把它最近邻上采样后交给下一步。",
+   "analogy_zh": "像 128 位评委给“表面在第几格”投票，softmax 把票数变成比例，再按比例平均出一个位置；得票最多那一格的得票率就是“共识程度”。代码的平均是在“倒数刻度”（视差）上做的，所以当评委分成近、远两派时，结果会偏向近的那一派。",
+   "equations": [
+    {
+     "tex": "\\mathbf{V}^i=\\mathrm{softmax}(\\hat{\\mathbf{C}}^i)\\,\\mathbf{G},\\quad \\mathbf{G}=[d_1,\\dots,d_D]^{\\top}\\quad(\\text{论文 Eq. 6})",
+     "explain_zh": "论文写法：Ĉ^i 是上采样到 H×W 的细化代价体，softmax 沿深度维，G 是深度候选向量，V^i∈ℝ^{H×W} 为深度图。"
+    },
+    {
+     "tex": "p_m=\\frac{\\exp(\\ell_m)}{\\sum_{k=1}^{D}\\exp(\\ell_k)},\\quad \\bar{\\delta}=\\sum_{m=1}^{D}p_m\\,\\frac{1}{d_m},\\quad \\hat{z}=\\frac{1}{\\mathrm{Up}_{\\times4}(\\bar{\\delta})},\\quad \\kappa=\\max_m p_m",
+     "explain_zh": "按代码改写（第 330–344 行）。ℓ_m 是 depth_head_lowres 输出的第 m 个 logit（64×64 分辨率）；δ̄ 是期望视差；Up_{×4} 为双线性上采样；ẑ 是粗深度（进入 mv7 前还会被细化）；κ 是匹配置信度，取值范围 [1/128, 1]，用最近邻上采样。"
+    },
+    {
+     "tex": "\\frac{1}{\\mathbb{E}_p[1/d]}\\le\\mathbb{E}_p[d]",
+     "explain_zh": "由 Jensen 不等式（1/x 在 x>0 上是凸函数），期望视差的倒数不大于期望深度，等号只在分布集中于一点时成立。所以代码的深度估计系统性地偏近，分布越分散偏得越多。"
+    }
+   ],
+   "numbers_zh": "数值例：一个像素的分布一半在 d=2（视差 0.5）、一半在 d=10（视差 0.1）。代码的做法：期望视差 0.3，深度 1/0.3≈3.33；论文 Eq. 6 的做法：期望深度 6.0。两者都不在任何真实表面上，说明多峰时 soft-argmin 本身就不可靠，这也是 mv7 要细化的原因之一。置信度范围：完全均匀时 1/128≈0.0078，完全确定时 1。depth_head_lowres 参数 590,208（probe）。",
+   "why_design_zh": "soft-argmin 可微、有亚格点精度，是学习式双目与 MVS 的标准做法；在 1/4 分辨率上 softmax 省下 16 倍计算。为何对视差求期望，论文未解释，合理的解读是候选本身在视差上均匀。放弃的是 pixelSplat 的“从分布采样深度 + 重参数化”，softmax 期望是确定性的。",
+   "pitfalls_zh": "（1）论文 Eq. 6 与代码不一致：代码在 1/4 分辨率上 softmax、对视差求期望、再双线性放大，而不是对全分辨率代价体做 softmax、对深度求期望。复现以代码为准。（2）双线性放大视差会在物体边缘产生介于前景与背景之间的“中间深度”，形成飞点，需要 mv7 的细化来修。（3）置信度 κ 只反映分布是否尖锐，不代表深度一定正确：重复纹理可能给出尖锐但错误的峰。",
+   "concept_ids": [
+    "d-stereo",
+    "g-depth",
+    "f-prob",
+    "a-learned-stereo",
+    "a-learned-mvs"
+   ],
+   "check_q_zh": "如果某像素的匹配分布非常平坦（例如对着一面白墙），代码会给出什么深度？置信度是多少？这对高斯意味着什么？",
+   "check_a_zh": "分布接近均匀时，期望视差约为所有候选视差的平均值 (0.01+1)/2≈0.505，深度约 1.98，这是一个与图像内容无关的“默认深度”；置信度接近 1/128≈0.008。完整模型会把这个低置信度交给深度细化 U-Net，由它结合上下文修正深度并输出较低的不透明度；在 base 模型里置信度直接作为不透明度，这些高斯几乎透明，不会在渲染中产生明显漂浮物，但该区域也就缺少有效内容。"
+  },
+  {
+   "id": "mv7",
+   "title_zh": "深度细化：特征上采样 4 倍 + 32 通道轻量 U-Net，输出残差视差与不透明度",
+   "paper_ref": "§3.1 “Depth refinement”；附录 C；Table 3 “base + refine” 对 “base”；附录 Table B（base 编码 0.038 s）；src/model/encoder/costvolume/depth_predictor_multiview.py 第 200–260、346–405 行",
+   "what_zh": "输入：RGB（3）、由 Transformer 特征与 CNN 特征上采样得到的全分辨率特征（压到 32 通道）、上采样粗视差（1）、上采样置信度（1），共 37 通道 × 256×256。输出：细化 U-Net 特征 refine_out [32,256,256]，由它经两层卷积得到残差视差 Δδ 与不透明度 logit；最终深度 z=1/clamp(δ̄↑+Δδ, 1/far, 1/near)。",
+   "plain_zh": "到上一步为止，深度只在 64×64 上算过，边缘是双线性放大出来的，比较糊；置信度也是块状的。深度细化要做的是把全分辨率的图像信息重新引进来，修边缘、补细节（l-iterative、l-cnn）。\n\n先准备全分辨率特征：把 Transformer 特征与 CNN 特征拼接（256 通道），3×3 卷积到 128 通道，双线性放大 4 倍再过 GELU，得到 [128,256,256]；这份特征后面还会被高斯头使用。再用一个 3×3 卷积压成 32 通道，与原始 RGB、粗视差、置信度拼成 37 通道，送入一个 32 通道的 2D U-Net：4 次 2× 下采样（256→16），在 16×16 处共 3 层跨视角注意力（1 头 × 32 维），结构与 mv5 的 U-Net 相同，只是更窄更深。\n\n输出头是两层卷积（32→64→2）。第 1 个通道是残差视差 Δδ，加到上采样的粗视差上，再截断到 [1/far, 1/near]，取倒数得到最终深度；第 2 个通道过 sigmoid 就是不透明度。因为 RGB 在输入里，细化网络可以学会“深度边缘要与颜色边缘对齐”，修掉 mv6 双线性放大造成的边缘飞点。\n\n作者把不含这一步的模型叫作 base：base 中细化 U-Net 被替换为一层卷积，深度直接取粗深度，不透明度直接取置信度。完整模型比 base 高 0.27 dB（26.39 对 26.12）；附录 Table B 中 base 的时间为 0.038 s，与完整模型的 0.043 s（编码）或 0.044 s（合计）相比约多 5–6 ms（Table B 未说明是否含渲染，这只是粗略推算）。",
+   "analogy_zh": "像先用粗笔在缩略图上勾出轮廓，再拿着原图用细笔描边：原图告诉你边缘到底在哪一个像素上，粗稿只负责大致位置。",
+   "equations": [
+    {
+     "tex": "\\mathbf{E}^i=\\mathrm{GELU}\\Big(\\mathrm{Up}_{\\times4}\\big(\\mathrm{Conv}_{3\\times3}[\\mathbf{F}^i,\\mathbf{F}^{cnn}_i]\\big)\\Big)\\in\\mathbb{R}^{128\\times H\\times W}",
+     "explain_zh": "按代码改写（upsampler，第 200–211、347 行）。F^i 是 Transformer 特征、F^{cnn}_i 是 CNN 特征（各 128 通道，64×64）；Up 为双线性插值（align_corners=True）。E^i 在高斯头中还会被用到。"
+    },
+    {
+     "tex": "[\\Delta\\delta,\\ o]=\\mathrm{Conv}\\circ\\mathrm{GELU}\\circ\\mathrm{Conv}\\Big(\\mathrm{UNet}_{32}\\big([\\mathbf{I}^i,\\ \\mathrm{Conv}(\\mathbf{E}^i),\\ \\mathrm{Up}(\\bar{\\delta}),\\ \\mathrm{Up}(\\kappa)]\\big)\\Big)",
+     "explain_zh": "按代码改写（refine_unet 与 to_disparity）。I^i 为 RGB（3 通道）；Conv(E^i) 把特征压到 32 通道；δ̄ 与 κ 来自 mv6；UNet_32 是 32 通道、channel_mult [1,1,1,1,1]、16× 下采样处加注意力的 U-Net；两层卷积输出 2 个通道：Δδ（残差视差）和 o（不透明度 logit）。"
+    },
+    {
+     "tex": "z=\\frac{1}{\\mathrm{clamp}\\big(\\mathrm{Up}(\\bar{\\delta})+\\Delta\\delta,\\ 1/d_{far},\\ 1/d_{near}\\big)},\\qquad \\alpha=\\sigma(o)",
+     "explain_zh": "最终深度与不透明度。clamp 保证深度落在 [near, far] 内；σ 为 sigmoid。代码中的 opacity mapping（initial=final=0）对 α 是恒等映射。"
+    }
+   ],
+   "numbers_zh": "细化 U-Net 输入 [2,37,256,256]、输出 [2,32,256,256]；to_disparity 输出 [2,2,256,256]（probe）。参数：upsampler 295,040，refine_unet 545,728，to_disparity 19,650（probe）。Table 3：base+refine 26.39，base 26.12；完整模型编码 0.043 s、合计 0.044 s（§4.2、Table 1），base 0.038 s（Table B，未注明是否含渲染），差约 5–6 ms（粗略推算）。",
+   "why_design_zh": "论文只说细化能“进一步提升深度质量”。合理的解读是：代价体只在 1/4 分辨率上工作，而像素对齐高斯在边缘处差 1 个像素就会形成飞点，用 RGB 引导的轻量网络做残差修正，比全分辨率代价体便宜得多。论文未讨论级联代价体或 RAFT 式迭代更新等替代方案。",
+   "pitfalls_zh": "（1）论文 §3.2 说不透明度“由两层卷积从匹配置信度预测”，在代码中这两层卷积作用于细化 U-Net 的 32 通道输出，置信度只是 U-Net 的一个输入通道，并不是直接输入；只有 base 模型才把置信度直接当不透明度。（2）残差视差与不透明度共用一个输出头，两者的梯度会相互影响。（3）clamp 会让超出 [near, far] 的真实表面被“压”在边界上，远景或贴近镜头的物体会被放错位置。",
+   "concept_ids": [
+    "l-cnn",
+    "l-iterative",
+    "l-attention",
+    "g-depth",
+    "a-learned-mvs"
+   ],
+   "check_q_zh": "为什么细化网络的输入里要放原始 RGB？只用代价体特征不行吗？",
+   "check_a_zh": "代价体与 Transformer 特征都在 1/4 分辨率，放大后无法精确定位边缘；原始 RGB 是唯一具有全分辨率细节的输入，物体边缘通常对应颜色边缘。把 RGB 放进来，细化网络可以学到“深度跳变应落在颜色跳变处”，从而修正双线性放大在边缘处产生的中间深度（飞点）。这类“图像引导的深度上采样”在双目与 MVS 中很常见。"
+  },
+  {
+   "id": "mv8",
+   "title_zh": "高斯参数：中心沿射线反投影、不透明度、尺度 [0.5,15]×像素足迹、四元数、4 阶球谐",
+   "paper_ref": "§3.2 “Gaussian Parameters Prediction”；附录 Table C（每像素高斯数）；src/model/encoder/encoder_costvolume.py 第 190–213 行；src/model/encoder/common/gaussian_adapter.py；src/model/encoder/common/gaussians.py；config/model/encoder/costvolume.yaml（gaussian_adapter）",
+   "what_zh": "输入：深度 z、不透明度 α、高斯头输出（由 refine_out 32 + RGB 3 + 全分辨率特征 128 = 163 通道经两层卷积得到的 84 通道）、相机参数。输出：每个像素一个高斯：中心 μ（3）、协方差 Σ（3×3，世界系）、SH 系数（3×25）、不透明度（1）。",
+   "plain_zh": "高斯头是两层 3×3 卷积（163→168→84），84 个通道依次是：2 个子像素偏移、3 个尺度、4 个四元数、75 个球谐系数（RGB 三个通道 × 25 个系数，即 4 阶）（n-3dgs、r-reps）。\n\n中心：像素坐标先加一个 (sigmoid−0.5)×像素大小的偏移，允许在 ±半个像素内移动，然后沿这条射线的单位方向走 z 的距离（g-pinhole）。论文没有提这个偏移。\n\n尺度：sigmoid 把输出映射到 [0.5, 15]，再乘以 z×0.1×(1/f_x+1/f_y)。一个像素在深度 z 处的物理宽度约为 z/f，所以这个设计让高斯的标准差落在约 0.1 到 3 个“像素足迹”之间，远处的高斯自动更大，与像素级表示的采样密度匹配。旋转用四元数，归一化后与尺度组成 Σ=RSSᵀRᵀ，再用相机到世界的旋转转到世界坐标系。\n\n颜色：用球谐函数表示视角相关颜色（r-appearance）。代码对高阶系数乘了一个很小的掩码（1 阶 0.025，2 阶 0.00625，3 阶约 0.0016，4 阶约 0.0004）。这个掩码每次前向都会乘上，不只作用于初始化：网络的原始输出要放大约 40 倍，1 阶系数才能恢复到未加掩码时的量级，所以颜色主要由 0 阶决定。另外，所用的光栅化器只计算到 3 阶，4 阶的 27 个输出通道实际上不参与渲染。\n\n不透明度：来自 mv7 的 sigmoid 输出。论文把它和匹配置信度联系起来：匹配越确定，越可能是表面，越不透明。附录 Table C 显示，把每像素高斯数从 1 增到 3，PSNR 只从 26.39 升到 26.54，渲染从 0.0015 s 变成 0.0023 s，作者因此选择 1 个。",
+   "analogy_zh": "像给每个像素发一颗形状可调的彩色棉花糖：钉在视线上指定的深度，大小按距离自动放大，形状可以压扁、旋转去贴合表面，颜色可以随看的角度略有变化，透明度则取决于“我有多确定这里真有东西”。",
+   "equations": [
+    {
+     "tex": "\\boldsymbol{\\mu}=\\mathbf{o}+z\\,\\hat{\\mathbf{r}}\\big(\\mathbf{x}+(\\sigma(\\mathbf{e})-0.5)\\odot\\boldsymbol{\\ell}\\big)",
+     "explain_zh": "按代码改写（encoder_costvolume.py 第 198–200 行、gaussian_adapter.py 第 84–85 行）。x 是像素中心的归一化坐标，e 是高斯头的前 2 个通道，ℓ=(1/W,1/H) 是像素大小，r̂(·) 返回单位射线方向，o 是相机光心，z 是 mv7 的深度。"
+    },
+    {
+     "tex": "\\mathbf{s}=\\big[s_{min}+(s_{max}-s_{min})\\,\\sigma(\\hat{\\mathbf{s}})\\big]\\cdot z\\cdot 0.1\\left(\\frac{1}{f_x}+\\frac{1}{f_y}\\right),\\quad s_{min}=0.5,\\ s_{max}=15",
+     "explain_zh": "按代码改写（gaussian_adapter.py 第 62–69、98–109 行）。ŝ 是 3 个尺度通道；f_x、f_y 为像素单位焦距（代码用归一化内参的逆乘以像素大小得到 1/f）；当 f_x≈f_y=f 时，s 约为 [0.1, 3]×z/f，即 0.1–3 个像素足迹。"
+    },
+    {
+     "tex": "\\boldsymbol{\\Sigma}_{w}=\\mathbf{R}^{c2w}\\,\\mathbf{R}(\\mathbf{q})\\,\\mathrm{diag}(\\mathbf{s})^2\\,\\mathbf{R}(\\mathbf{q})^{\\top}\\,(\\mathbf{R}^{c2w})^{\\top},\\qquad \\mathbf{q}\\leftarrow\\frac{\\mathbf{q}}{\\lVert\\mathbf{q}\\rVert}",
+     "explain_zh": "协方差。q 是 4 维四元数（代码为 xyzw 顺序），R(q) 为对应的旋转矩阵；diag(s)² 为尺度平方；R^{c2w} 把相机系下的协方差转到世界系。论文 §3.2 写作 Σ=R(θ)ᵀ diag(s) R(θ)，转置位置和尺度是否平方都与代码不同，应视为记号上的差异，以代码（build_covariance：R S Sᵀ Rᵀ）为准。"
+    },
+    {
+     "tex": "\\mathbf{c}(\\mathbf{d})=\\max\\Big(0,\\ \\sum_{l=0}^{3}\\sum_{m=-l}^{l}w_l\\,k_{lm}\\,Y_{lm}(\\mathbf{d})+0.5\\Big),\\quad w_0=1,\\ w_l=0.1\\cdot0.25^{l}",
+     "explain_zh": "按代码与光栅化器改写。k_lm 是网络预测的 SH 系数，w_l 是 sh_mask，Y_lm 是球谐基，d 是观察方向；求和只到 l=3，因为 pixelSplat 修改版光栅化器（forward.cu computeColorFromSH）只处理到 3 阶，网络预测的 l=4 系数不起作用；颜色加 0.5 后截断为非负，没有 sigmoid。"
+    }
+   ],
+   "numbers_zh": "高斯头 [2,163,256,256]→[2,84,256,256]，84 = 2 + 3 + 4 + 75（probe；d_in=82 另加 2 个偏移），参数 373,716。高斯 131,072 个：means [1,131072,3]、cov [1,131072,3,3]、SH [1,131072,3,25]、opacity [1,131072]（probe）。Table C：每像素 3 个高斯 26.54，渲染 0.0023 s。",
+   "why_design_zh": "这些参数化都沿用 pixelSplat 的 GaussianAdapter（0.5/15、sh_degree 4 相同），论文未解释。合理的解读是：尺度乘以深度与 1/f，网络只需预测“以像素足迹为单位”的无量纲量；SH 掩码让训练先学漫反射颜色。每像素 1 个高斯来自 Table C 的速度与质量权衡。",
+   "pitfalls_zh": "（1）深度语义不一致：代价体按正对平面构建（z 为相机坐标系深度），中心却放在“光心 + z×单位射线方向”，即把 z 当作沿射线的距离；偏离光轴 θ 的像素，真实 z 坐标只有 z·cosθ，以水平视场 60° 的方形图像为例（假设值），角点处约 0.78 倍。能否由细化残差补偿、补偿了多少，都未经验证；仓库 issue #106（2026-01）也提出了同一问题。（2）4 阶 SH 的 27 个通道不参与渲染。（3）论文说协方差与颜色的输入含“refined cost volume”，代码中高斯头不直接读取代价体，代价体的信息只经粗视差与置信度、通过深度细化 U-Net 间接进入。（4）颜色只在 0 处截断，可能超过 1。",
+   "concept_ids": [
+    "n-3dgs",
+    "g-pinhole",
+    "r-appearance",
+    "r-reps",
+    "a-ff-3dgs"
+   ],
+   "check_q_zh": "深度 z 从 2 增加到 4（其他不变），同一个尺度通道输出对应的高斯标准差怎么变？这样设计的好处是什么？",
+   "check_a_zh": "尺度公式里有一个 z 的线性因子，所以标准差也翻倍。一个像素在深度 z 处覆盖的物理宽度约为 z/f，也随 z 线性增长；把 z 乘进去以后，网络输出的 ŝ 表示的是“相对于像素足迹的大小”，与场景尺度和距离无关，远近物体可以用同一套输出范围，训练更稳定，也更容易跨数据集迁移。"
+  },
+  {
+   "id": "mv9",
+   "title_zh": "合并与渲染：各视角高斯直接取并集，3DGS 光栅化，渲染一张 256² 图约 1.5 ms",
+   "paper_ref": "Fig. 2；§2 “Multi-View Stereo” 段（union 代替点云融合）；Table 1 标题（渲染约 500 FPS）；§4.2 “Assessing model efficiency”；src/model/encoder/encoder_costvolume.py 第 230–247 行；src/model/decoder/decoder_splatting_cuda.py；src/model/decoder/cuda_splatting.py（render_cuda）；requirements.txt（diff-gaussian-rasterization-modified）",
+   "what_zh": "输入：K 组各 H×W 个高斯；目标视角的内外参、near/far。输出：目标视角 RGB [3,256,256]（背景黑色），可以对任意多个目标视角重复渲染而不必重新编码。",
+   "plain_zh": "传统 MVS 流水线在得到各视角深度图之后，还要做一致性检查和点云融合，把多个视角看到的同一个表面合并成一份（d-mvs、d-tsdf）。MVSplat 不做这一步：把每个视角的高斯直接拼在一起（Fig. 2 里的 ∪），交给 3DGS 光栅化器（n-3dgs、r-raster）。光栅化器把每个 3D 高斯投影成屏幕上的 2D 椭圆，按深度排序后做前到后的 alpha 合成（r-alpha）。重叠区域的两层高斯，靠不透明度与排序自然地“挑”出前面那层。论文认为这正是 3DGS 表示的便利之处：并集本身就是一个合法的全局表示（§2）。\n\n代码细节：渲染前把整个世界坐标除以 near，避免数值问题（RE10K 的 near=1，所以不改变什么）；光栅化器是 pixelSplat 作者修改过的 3DGS CUDA 实现（主要改动是让 SH 的坐标约定与 e3nn 一致），它只计算到 3 阶球谐。渲染一张 256² 图约 0.0015 s，pixelSplat（每像素 3 个高斯）约 0.0025 s，按单次渲染时间折算，MVSplat 约 670 帧/秒、pixelSplat 约 400 帧/秒（Table 1 表注笼统写作约 500 FPS）。\n\n这一步决定了 MVSplat 在系统层面的一个关键性质：“一次重建、任意渲染”。编码约 43 ms 只做一次，之后每多一个观看视角只多约 1.5 ms。对多观看者或双目显示，这比每个视角都要重跑网络的 IBR 或 LVSM 类方法划算得多。代价是表示有冗余：重叠区域出现两份近似重复的高斯，数量随视角数线性增长。",
+   "analogy_zh": "像两位画家各自在透明胶片上画了自己看到的场景，然后直接把两张胶片叠在一起投影，而不是先坐下来商量合成一张。叠的地方颜色一样就看不出来，差一点就会有重影。",
+   "equations": [
+    {
+     "tex": "\\mathcal{G}=\\bigcup_{i=1}^{K}\\big\\{(\\boldsymbol{\\mu}_{i,uv},\\alpha_{i,uv},\\boldsymbol{\\Sigma}_{i,uv},\\mathbf{c}_{i,uv})\\big\\}_{u,v},\\qquad |\\mathcal{G}|=K\\cdot H\\cdot W",
+     "explain_zh": "并集。i 是输入视角，(u,v) 是像素；没有去重，总数固定为 K·H·W。代码中就是把 b v r srf spp 几个维度 reshape 成一维（encoder_costvolume.py 第 230–247 行）。"
+    },
+    {
+     "tex": "\\mathbf{C}(\\mathbf{x})=\\sum_{n}\\mathbf{c}_n\\,\\alpha_n'(\\mathbf{x})\\prod_{k<n}\\big(1-\\alpha_k'(\\mathbf{x})\\big),\\qquad \\alpha_n'(\\mathbf{x})=\\alpha_n\\exp\\!\\Big(-\\tfrac12(\\mathbf{x}-\\boldsymbol{\\mu}_n')^{\\top}\\boldsymbol{\\Sigma}_n'^{-1}(\\mathbf{x}-\\boldsymbol{\\mu}_n')\\Big)",
+     "explain_zh": "3DGS 光栅化。n 按到目标相机的深度从近到远排序；μ'_n 与 Σ'_n 是投影到屏幕的 2D 均值与协方差（Σ'=JWΣWᵀJᵀ）；α_n 是 mv7 的不透明度；c_n 是按观察方向由 SH 求出的颜色；x 是像素位置。背景色为黑色，加在剩余透射率上。"
+    },
+    {
+     "tex": "T_{\\text{total}}(N_v)\\approx T_{\\text{enc}}+N_v\\,T_{\\text{render}}\\approx 43\\,\\text{ms}+N_v\\times1.5\\,\\text{ms}",
+     "explain_zh": "按论文数字写成的成本模型（§4.2）。N_v 是要渲染的目标视角数。单视角约 44.5 ms（论文合计写 0.044 s，约 22 fps）；双目约 46 ms；10 个视点约 58 ms。编码在 256²、2 视角下测得，GPU 型号论文未写。"
+    }
+   ],
+   "numbers_zh": "高斯数 131,072（2 视角）；pixelSplat 约 393K（Fig. 1）。渲染：MVSplat 0.0015 s，pixelSplat 0.0025 s；每像素 3 个高斯时 0.0023 s（Table C）。背景色 [0,0,0]（config/dataset/re10k.yaml）。每个高斯若按 3 位置 + 6 协方差 + 75 SH + 1 不透明度共 85 个 float32 存储，131K 个约 45 MB（推算）。",
+   "why_design_zh": "并集省去显式融合，对输入视角数也没有限制；可微光栅化让深度、不透明度、协方差都能从渲染误差得到梯度。论文把这看作相对传统 MVS 的“独特优势”（§2）。没有采用：深度图融合（点云或 TSDF）、体渲染（pixelNeRF、MuRF 的逐像素采样）、按目标视角重新推理（IBR 类方法）。",
+   "pitfalls_zh": "（1）并集不是融合：两视角深度稍有不一致时，重叠区域会出现前后两层高斯，视角移动时可能表现为轻微重影或闪烁；视角越多冗余越大（FreeSplat 的 PTF、Fuse-and-Refine 的体素融合就是针对这一点）。（2）“约 500 FPS”只是渲染部分，不含 43 ms 的编码；视频逐帧推理时帧率由编码决定，约 22 fps。（3）光栅化器只算到 3 阶 SH，网络的 4 阶输出被忽略。",
+   "concept_ids": [
+    "n-3dgs",
+    "r-raster",
+    "r-alpha",
+    "d-mvs",
+    "a-3dgs-ext"
+   ],
+   "check_q_zh": "一个 3D 临场场景需要同时给 4 个观看者、每人双目渲染，用 MVSplat 每帧大约要多少时间？如果换成每个目标视角都要重跑整个网络的方法（编码+渲染 44 ms/视角）呢？",
+   "check_a_zh": "共 8 个目标视角。MVSplat：编码一次 43 ms + 8×1.5 ms ≈ 55 ms。若每个视角都要完整推理：8×44 ms ≈ 352 ms。这就是“一次重建、任意渲染”在多观看者、双目、光场显示上的价值；当然，前提是 256² 的分辨率和 2 视角输入能满足需求，而这在真实系统中通常不成立。"
+  },
+  {
+   "id": "mv10",
+   "title_zh": "训练：MSE + 0.05·LPIPS，Adam 2e-4，batch 14，300K 步，单张 A100；视角间隔实际为 25→45 帧",
+   "paper_ref": "§3.3；§4.1 “Implementation details”；附录 C “More training details”；附录 Table D；config/experiment/re10k.yaml；config/main.yaml；config/dataset/view_sampler_dataset_specific_config/bounded_re10k.yaml；src/dataset/view_sampler/view_sampler_bounded.py 第 25–113 行；src/model/model_wrapper.py 第 540–565 行；src/loss/loss_mse.py、loss_lpips.py；src/dataset/dataset_re10k.py 第 247–252 行",
+   "what_zh": "输入：RE10K（或 ACID）视频片段，每个样本 2 个输入帧、4 个目标帧，256×256。输出：训练好的编码器权重（re10k.ckpt 或 acid.ckpt）。只用 RGB 监督。",
+   "plain_zh": "损失很简单（l-loss）：把 4 个目标视角渲染出来，与真值比 MSE（权重 1）和 LPIPS（VGG 版，权重 0.05），从第 0 步起就同时使用（默认 loss 配置里 LPIPS 要 150K 步后才启用，实验配置把它改成了 0）。没有深度监督，没有几何正则。深度之所以能学好，是因为代价体把“深度对不对”变成了“两边特征对不对得上”，而渲染误差会通过可微光栅化把梯度传回高斯中心、再传回 softmax 分布（f-optim）。\n\n优化器 Adam，峰值学习率 2e-4，OneCycleLR：前 1% 的步数（约 3,000 步）从 8e-6 余弦升到 2e-4，之后余弦退火到约 8e-10；梯度裁剪 0.5；batch 14（每个元素是一个场景的 2+4 张图）；300,001 步；单张 80 GB A100。骨干用 UniMatch 深度模型初始化，随机初始化 300K 步只有 26.01（Table D）。\n\n视角采样有一个值得注意的细节。配置文件写的是：输入两帧的间隔前 150K 步从 25–45 逐渐放宽到 45–192。但 view_sampler_bounded.py 里保留了一个 bug（注释写明是为了与最初的 pixelSplat 配置保持一致；pixelSplat README 的“Notes on Bugs”也记录了它，MVSplat 仓库 issue #93 至今未关闭），把上限赋成了下限，于是间隔恒等于当前下限：从第 0 步的 25 帧线性增加到第 150K 步的 45 帧，之后一直是 45 帧。目标帧从两输入帧之间均匀抽取。训练时还以 50% 概率整体水平翻转。另外，代码里的“验证集”读取的是测试集数据，附录 Fig. A 的验证曲线就来自这里。",
+   "analogy_zh": "像教学生看立体图：一开始给他两张只差一点点的照片（间隔 25 帧），慢慢拉大到 45 帧；每次让他把两张照片“拼”成一个 3D 模型，再从中间几个位置拍照，与真实照片对比打分。老师从不告诉他正确的深度，只告诉他拍出来的照片像不像。",
+   "equations": [
+    {
+     "tex": "\\mathcal{L}=\\frac{1}{N}\\sum_{t=1}^{4}\\big\\lVert\\hat{\\mathbf{I}}_t-\\mathbf{I}_t\\big\\rVert_2^2+0.05\\cdot\\frac{1}{4}\\sum_{t=1}^{4}\\mathrm{LPIPS}_{\\text{VGG}}\\big(\\hat{\\mathbf{I}}_t,\\mathbf{I}_t\\big)",
+     "explain_zh": "§3.3 与 loss_mse.py、loss_lpips.py。Î_t 是第 t 个目标视角的渲染图，I_t 是真值；N 是 4 个目标视角所有像素与通道的总数（代码用 mean）；LPIPS 使用 VGG 特征、输入按 [0,1] 归一化。"
+    },
+    {
+     "tex": "g(s)=25+\\left\\lfloor 20\\cdot\\min\\!\\Big(\\frac{s}{150000},1\\Big)\\right\\rfloor",
+     "explain_zh": "按代码推得的实际输入帧间隔（view_sampler_bounded.py schedule 与第 62 行的 bug）。s 为训练步数，g 为两输入帧的索引差；配置中的上限 192 从未生效。"
+    },
+    {
+     "tex": "\\eta(s)=\\begin{cases}\\eta_0+\\frac{\\eta_{max}-\\eta_0}{2}\\big(1-\\cos\\frac{\\pi s}{S_1}\\big), & s\\le S_1\\\\ \\eta_{end}+\\frac{\\eta_{max}-\\eta_{end}}{2}\\big(1+\\cos\\frac{\\pi(s-S_1)}{S-S_1}\\big), & s>S_1\\end{cases}",
+     "explain_zh": "OneCycleLR（anneal_strategy='cos'）的学习率。η_max=2e-4；η_0=η_max/25=8e-6 与 η_end=η_0/10⁴=8e-10 是 PyTorch 默认的 div_factor、final_div_factor；S=max_steps+10≈300,011，S_1≈0.01·S≈3,000。配置里的 warm_up_steps: 2000 只在 cosine_lr=false 时使用。"
+    }
+   ],
+   "numbers_zh": "batch 14，max_steps 300,001，Adam lr 2e-4，gradient_clip_val 0.5，checkpoint 每 20K 步、全部保留（config）。损失权重 MSE 1、LPIPS 0.05（论文与 config 一致）。每步看到 14 个场景、28 张输入图、56 张目标图；300K 步共 420 万个场景样本（推算）。训练硬件：单张 A100（README：80 GB）；训练时长与显存峰值未报告。RE10K 67,477 个训练场景（论文）。Table D：UniMatch 初始化 26.39；随机初始化 300K 26.01、450K 26.29。",
+   "why_design_zh": "只用光度损失，是为了能在没有深度真值的大规模视频上训练（§2）。输入间隔由小到大的课程沿用 pixelSplat（附录 C），合理的解读是先在小基线上学会找对应、再面对更大视差。没有采用：深度监督、几何正则、pixelSplat 的额外深度正则微调。",
+   "pitfalls_zh": "（1）配置与实际不符：bounded_re10k.yaml 的 45–192 帧没有生效，实际训练间隔最多 45 帧，而测试索引中的间隔是 45–136 帧（RE10K 平均约 66），约 92% 的测试样本基线比训练时最大的还大；pixelSplat 实际行为相同，所以两者的比较仍公平。（2）验证集即测试集；Table 3 中“w/o cross-view attention”报告的是“best performance”（发布的权重名带 _best，选取方式论文未说明），等于用测试数据选模型。（3）costvolume.yaml 的默认值（32 个候选等）与论文模型不同，必须带 +experiment=re10k。",
+   "concept_ids": [
+    "l-loss",
+    "f-optim",
+    "v-metrics",
+    "a-ff-3dgs"
+   ],
+   "check_q_zh": "如果把 LPIPS 权重设为 0，只用 MSE 训练，你预计 PSNR 与 LPIPS 两个指标分别会怎么变？为什么？",
+   "check_a_zh": "PSNR 可能持平甚至略升，因为 MSE 直接优化的就是 PSNR；LPIPS 很可能变差，渲染图更糊。原因是在不确定区域（遮挡、弱纹理、单视角可见处），MSE 的最优解是多种可能颜色的平均，即模糊结果；LPIPS 在深度特征空间比较，会惩罚这种模糊。论文没有做这个消融，这是基于损失性质的推断；论文强调 MVSplat 在 LPIPS 上的提升比 PSNR 更明显，与加入 LPIPS 损失也有关系。"
+  },
+  {
+   "id": "mv11",
+   "title_zh": "评测协议与主结果：RE10K 26.39 dB、ACID 28.25 dB，0.044 s 与 12.0M 参数",
+   "paper_ref": "§4.1–4.2；Table 1；Fig. 1、Fig. 3；src/evaluation/metrics.py；src/model/model_wrapper.py（test_step、on_test_end）；src/misc/benchmarker.py；assets/evaluation_index_re10k.json、evaluation_index_acid.json；more_commands.sh",
+   "what_zh": "输入：官方评测索引中的每个测试场景（2 个输入帧 + 3 个目标帧），256×256。输出：每个场景 3 张渲染图的平均 PSNR / SSIM / LPIPS，再对所有场景求平均；编码与渲染的平均耗时；参数量。",
+   "plain_zh": "评测沿用 pixelSplat 的协议（v-metrics）。RE10K 的评测索引有 7,194 个键，其中 6,474 个有效；ACID 有 1,848 个键，1,595 个有效。每个场景的两个输入帧相距 45–136 帧，3 个目标帧都在两者之间。PSNR 先把图像截到 [0,1] 再算，SSIM 用 skimage 的 11×11 高斯窗，LPIPS 用 VGG 版本。每个场景先对 3 个目标取平均，再对场景取平均。\n\n主结果（Table 1）：RE10K 上 MVSplat 26.39 / 0.869 / 0.128，pixelSplat 25.89 / 0.858 / 0.142，MuRF 26.10；ACID 上 28.25 对 pixelSplat 28.14。RE10K 上 +0.50 dB 意味着 MSE 约降到 0.89 倍；ACID 上只有 +0.11 dB，基本打平。还要注意，表中 pixelSplat 是旧版数字：pixelSplat 的 CVPR camera-ready 和官方仓库已更新为 RE10K 26.09 / 0.863 / 0.136、ACID 28.27 / 0.843 / 0.146，按新版比较，RE10K 领先 0.30 dB，ACID 上 PSNR 反而低 0.02 dB。作者强调 LPIPS 的改善，它更接近人的感知。Fig. 3 展示了重复纹理（窗框）、单视角可见物体（扶手、灯罩）和远处大物体（桥）上的优势。\n\n效率：编码 0.043 s、渲染 0.0015 s，合计 0.044 s，约 22 fps；pixelSplat 0.102 + 0.0025 ≈ 0.104 s。参数 12.0M（代码实测 11,955,734），pixelSplat 125.4M。但表中还有更小的模型：MuRF 5.3M、GPNR 9.6M，只是它们慢得多（0.186 s、13.3 s）。计时 GPU 论文没写；代码计时用 time.time()、没有显式 CUDA 同步，并跳过前 5 个场景作为预热。",
+   "analogy_zh": "像一场有统一考卷的考试：每位考生（方法）都看同样两张照片，画同样三个中间视角，按三项评分取平均。MVSplat 分数略高，交卷还最快；但要注意，其中几位考生的成绩是从上一届（pixelSplat 论文）的成绩单上抄来的。",
+   "equations": [
+    {
+     "tex": "\\mathrm{PSNR}=-10\\log_{10}\\mathrm{MSE},\\qquad \\frac{\\mathrm{MSE}_{\\text{MVSplat}}}{\\mathrm{MSE}_{\\text{pixelSplat}}}=10^{-(26.39-25.89)/10}\\approx0.89",
+     "explain_zh": "代码中的 PSNR（图像先 clip 到 [0,1]，MAX=1）。PSNR 每高 0.5 dB，MSE 约乘 0.89；注意这是逐场景 PSNR 的平均，不等于平均 MSE 的 PSNR。"
+    },
+    {
+     "tex": "\\overline{\\mathrm{PSNR}}=\\frac{1}{S}\\sum_{s=1}^{S}\\frac{1}{3}\\sum_{t=1}^{3}\\mathrm{PSNR}\\big(\\hat{\\mathbf{I}}_{s,t},\\mathbf{I}_{s,t}\\big)",
+     "explain_zh": "评测平均方式（model_wrapper.py test_step 与 on_test_end）。S 为测试场景数（RE10K 索引中 6,474 个有效场景），t 为 3 个目标视角。SSIM、LPIPS 同样处理。"
+    }
+   ],
+   "numbers_zh": "Table 1（时间 s / 参数 M / RE10K / ACID 的 PSNR）：pixelNeRF 5.299 / 28.2 / 20.43 / 20.97；GPNR 13.340 / 9.6 / 24.11 / 25.28；AttnRend 1.325 / 125.1 / 24.78 / 26.88；MuRF 0.186 / 5.3 / 26.10 / 28.09；pixelSplat 0.104 / 125.4 / 25.89 / 28.14；MVSplat 0.044 / 12.0 / 26.39 / 28.25（SSIM、LPIPS 见本篇的论文精读）。Fig. 1 写 pixelSplat 参数 125.1M，与表中 125.4M 不一致；高斯数 393K 对 131K。评测索引：RE10K 6,474 个有效场景，ACID 1,595 个。pixelSplat camera-ready 版：RE10K 26.09 / 0.863 / 0.136，ACID 28.27 / 0.843 / 0.146（pixelSplat README）。RE10K 的 19,422 个目标帧中有 583 个（3.0%）就是输入帧（assets 统计）。",
+   "why_design_zh": "沿用 pixelSplat 的数据、分辨率与索引，才能直接引用前人数字、做到“同卷考试”。作者对最相关的 NeRF 类强基线 MuRF 用官方代码重训；pixelNeRF、GPNR、AttnRend、pixelSplat 的数字取自 pixelSplat 论文。",
+   "pitfalls_zh": "（1）只有 MuRF 是重训的，其他基线数字取自 pixelSplat 论文，而且用的是 pixelSplat 的旧版结果（camera-ready 版已更新为 RE10K 26.09、ACID 28.27）。（2）论文说“lightweight model size”，但 MuRF（5.3M）与 GPNR（9.6M）其实更小；“10 倍更少参数”只相对 pixelSplat 与 AttnRend 成立。（3）目标帧都在两输入帧之间，属于插值；没有外推、没有高分辨率、没有多次训练的方差。（4）计时 GPU 未说明。pixelSplat 论文自己报告编码 0.102 s、渲染 0.002 s，MVSplat 正文写成编码 0.102 s、渲染 0.0025 s，是否在同一硬件上重测，论文没有交代。",
+   "concept_ids": [
+    "v-metrics",
+    "n-generalizable",
+    "a-ff-3dgs",
+    "a-generalizable-ibr"
+   ],
+   "check_q_zh": "RE10K 上 MVSplat 比 pixelSplat 高 0.50 dB，ACID 上只高 0.11 dB。你会怎么解释这个差别？还需要什么信息才能判断？",
+   "check_a_zh": "可能的解释有三种：ACID 是户外航拍，远景多、视差小，代价体在远处候选稀疏、匹配线索弱，优势变小；ACID 训练集小（11,075 个场景，约为 RE10K 的 1/6），轻量模型的优势不明显；或者差距本身就在训练随机性的范围内。要判断，需要多次训练的方差、按场景深度范围或基线大小分组的结果，以及两方法在同一硬件、同一代码下重跑的数字，论文都没有给出。另外，如果换成 pixelSplat camera-ready 版的数字，RE10K 的差距只剩 0.30 dB，ACID 上 MVSplat 反而低 0.02 dB，两处差距都很小，更需要方差信息才能下结论。"
+  },
+  {
+   "id": "mv12",
+   "title_zh": "跨数据集泛化、几何质量与消融：RE10K→ACID 28.15、→DTU 13.94；去掉代价体掉 3.3 dB",
+   "paper_ref": "§4.2 “Assessing geometry reconstruction / cross-dataset generalization / more-view quality”；Table 2、Table 3；Fig. 4、Fig. 5、Fig. 6；附录 A（Table A–D，Fig. A、Fig. B）；config/experiment/dtu.yaml；src/scripts/generate_dtu_evaluation_index.py；more_commands.sh",
+   "what_zh": "输入：只在 RE10K 上训练的模型，以及各消融模型。输出：ACID、DTU（2/3 视角）上的零样本分数；深度图与 3D 高斯的定性对比；Table 3 与附录各消融的数字。",
+   "plain_zh": "泛化（a-generalizable-ibr）：作者认为代价体存的是“相对相似度”，不随特征绝对大小变化，所以换数据集更稳；pixelSplat 从特征直接回归深度分布，特征分布一变就出问题（§4.2）。RE10K→ACID：MVSplat 28.15、pixelSplat 27.64，前者略高于在 ACID 上训练的旧版 pixelSplat（28.14），但低于其 camera-ready 版（28.27）。RE10K→DTU（16 个物体场景，每个 4 个目标视角）：13.94 对 12.89；3 个输入视角时 MVSplat 升到 14.30，pixelSplat 反而降到 12.52。但 14 dB 左右的图像离可用还很远，而且 DTU 测试时 near/far 用的是数据集提供的 2.125 与 4.525，代价体候选集中在物体所在的深度范围内。\n\n几何（Fig. 4、附录 Fig. D）：只有定性图。pixelSplat 的高斯点云有大量漂浮物、深度图噪点多，而且原作要额外做 5 万步带深度正则的微调才能改善；MVSplat 只用光度监督就得到平滑深度。论文没有给出任何深度误差指标。\n\n消融（Table 3，都在不含深度细化的 base 上做）：base 26.12；去掉代价体 22.83（−3.29 dB，两图直接叠在一起）；去掉骨干 cross-attention 25.19（并过拟合，报告最佳步）；去掉 U-Net 25.45；加上深度细化 26.39。附录还显示：把代价体装进 pixelSplat 可到 26.63（Table A），Swin 与 Epipolar Transformer 质量相同而前者更快（Table B）。",
+   "analogy_zh": "像一个只在室内房产视频里练过“看立体”的学生，被带到海边和实验室的转台前：他靠的是“两边对不对得上”这条通用规律，所以比死记室内外观的同学发挥得好；但在转台这种陌生场景里，两人的绝对成绩都很低。",
+   "equations": [
+    {
+     "tex": "\\Delta_{\\text{PSNR}}^{\\text{w/o CV}}=22.83-26.12=-3.29\\ \\text{dB}\\ \\Rightarrow\\ \\frac{\\mathrm{MSE}_{\\text{w/o CV}}}{\\mathrm{MSE}_{\\text{base}}}\\approx10^{0.329}\\approx2.1",
+     "explain_zh": "去掉代价体后 MSE 约翻倍，是所有消融中最大的退化；LPIPS 从 0.133 增到 0.197（+0.064，论文称约 50% 的相对退化）。"
+    },
+    {
+     "tex": "\\mathrm{gap}(\\text{DTU})=13.94-12.89=+1.05\\ \\text{dB},\\qquad \\mathrm{gap}(\\text{ACID})=28.15-27.64=+0.51\\ \\text{dB}",
+     "explain_zh": "Table 2 的领先幅度。论文据此说“源与目标域差距越大，优势越明显”，LPIPS 上尤其明显（DTU 0.385 对 0.560）。"
+    }
+   ],
+   "numbers_zh": "Table 2：RE10K→ACID pixelSplat 27.64 / 0.830 / 0.160，MVSplat 28.15 / 0.841 / 0.147；RE10K→DTU 12.89 / 0.382 / 0.560 对 13.94 / 0.473 / 0.385。DTU 3 视角：MVSplat 14.30、pixelSplat 12.52。Table 3 与附录 Table A–D 的数字见本篇的论文精读。DTU 设置：16 个 scan，目标视角 32、24、23、44，输入 33、31（3 视角加 43），near/far 2.125/4.525（代码与配置）。Table 2 表注把 ACID 上训练的 pixelSplat 写成 28.14 / 0.843 / 0.144，后两个数其实是 Table 1 中 MVSplat 自己的 ACID 结果（pixelSplat 为 0.839 / 0.150），属于表注笔误。",
+   "why_design_zh": "作者用跨数据集与“更多视角”实验支撑“代价体更具几何意义、更可泛化”的核心论点，用 Table A 说明这一思想对其他架构同样有效。消融为何只在 base 上做，论文没有说明（合理的推测是节省训练成本）。",
+   "pitfalls_zh": "（1）DTU 的绝对质量很低，“泛化更好”只是相对 pixelSplat 而言；DTU 使用数据集提供的深度范围，不是真正“什么都不知道”的零样本。（2）几何质量只有定性图，没有深度误差或点云指标。（3）Table A 的混合模型（pixelSplat + 代价体深度）比 MVSplat 本身还好（26.63 对 26.39），但它的参数量与速度没有报告，合理的解读是 MVSplat 的领先主要来自代价体，而不是其余部分的设计（论文只用它说明代价体思想的通用性）。（4）论文没有报告多次训练的方差；“w/o cross-view attention”报告的是“best performance”，而代码的验证数据就是测试集。",
+   "concept_ids": [
+    "a-generalizable-ibr",
+    "a-learned-mvs",
+    "d-mvs",
+    "v-metrics",
+    "n-generalizable"
+   ],
+   "check_q_zh": "为什么“去掉代价体”的模型渲染出来像两张输入图叠在一起？这说明它的高斯位置出了什么问题？",
+   "check_a_zh": "没有代价体时，网络只能从 Transformer 特征直接回归 128 维深度分布。这些特征经过了跨视角注意力，U-Net 里也仍有跨视角注意力，但没有任何按候选深度做的显式几何对应（与 pixelSplat 类似，但连极线采样也没有）。两个视角各自回归的深度彼此不一致，于是视角 1 的高斯与视角 2 的高斯落在不同的 3D 位置上，同一个物体变成两份错开的副本。从目标视角看过去，两份副本各自投影到不同的位置，就像两张输入图半透明地叠在一起（Fig. 6，§4.3：“fail to align within the same 3D space”）。代价体通过显式匹配把两视角的深度绑定到同一表面，所以能对齐。"
+  }
+ ],
+ "tensor_trace": [
+  {
+   "stage_zh": "输入图像（测试）",
+   "tensor": "context.image",
+   "shape": "[B=1, V=2, 3, 256, 256]，取值 [0,1]（训练时 B=14）",
+   "note_zh": "由 360×640 原始帧 Lanczos 缩放到 256×455 后中心裁剪得到；送入骨干前按 ImageNet 均值方差归一化。"
+  },
+  {
+   "stage_zh": "相机参数",
+   "tensor": "intrinsics / extrinsics / near / far",
+   "shape": "[1,2,3,3]（按宽高归一化）/ [1,2,4,4]（相机到世界，OpenCV）/ [1,2] / [1,2]",
+   "note_zh": "near=1、far=100（RE10K、ACID）；DTU 为 2.125、4.525。构建代价体时内参第一、二行分别乘回特征图宽高 64。"
+  },
+  {
+   "stage_zh": "CNN 特征",
+   "tensor": "F_cnn",
+   "shape": "[B·V=2, 128, 64, 64]",
+   "note_zh": "1/4 分辨率；也作为 cnn_features 保留到深度细化阶段。"
+  },
+  {
+   "stage_zh": "多视角 Transformer 特征",
+   "tensor": "F（trans_features）",
+   "shape": "[1, 2, 128, 64, 64]",
+   "note_zh": "6 块 self + cross attention；2×2 窗口，每窗 1,024 个 query token，cross-attention 的 key 为其余 V−1 个视角同窗口 token（2 视角时 1,024 个）。"
+  },
+  {
+   "stage_zh": "视差候选",
+   "tensor": "disp_candi_curr",
+   "shape": "[V·B=2, D=128, 1, 1]",
+   "note_zh": "linspace(1/far, 1/near, 128) = 0.01 … 1.0，间距约 0.0078；代码中该模块的 batch 维按 (v b) 排列。"
+  },
+  {
+   "stage_zh": "warp 后的另一视角特征",
+   "tensor": "feat01_warped",
+   "shape": "[2, C=128, D=128, 64, 64]",
+   "note_zh": "约 1.34 亿个 float32，约 537 MB（按形状计算）；grid_sample 双线性、越界补零。"
+  },
+  {
+   "stage_zh": "代价体 + 特征拼接",
+   "tensor": "raw_correlation_in",
+   "shape": "[2, 128+128=256, 64, 64]",
+   "note_zh": "点积 / √128 得 [2,128,64,64]；多于 2 视角时对各视角代价体取平均；再与本视角 Transformer 特征拼接。"
+  },
+  {
+   "stage_zh": "细化代价体",
+   "tensor": "raw_correlation",
+   "shape": "[2, 128, 64, 64]",
+   "note_zh": "2D U-Net（128 通道，16×16 处 3 层跨视角注意力，4 头）+ 1×1 卷积残差。"
+  },
+  {
+   "stage_zh": "匹配分布、粗视差、置信度",
+   "tensor": "pdf / coarse_disps / pdf_max",
+   "shape": "[2,128,64,64] / [2,1,64,64] / [2,1,64,64]",
+   "note_zh": "depth_head_lowres 两层卷积后沿 D 维 softmax；coarse_disps = Σ pdf·视差候选；pdf_max ∈ [1/128, 1]。"
+  },
+  {
+   "stage_zh": "上采样到全分辨率",
+   "tensor": "fullres_disps / pdf_max↑ / proj_feat_in_fullres",
+   "shape": "[2,1,256,256] / [2,1,256,256] / [2,128,256,256]",
+   "note_zh": "视差双线性 ×4，置信度最近邻 ×4；特征为 concat(Transformer, CNN)=256 通道 → 卷积到 128 → 双线性 ×4 → GELU。"
+  },
+  {
+   "stage_zh": "深度细化 U-Net",
+   "tensor": "refine_unet 输入 → refine_out",
+   "shape": "[2, 3+32+1+1=37, 256, 256] → [2, 32, 256, 256]",
+   "note_zh": "32 通道 U-Net，4 次下采样到 16×16，在该分辨率处 3 层跨视角注意力（1 头）。"
+  },
+  {
+   "stage_zh": "残差视差与不透明度",
+   "tensor": "to_disparity 输出 → depths / densities",
+   "shape": "[2, 2, 256, 256] → [1, 2, 65536, 1, 1]（各一份）",
+   "note_zh": "深度 = 1/clamp(视差 + Δ, 0.01, 1)；不透明度 = sigmoid（opacity mapping 为恒等）。"
+  },
+  {
+   "stage_zh": "高斯头",
+   "tensor": "to_gaussians 输入 → raw_gaussians",
+   "shape": "[2, 32+3+128=163, 256, 256] → [2, 84, 256, 256]",
+   "note_zh": "84 = 2 偏移 + 3 尺度 + 4 四元数 + 75 SH（3×25，4 阶）；重排为 [1, 2, 65536, 84]。"
+  },
+  {
+   "stage_zh": "3D 高斯（并集）",
+   "tensor": "Gaussians(means, covariances, harmonics, opacities)",
+   "shape": "[1,131072,3] / [1,131072,3,3] / [1,131072,3,25] / [1,131072]",
+   "note_zh": "V·H·W = 131,072；3 视角时为 196,608（probe）。渲染器只使用前 16 个 SH 系数。"
+  },
+  {
+   "stage_zh": "渲染输出",
+   "tensor": "output.color",
+   "shape": "[1, 3(测试目标数), 3, 256, 256]；训练时 [14, 4, 3, 256, 256]",
+   "note_zh": "3DGS 光栅化，背景黑色；每个视角约 0.0015 s（论文）。"
+  },
+  {
+   "stage_zh": "训练损失",
+   "tensor": "L",
+   "shape": "标量",
+   "note_zh": "MSE×1 + LPIPS(VGG)×0.05，对 4 个目标视角求平均；无深度项。"
+  }
+ ],
+ "reading_experiments": [
+  {
+   "item": "Table 1（与前馈方法比较：时间、参数、RE10K 与 ACID 质量）",
+   "how_to_read_zh": "分三列看：时间、参数、质量。质量上 MVSplat 在两个数据集都排第一，但 RE10K 领先 pixelSplat 0.50 dB、ACID 只领先 0.11 dB，ACID 上与 MuRF（28.09）、pixelSplat（28.14）几乎打平；LPIPS 的改善相对更明显（0.142→0.128）。时间上 0.044 s 最快，参数上 12.0M 远小于 pixelSplat 的 125.4M，但 MuRF（5.3M）和 GPNR（9.6M）更小。再看数字来源：只有 MuRF 是作者用官方代码重训，其余基线取自 pixelSplat 论文。还要知道：表中 pixelSplat 是旧版数字，它的 camera-ready 版为 RE10K 26.09 / 0.863 / 0.136、ACID 28.27 / 0.843 / 0.146。",
+   "takeaway_zh": "“更快、更小、略好”这个结论成立，最有分量的是效率；画质上 RE10K 的领先按旧版 pixelSplat 为 0.50 dB、按新版为 0.30 dB（没有方差），ACID 上基本持平。“最轻量”的说法只对 pixelSplat、AttnRend 成立。"
+  },
+  {
+   "item": "Table 2 与 §4.2 “more-view quality”（跨数据集与 3 视角）",
+   "how_to_read_zh": "RE10K→ACID：28.15 对 27.64，MVSplat 零样本略高于 ACID 上训练的旧版 pixelSplat（28.14），但不及其 camera-ready 版（28.27）；另外表注给 pixelSplat 写的 SSIM 0.843、LPIPS 0.144 其实是 MVSplat 自己在 Table 1 的 ACID 数字。RE10K→DTU：13.94 对 12.89，LPIPS 0.385 对 0.560；3 视角时 MVSplat 14.30、pixelSplat 12.52。读这张表要同时看相对差距与绝对值：DTU 上两者都只有 13–14 dB。再看设置：DTU 用的是它自己的 near/far（2.125/4.525），固定 2 个最近的输入相机，16 个场景 × 4 个目标。",
+   "takeaway_zh": "代价体确实让模型对域变化更鲁棒，多给视角也能用上；但“泛化”是相对 pixelSplat 而言，在物体中心、近距离场景上远未可用，而且测试时借用了数据集提供的深度范围。"
+  },
+  {
+   "item": "Fig. 4 与附录 Fig. D（3D 高斯与深度图的几何对比）",
+   "how_to_read_zh": "看两样东西：放大视角下高斯点云是否有漂浮物，输入视角的深度图是否平滑、边缘是否清楚。pixelSplat 的点云有大量漂浮高斯，深度图噪点多；MVSplat 的更干净。注意这里双方都没有做额外微调，而 pixelSplat 原论文另有一个 50K 步深度正则微调版本。",
+   "takeaway_zh": "几何改进是代价体最直观的收益，但证据只有定性图，没有深度误差、点云精度等数字；项目页提供 .ply 文件，可自行检查。"
+  },
+  {
+   "item": "Table 3 与 Fig. 6（主消融）",
+   "how_to_read_zh": "先认清基准：除第一行外，所有行都在不含深度细化的 base（26.12）上做。按退化大小排序：去掉代价体 −3.29 dB；去掉骨干 cross-attention −0.93 dB（报告的是过拟合前的最佳步）；去掉 U-Net −0.67 dB；加上深度细化 +0.27 dB。Fig. 6 的误差图说明了各自坏在哪里：没有代价体时两图叠影，没有 U-Net 时单视角可见的两侧出错。",
+   "takeaway_zh": "代价体是决定性组件；U-Net 与 cross-attention 主要处理匹配不可靠的区域；深度细化是锦上添花。论文没有报告方差，且代码中的验证集就是测试集，报告“best performance”的那一行偏乐观。"
+  },
+  {
+   "item": "附录 Table A（把代价体深度装进 pixelSplat）",
+   "how_to_read_zh": "pixelSplat 原版 25.89 / 0.858 / 0.142，换成代价体深度分支后 26.63 / 0.875 / 0.122，比 MVSplat 本身的 26.39 还高。表中没有这个混合模型的参数量和时间。",
+   "takeaway_zh": "论文的核心贡献是“用代价体给高斯定位”这个思想，而不是 MVSplat 的其余结构；在不在乎速度和参数时，把代价体加到更大的模型上可以更好。"
+  },
+  {
+   "item": "附录 Table B（Swin 窗口 Transformer 对 Epipolar Transformer）",
+   "how_to_read_zh": "都在 base 模型上比较：Epipolar 0.055 s、26.09；Swin 0.038 s、26.12。质量差 0.03 dB，可以视为相同；时间差 17 ms 来自极线采样。",
+   "takeaway_zh": "有了显式代价体之后，骨干里再做极线注意力的收益很小，局部窗口注意力足够，且更快、更规整。这也说明几何约束已经由代价体承担。"
+  },
+  {
+   "item": "附录 Table C 与 Table D（每像素高斯数、骨干初始化）",
+   "how_to_read_zh": "Table C：每像素 3 个高斯 26.54 / 0.872 / 0.127，渲染 0.0023 s；1 个高斯 26.39，0.0015 s。Table D：UniMatch 初始化 26.39；随机初始化 300K 步 26.01，450K 步 26.29；pixelSplat（DINO 初始化）25.89。",
+   "takeaway_zh": "多放高斯有小幅收益，默认 1 个是速度权衡；预训练的匹配骨干至少相当于 150K 步训练（随机初始化 450K 步仍低 0.10 dB），但即使从零训练，MVSplat 也超过 pixelSplat，说明优势不全来自预训练。"
+  },
+  {
+   "item": "附录 Fig. A（验证曲线）与 Fig. B（失败案例）",
+   "how_to_read_zh": "Fig. A 画了各消融在整个训练过程中的 PSNR、SSIM、LPIPS，“w/o cross-view attention” 在后期下降（过拟合）。需要知道：代码中的验证阶段读取的是测试集数据。Fig. B 展示玻璃、窗户等反光与非朗伯表面上的失败。",
+   "takeaway_zh": "跨视角交互对防止过拟合很重要；反光表面会让代价体匹配失效；低阶且被强衰减的 SH 颜色模型可能也限制了视角相关效果（后者是合理的推测，论文没有分析），这在有眼镜、屏幕的通话场景里需要特别注意。"
+  }
+ ],
+ "tradeoffs": [
+  {
+   "choice_zh": "用平面扫描代价体定位高斯，而不是从特征直接回归深度分布",
+   "gain_zh": "几何更准、点云更干净；模型小（12.0M）、快；跨数据集更稳；消融中是贡献最大的组件（+3.29 dB）",
+   "cost_zh": "必须有精确位姿和合适的 near/far；显存随 D×H×W 增长（256² 时 warp 张量约 537 MB）；遮挡、弱纹理、反光处匹配失效，要靠 U-Net 与上下文补"
+  },
+  {
+   "choice_zh": "代价体只在 1/4 分辨率上构建与 softmax，再上采样并用轻量 U-Net 细化",
+   "gain_zh": "代价体计算量与显存降为全分辨率的 1/16；细化网络借助 RGB 修边缘，只多约 5–6 ms（按附录 Table B 粗略推算）",
+   "cost_zh": "细小结构可能在低分辨率匹配中丢失；视差双线性放大会在边缘产生中间深度，完全依赖细化网络修复"
+  },
+  {
+   "choice_zh": "在逆深度上均匀取 128 个候选，并对视差求 softmax 期望",
+   "gain_zh": "近处采样密、远处稀，符合立体测量误差规律；期望可微、有亚格点精度",
+   "cost_zh": "远景非常粗（far=100 时约一半候选在深度 2 以内）；多峰分布下期望落在两个表面之间；训练后不能随意改 D 与 near/far"
+  },
+  {
+   "choice_zh": "每像素 1 个高斯，各视角直接取并集",
+   "gain_zh": "高斯数为 pixelSplat 的 1/3，渲染快（0.0015 s）；对输入视角数无限制，实现简单",
+   "cost_zh": "重叠区域冗余、可能重影；数量随视角数线性、随分辨率平方增长；没有跨视角一致性检查"
+  },
+  {
+   "choice_zh": "局部窗口多视角 Transformer（UniMatch 预训练），而非极线 Transformer",
+   "gain_zh": "比极线版快（0.038 对 0.055 s），质量相同；可直接加载匹配任务的预训练权重",
+   "cost_zh": "注意力不利用几何，视差超出窗口时 cross-attention 帮不上忙；依赖外部预训练（ScanNet 深度 + 光流）才能在 300K 步内达到最佳"
+  },
+  {
+   "choice_zh": "只用渲染损失（MSE + 0.05·LPIPS）端到端训练",
+   "gain_zh": "可以在没有深度真值的大规模视频上训练；几何与外观一起优化",
+   "cost_zh": "几何只受间接约束，深度语义（z 深度还是射线距离）可以被网络“将错就错”；弱纹理处深度可能不唯一，也没有几何误差评测"
+  },
+  {
+   "choice_zh": "静态、单帧、256² 的问题设定",
+   "gain_zh": "可以直接利用 RE10K/ACID 的大规模数据与 pixelSplat 的协议，训练与评测成本可控",
+   "cost_zh": "与 3D 临场所需的人物、动态、1–2K 分辨率、时间一致性都有明显差距；逐帧推理会闪烁"
+  }
+ ],
+ "faq": [
+  {
+   "q_zh": "MVSplat 和 pixelSplat 最本质的区别是什么？",
+   "a_zh": "在于“高斯中心的深度从哪来”。pixelSplat 让网络看着经过极线注意力增强的特征，直接输出每条射线上各深度桶的概率，再从中采样深度，每像素 3 个高斯；MVSplat 显式构建平面扫描代价体，比较两视角特征在 128 个候选深度上是否一致，用 softmax 期望得到深度，每像素 1 个高斯。其余部分（数据、协议、高斯参数化、光栅化器）大多沿用 pixelSplat 的代码。附录 Table A 把代价体装进 pixelSplat 也能从 25.89 提升到 26.63，合理的解读是差别主要就在这一处。"
+  },
+  {
+   "q_zh": "为什么要在逆深度（视差）上均匀取候选，而不是在深度上均匀取？",
+   "a_zh": "对两台相机来说，同一个像素在不同深度下的对应点沿极线移动，移动量与 1/深度 成正比。在视差上等间距取候选，等价于让对应点在另一张图上大致按等像素间距移动，每个候选的“匹配分辨率”相近。在深度上均匀取，远处候选会挤在一起、近处又太稀。near=1、far=100 时，约一半的候选（65 个）落在深度 2 以内，远景只有很粗的几档，这是逆深度采样的代价。"
+  },
+  {
+   "q_zh": "训练时没有深度真值，网络怎么学会深度？",
+   "a_zh": "靠两件事。第一，代价体本身含几何信息：深度对时两视角特征相似，网络只需学会挑相关性最高的那一格。第二，渲染可微：深度错了，高斯就被投到目标视角的错误位置，渲染误差经光栅化反传到高斯中心，再经 softmax 期望传到匹配分布；目标视角位于两个输入之间，任何位置错误都会在渲染图上显现。代价是深度只受间接约束，例如代码里“z 深度”与“沿射线距离”的混用就不会被显式纠正。"
+  },
+  {
+   "q_zh": "论文说不透明度来自匹配置信度，代码里真是这样吗？",
+   "a_zh": "只对一部分成立。softmax 分布的最大值（置信度）确实被计算出来，但在默认的完整模型里，它只是深度细化 U-Net 的一个输入通道；不透明度是细化 U-Net 输出经两层卷积后的 sigmoid。只有不含深度细化的 base 消融模型，才把置信度直接当作不透明度（opacity mapping 配置为恒等）。所以更准确的说法是：不透明度“以匹配置信度为输入之一”学出来。练习 4 可以亲手验证这一点。"
+  },
+  {
+   "q_zh": "代价体为什么只在 1/4 分辨率上算？会不会丢细节？",
+   "a_zh": "因为代价是 C×D×H×W 量级：256² 输入、128 个候选时，warp 后的特征已有约 1.34 亿个数（约 537 MB）；全分辨率会再大 16 倍。细节确实会在匹配阶段丢一部分，MVSplat 用两个手段补：把 Transformer 与 CNN 特征上采样到全分辨率，以及一个输入含原始 RGB 的深度细化 U-Net。这一步约多 5–6 ms（按附录 Table B 粗略推算），PSNR 提高 0.27 dB。更细的结构（发丝、栏杆）仍然是弱点，高分辨率扩展要靠分层或级联代价体（例如 PanSplat）。"
+  },
+  {
+   "q_zh": "DTU 上只有约 14 dB，为什么还说泛化好？",
+   "a_zh": "“好”是相对 pixelSplat 而言：13.94 对 12.89 dB，LPIPS 0.385 对 0.560，3 视角时差距更大。绝对质量确实很差，物体中心、近距离、背景复杂度低的 DTU 与室内漫游视频差别太大。还要注意 DTU 测试时 near/far 用了数据集提供的深度范围（2.125–4.525），代价体候选集中在物体所在深度，这是一个很强的先验。论文作者也承认模型只在 RE10K 上训练、多样性不足。"
+  },
+  {
+   "q_zh": "两个视角的高斯直接合并，会不会在重叠区域产生重影？",
+   "a_zh": "有可能。两个视角各自为同一表面生成一层高斯，深度一致时前一层挡住后一层，看不出问题；深度有偏差时，移动视角会看到两层错开，出现轻微重影或闪烁。论文没有去重或融合，也没有专门评测这一现象；后续的 FreeSplat（像素级三元组融合）与 Fuse-and-Refine（体素空间融合）正是针对它。"
+  },
+  {
+   "q_zh": "MVSplat 和站内的 Quark、Ha et al. 是什么关系？",
+   "a_zh": "三者都是无需逐场景优化的前馈方法，表示不同。Quark 为每个目标视角即时生成分层深度图并用 IBR 取色，每个视角都要重跑网络，没有引用 MVSplat。Ha et al. 用解析参数的不透明像素高斯逐视角渲染，再由 TSDF 引导的 U-Net 融合并做时间滤波；它在 Fig. 12 把 MVSplat 作为定性对照，并明确反对“网络预测高斯参数 + 一次整体渲染”。MVSplat 预测一个持久的高斯集合，一次重建、任意渲染，但没有时间机制。三者分别代表“逐视角 IBR”“一致性优先的几何引导融合”“持久 3DGS”。"
+  },
+  {
+   "q_zh": "代码和论文有好几处不一致，读的时候以哪个为准？",
+   "a_zh": "以代码为准，论文数字就是用这份代码和发布的权重得到的。主要不一致：softmax 在 1/4 分辨率上做、对视差而不是深度求期望（Eq. 6）；代价体残差是可学习的 1×1 卷积（Eq. 5）；默认模型的不透明度不直接取匹配置信度；高斯头输入不含代价体；训练间隔实际为 25→45 帧；4 阶球谐只渲染到 3 阶；附录对 CNN 下采样位置的描述与代码不符。另外要带 +experiment=re10k，否则会用到不同的默认配置。"
+  }
+ ],
+ "exercises": [
+  {
+   "title_zh": "逆深度候选与 soft-argmin 的数值实验",
+   "level": "入门",
+   "task_zh": "用 NumPy 复现 MVSplat 的候选深度：在 [1/100, 1/1] 上 linspace 取 128 个视差，打印深度 2、10、50 附近相邻候选的深度间距，并统计深度 ≤2 的候选个数。然后构造三种 128 维匹配分布：（a）单峰高斯，中心在深度 3、宽 2 个格点；（b）双峰，各 0.5 概率在深度 2 与 10；（c）均匀分布。分别计算代码的做法 1/Σp·(1/d) 与论文 Eq. 6 的做法 Σp·d，以及置信度 max p。",
+   "expected_zh": "深度 2 附近相邻候选差约 0.03，10 附近约 0.8，50 附近几十；65 个候选在深度 2 以内。（a）两种期望都接近 3；（b）代码得约 3.33、论文公式得 6.0；（c）代码得约 1.98、论文公式得所有候选深度的平均约 5.1，置信度约 0.0078。你应能用 Jensen 不等式解释为什么代码的结果总是偏近。",
+   "hint_zh": "视差候选 = 0.01 + k·0.99/127，k=0…127；深度取倒数。（b）的分布可以把两个最接近目标深度的格点各设为 0.5。",
+   "concept_ids": [
+    "g-depth",
+    "d-stereo",
+    "f-prob"
+   ]
+  },
+  {
+   "title_zh": "在 CPU 上实例化 MVSplat 编码器：统计参数、打印每一步张量形状",
+   "level": "入门",
+   "task_zh": "clone 官方仓库，在装有 torch、einops、jaxtyping、omegaconf、e3nn、torchvision、pytorch_lightning 的环境里，用 unittest.mock.MagicMock 占位 diff_gaussian_rasterization、lpips、wandb、moviepy、skvideo，以及没有安装的 colorspacious、svg、cv2、plyfile、imageio（编码器前向都用不到）。用 src.global_cfg.set_cfg 设置 {'mode':'test','dataset':{'view_sampler':{'num_context_views':2}}}，按 config/experiment/re10k.yaml 的取值构造 EncoderCostVolumeCfg（num_depth_candidates=128、depth_unet_feat_dim=32 等，unimatch_weights_path=None），实例化 src/model/encoder/encoder_costvolume.py 的 EncoderCostVolume。统计总参数与各子模块参数；给 depth_predictor 的各子模块注册 forward hook，用随机 2×3×256×256 图像和两台沿 x 平移 0.3 的相机跑一次前向并打印形状；再把视角数改为 3 重跑。",
+   "expected_zh": "总参数 11,955,734（论文 12.0M），其中代价体细化 U-Net 约 5.86M、Transformer 约 3.15M、CNN 约 1.05M。形状应与本导读的 tensor_trace 一致，例如细化 U-Net 输入 [2,37,256,256]、高斯头输出 [2,84,256,256]、means [1,131072,3]；3 视角时 means 为 [1,196608,3]。",
+   "hint_zh": "mode 设为 'test' 可跳过加载 UniMatch 权重；内参按宽高归一化（如 fx=fy=0.86、cx=cy=0.5），外参是相机到世界的 4×4 矩阵，near/far 用 [1,2] 形状的 1 与 100。",
+   "concept_ids": [
+    "l-cnn",
+    "l-attention",
+    "d-mvs",
+    "n-3dgs"
+   ]
+  },
+  {
+   "title_zh": "官方评测复现与 near/far 敏感性",
+   "level": "进阶",
+   "task_zh": "按 README 下载 re10k.ckpt 和 RealEstate10K 测试 chunk，先复现 Table 1：python -m src.main +experiment=re10k checkpointing.load=checkpoints/re10k.ckpt mode=test dataset/view_sampler=evaluation test.compute_scores=true（可加 dataset.test_chunk_interval=10 只评每第 10 个 chunk）。然后在同一子集上改深度范围重跑：dataset.near=0.5 dataset.far=200、dataset.near=2 dataset.far=100、dataset.near=1 dataset.far=20，每次换一个 wandb.name，读取 outputs/test/<name>/scores_all_avg.json 中的指标与耗时。",
+   "expected_zh": "全量评测应接近 26.39 / 0.869 / 0.128（子集数字会有偏差）。改变 near/far 后，代价体每个通道对应的物理深度都变了，而网络是按 1/100 训练的，分数通常会下降；near 设得比真实最近表面还大时，近处物体会被 clamp 到 near 上，下降更明显。你应能写出结论：near/far 是模型的一部分，部署到固定阵列时应在匹配的范围上重新训练或微调。",
+   "hint_zh": "test_chunk_interval 在 src/dataset/dataset_re10k.py 第 80–83 行生效；耗时统计来自 src/misc/benchmarker.py，跳过前 5 个场景；它没有显式 torch.cuda.synchronize，比较不同设置时以同一台机器的相对值为准。",
+   "concept_ids": [
+    "g-depth",
+    "d-mvs",
+    "v-metrics",
+    "i-psv"
+   ]
+  },
+  {
+   "title_zh": "不透明度到底是不是匹配置信度？",
+   "level": "进阶",
+   "task_zh": "在 src/model/encoder/costvolume/depth_predictor_multiview.py 的 forward 里，把 pdf_max（上采样后）与 densities 存到 extra_info 或一个全局列表中。分别加载完整模型 re10k.ckpt 和 base 消融模型 checkpoints/ablations/re10k_worefine.ckpt（后者运行时加 model.encoder.wo_depth_refine=true），在 50 个测试场景上收集两者，画二维直方图并计算 Pearson 相关系数；再把高置信度与低置信度像素在输入图上标出来，看它们落在哪些区域。",
+   "expected_zh": "base 模型中两者完全相同（相关系数为 1），因为代码直接把 pdf_max 当不透明度；完整模型中两者正相关但不相同，不透明度更多受细化 U-Net 的判断影响（例如边缘、单视角可见区域）。低置信度通常出现在弱纹理墙面、窗户、画面两侧与遮挡边界。",
+   "hint_zh": "完整模型里不透明度来自 to_disparity 第 2 个通道的 sigmoid；opacity_mapping 的 initial=final=0 使 map_pdf_to_opacity 成为恒等映射（encoder_costvolume.py 第 127–140 行）。可视化时注意代码的 batch 维是 (v b) 顺序。",
+   "concept_ids": [
+    "f-prob",
+    "r-alpha",
+    "d-mvs",
+    "n-3dgs"
+   ]
+  },
+  {
+   "title_zh": "修复视角采样 bug：训练基线到底要多大？",
+   "level": "挑战",
+   "task_zh": "阅读 src/dataset/view_sampler/view_sampler_bounded.py 第 42–71 行，确认第 62 行把 max_gap 设成了 min_gap。先写一个小脚本，按 schedule 逻辑打印第 0、75K、150K、300K 步的实际输入帧间隔；再统计 assets/evaluation_index_re10k.json 中测试间隔的分布（45–136）。然后在一块 GPU 上用较小的 batch（例如 4）和较短的日程（例如 50K 步、warm_up_steps 按比例缩短）训练两个模型：原版，以及把第 62 行改为 max_gap = min(num_views - 1, max_gap) 的修复版（间隔 45–192）。把测试索引按间隔分成 45–70、70–100、100–136 三组分别评测。",
+   "expected_zh": "原版实际训练间隔为 25→45，修复版覆盖更大的基线。预期修复版在大间隔组上可能更好、在小间隔组上可能略差或持平；若结果相反，要讨论是否因为大间隔样本匹配更难、训练步数不够。无论结论如何，都应说明论文与 pixelSplat 的比较不受此 bug 影响（两者实际行为相同）。",
+   "hint_zh": "按间隔过滤出新的 index json，用 dataset.view_sampler.index_path 指定；训练可用 python -m src.main +experiment=re10k data_loader.train.batch_size=4 trainer.max_steps=50001 dataset.view_sampler.warm_up_steps=25000，需先下载 UniMatch 权重到 checkpoints/。",
+   "concept_ids": [
+    "l-loss",
+    "d-mvs",
+    "n-generalizable",
+    "v-metrics"
+   ]
+  },
+  {
+   "title_zh": "面向 3D 临场：固定目标视角下的逐帧稳定性",
+   "level": "挑战",
+   "task_zh": "用 RE10K 测试场景模拟“固定阵列拍静态场景、逐帧推理”：固定一个目标相机（例如第 90 帧位姿），让输入帧对以 1 帧为步长滑动（第 t 与 t+60 帧，t=40…80），每次用 re10k.ckpt 重建并渲染同一目标视角，得到 41 帧。计算相邻帧差的平均绝对值、PSNR 随 t 的变化，并画 x–t 切片。再对每个输入视角的视差图做系数 0.6 的指数滑动平均（EMA），比较闪烁与 PSNR。",
+   "expected_zh": "场景是静止的，理想输出应当完全不变，但由于每帧独立推理、输入视角在变，渲染会出现可见的闪烁，弱纹理与画面边缘处最明显；EMA 能降低帧差，但对输入视角变化引起的系统性差异作用有限，还可能在视差变化处产生拖影。你应能说明 MVSplat 用于视频时为什么需要 Ha et al. 式的时间滤波或 Fuse-and-Refine 式的规范空间融合。",
+   "hint_zh": "可以仿照 assets/evaluation_index_re10k_video.json 的格式自己写一个 index（context 为两帧、target 为固定一帧），用 dataset.view_sampler.index_path 加载；EMA 需要跨帧保存状态，最简单的做法是在测试循环外逐帧调用编码器并手动修改 depth_predictor 的输出。",
+   "concept_ids": [
+    "v-temporal",
+    "v-metrics",
+    "f-prob",
+    "g-rig"
+   ]
+  }
+ ],
+ "glossary": [
+  {
+   "term_en": "Feed-forward 3D Gaussian Splatting",
+   "term_zh": "前馈式 3DGS",
+   "def_zh": "在大量场景上训练一个网络，测试时对新场景只做一次前向就输出一组 3D 高斯，不做逐场景优化。pixelSplat、MVSplat、GS-LRM、DepthSplat 都属于此类。"
+  },
+  {
+   "term_en": "Pixel-aligned Gaussians",
+   "term_zh": "像素对齐高斯",
+   "def_zh": "每个输入像素生成一个（或几个）高斯，中心约束在该像素的射线上，网络只需预测沿射线的深度及其余属性。总数为视角数 × 像素数。"
+  },
+  {
+   "term_en": "Plane sweep",
+   "term_zh": "平面扫描",
+   "def_zh": "在参考相机前放一组正对的平面，逐个假设“表面在这个深度”，把其他视角的内容按该平面投影过来比较。对平面而言投影就是平面诱导单应。"
+  },
+  {
+   "term_en": "Cost volume",
+   "term_zh": "代价体",
+   "def_zh": "对每个像素、每个候选深度存一个匹配分数的三维张量。MVSplat 的代价体是 1/4 分辨率上 128 个候选的特征点积，形状 64×64×128。"
+  },
+  {
+   "term_en": "Depth candidates / inverse-depth sampling",
+   "term_zh": "深度候选 / 逆深度采样",
+   "def_zh": "代价体离散化深度用的候选值。MVSplat 在 [1/far, 1/near] 上均匀取 128 个视差，近处密、远处稀。"
+  },
+  {
+   "term_en": "Feature warping",
+   "term_zh": "特征 warp",
+   "def_zh": "按候选深度与相对位姿把另一视角的特征图重采样到参考视角像素网格上（反投影、变换、投影、双线性采样），越界补零。"
+  },
+  {
+   "term_en": "Soft-argmin / softmax depth regression",
+   "term_zh": "softmax 深度回归",
+   "def_zh": "把代价沿深度维做 softmax 得到概率，再对候选值求期望，得到可微、亚格点精度的深度。MVSplat 代码是对视差候选求期望。"
+  },
+  {
+   "term_en": "Matching confidence",
+   "term_zh": "匹配置信度",
+   "def_zh": "softmax 分布的最大概率，取值 [1/128, 1]。分布越尖锐越接近 1。base 模型直接把它当不透明度，完整模型把它作为深度细化网络的输入。"
+  },
+  {
+   "term_en": "Multi-view Transformer",
+   "term_zh": "多视角 Transformer",
+   "def_zh": "对多张图的特征交替做 self-attention 与 cross-attention，使特征在匹配之前就包含其他视角的信息。MVSplat 用 6 块，结构来自 UniMatch/GMFlow。"
+  },
+  {
+   "term_en": "Cross-view attention",
+   "term_zh": "跨视角注意力",
+   "def_zh": "query 来自一个视角、key/value 来自其他视角的注意力。MVSplat 在骨干 Transformer 与两个 U-Net 的最低分辨率处都用到，参数与视角数无关。"
+  },
+  {
+   "term_en": "Swin window attention / shifted window",
+   "term_zh": "Swin 局部窗口注意力 / 移位窗口",
+   "def_zh": "把特征图切成若干窗口，只在窗口内做注意力以降低计算；相邻层把窗口错开半格，让信息跨窗口传播。MVSplat 切成 2×2 个窗口。"
+  },
+  {
+   "term_en": "UniMatch / GMFlow",
+   "term_zh": "UniMatch / GMFlow",
+   "def_zh": "统一光流、双目与深度估计的匹配框架（TPAMI 2023）及其前身（CVPR 2022）。MVSplat 的 CNN、Transformer 与 warp 代码来自这里，并用其 GMDepth 权重初始化。"
+  },
+  {
+   "term_en": "Cost volume refinement U-Net",
+   "term_zh": "代价体细化 U-Net",
+   "def_zh": "把代价体与特征拼接后送入的 128 通道 2D U-Net，在 16×16 处有 3 层跨视角注意力，外加 1×1 残差，用于处理弱纹理与单视角可见区域。"
+  },
+  {
+   "term_en": "Depth refinement",
+   "term_zh": "深度细化",
+   "def_zh": "以 RGB、上采样特征、粗视差与置信度为输入的 32 通道轻量 U-Net，输出残差视差与不透明度，修正低分辨率匹配带来的边缘误差。"
+  },
+  {
+   "term_en": "Union of per-view Gaussians",
+   "term_zh": "逐视角高斯并集",
+   "def_zh": "把各视角反投影得到的高斯直接合并为一个集合，不做去重与融合，代替传统 MVS 的深度图融合步骤。"
+  },
+  {
+   "term_en": "Spherical harmonics (SH) and SH mask",
+   "term_zh": "球谐系数与球谐掩码",
+   "def_zh": "用球谐函数表示随观察方向变化的颜色。MVSplat 预测 4 阶（25 个系数/通道），代码把 l 阶系数乘以 0.1·0.25^l；所用光栅化器只计算到 3 阶。"
+  },
+  {
+   "term_en": "Near / far planes",
+   "term_zh": "近 / 远平面",
+   "def_zh": "代价体深度候选的范围。RE10K、ACID 固定为 1 与 100，DTU 为数据集给出的 2.125 与 4.525；是模型的一部分，训练后不宜随意改动。"
+  },
+  {
+   "term_en": "RealEstate10K (RE10K)",
+   "term_zh": "RealEstate10K 数据集",
+   "def_zh": "YouTube 房产漫游视频及估计的相机参数，67,477 个训练场景、7,289 个测试场景，是前馈 NVS 的标准基准。"
+  },
+  {
+   "term_en": "ACID",
+   "term_zh": "ACID 数据集",
+   "def_zh": "无人机航拍的自然场景视频及相机参数，11,075 个训练场景、1,972 个测试场景。"
+  },
+  {
+   "term_en": "DTU",
+   "term_zh": "DTU 数据集",
+   "def_zh": "实验室转台拍摄的物体中心多视角数据集。MVSplat 只用于零样本测试：16 个场景、每个 4 个目标视角，输入固定为 2 或 3 台相机。"
+  },
+  {
+   "term_en": "Cross-dataset generalization",
+   "term_zh": "跨数据集泛化",
+   "def_zh": "在一个数据集上训练、不微调直接在另一个数据集上测试。MVSplat 用 RE10K→ACID、RE10K→DTU 来验证代价体的泛化优势。"
+  },
+  {
+   "term_en": "LPIPS",
+   "term_zh": "学习式感知图像块相似度",
+   "def_zh": "在预训练网络特征空间比较两张图的距离，越低越好。MVSplat 既用它评测，也以 0.05 的权重（VGG 版）作为训练损失。"
+  }
+ ],
+ "fixes": [
+  {
+   "location": "paper.citation.venue",
+   "problem": "DOI 标为“未能核对”；并把 arXiv v2 断言为 camera-ready 版本，缺乏依据。",
+   "fix": "补上 DOI 10.1007/978-3-031-72664-4_21、论文集 Part XXI、pp. 370–386；v2 只写作 arXiv v2，不再断言为 camera-ready。",
+   "evidence": "WebSearch “MVSplat … ECCV 2024 doi 10.1007” → link.springer.com/chapter/10.1007/978-3-031-72664-4_21（Proceedings Part XXI，pp. 370–386）；PDF 第 1 页页脚 arXiv:2403.14627v2 18 Jul 2024，fitz 读出 23 页"
+  },
+  {
+   "location": "paper.tldr_zh",
+   "problem": "pixelSplat 25.89 是其 arXiv 旧版数字；pixelSplat camera-ready 与官方仓库已更新为 26.09，MVSplat 论文（含 2024-07 的 v2）仍用旧数字，领先幅度被放大。",
+   "fix": "注明 25.89 为旧版，并给出新版 26.09 与约 0.3 dB 的差距。",
+   "evidence": "scratchpad/repos/pixelsplat/README.md:9-20（Camera-ready Updates 表：re10k old 25.89/0.858/0.142 → new 26.09/0.863/0.136；acid old 28.14/0.839/0.150 → new 28.27/0.843/0.146）"
+  },
+  {
+   "location": "paper.pipeline_zh[4].detail",
+   "problem": "把 Table B 的 0.038 s 当作“编码时间”，与 Table 1 的 0.043 s 相减得“约少 5 ms”；Table B 只写 Time (s)，未说明是否含渲染。",
+   "fix": "改为“约 5–6 ms 的粗略推算”，并注明 Table B 时间口径不明。",
+   "evidence": "PDF p.18 Table B：列名 “Time (s)”，MVSplat (w/ Swin) 0.038；p.8 Table 1 表注：Running time includes both encoder and render；p.10 正文 encoder 0.043 s"
+  },
+  {
+   "location": "paper.system_perf[0].value",
+   "problem": "未说明 pixelSplat 0.104 s 的来源；撰写 agent 列为未核实项。",
+   "fix": "补充 pixelSplat 论文自报编码 0.102 s、渲染 0.002 s（0.102+0.002=0.104，与 MVSplat 表中合计一致），而 MVSplat 正文写渲染 0.0025 s；是否重测仍未说明。",
+   "evidence": "WebSearch “pixelSplat Table 1 inference time encode 0.102 render 0.002” → pixelSplat Table 1 编码 0.102 s、渲染 0.002 s；站内 anchor_pixelsplat.json system_perf 同；MVSplat PDF p.10 “(0.0015s vs. 0.0025s)”"
+  },
+  {
+   "location": "paper.system_perf[3].value",
+   "problem": "同上：把 Table B 的时间当作编码时间做精确相减。",
+   "fix": "改为口径不明的粗略推算（约 5–6 ms）。",
+   "evidence": "PDF p.18 Table B"
+  },
+  {
+   "location": "paper.system_perf[4].value",
+   "problem": "“batch 14 时需要单张 80 GB A100”把作者的训练配置说成硬件需求，无依据。",
+   "fix": "改为“作者在 80 GB A100 上以 batch 14 训练”，补 README 的多卡说明与代码中的峰值显存记录。",
+   "evidence": "repos/mvsplat/README.md:123 “Our models are trained with a single A100 (80GB) GPU. They can also be trained on multiple GPUs with smaller RAM…”；src/misc/benchmarker.py:30-33"
+  },
+  {
+   "location": "paper.results_zh[0].finding",
+   "problem": "未指出 pixelSplat 基线是旧版数字，也未提到约 3% 的目标帧就是输入帧。",
+   "fix": "补充 pixelSplat camera-ready 版 26.09/0.863/0.136 及按新版的差距（0.30 dB），以及 583/19,422 的统计。",
+   "evidence": "scratchpad/repos/pixelsplat/README.md:9-20（Camera-ready Updates 表：re10k old 25.89/0.858/0.142 → new 26.09/0.863/0.136；acid old 28.14/0.839/0.150 → new 28.27/0.843/0.146）；python 统计 assets/evaluation_index_re10k.json：19422 个目标中 583 个在 context 中；WebSearch “Fuse-and-Refine Table RealEstate10K MVSplat 26.39 pixelSplat 26.09”"
+  },
+  {
+   "location": "paper.results_zh[1].finding",
+   "problem": "ACID 对比同样用的是 pixelSplat 旧版 28.14。",
+   "fix": "补充新版 28.27/0.843/0.146：MVSplat PSNR 反低 0.02 dB。",
+   "evidence": "scratchpad/repos/pixelsplat/README.md:9-20（Camera-ready Updates 表：re10k old 25.89/0.858/0.142 → new 26.09/0.863/0.136；acid old 28.14/0.839/0.150 → new 28.27/0.843/0.146）"
+  },
+  {
+   "location": "paper.results_zh[2].finding",
+   "problem": "“零样本超过 ACID 上训练的 pixelSplat”只对旧版数字成立；且未发现 Table 2 表注把 MVSplat 的 SSIM/LPIPS 写成了 pixelSplat 的。",
+   "fix": "注明只对旧版成立，新版 28.27 更高；指出表注笔误。",
+   "evidence": "PDF p.11 Table 2 表注 “pixelSplat’s ACID trained model (PSNR: 28.14, SSIM: 0.843, LPIPS: 0.144) reported in Tab. 1”；p.8 Table 1：pixelSplat ACID 28.14/0.839/0.150，MVSplat 28.25/0.843/0.144；scratchpad/repos/pixelsplat/README.md:9-20（Camera-ready Updates 表：re10k old 25.89/0.858/0.142 → new 26.09/0.863/0.136；acid old 28.14/0.839/0.150 → new 28.27/0.843/0.146）"
+  },
+  {
+   "location": "paper.results_zh[3].finding",
+   "problem": "把数据集提供的 near/far 说成“真实深度范围”，措辞过强。",
+   "fix": "改为“数据集提供的深度范围”，并注明 pixelSplat 的设置未说明。",
+   "evidence": "PDF p.23 附录 C：“for DTU, we set them to 2.125 and 4.525 as provided by the dataset”；config/experiment/dtu.yaml near 2.125 far 4.525"
+  },
+  {
+   "location": "paper.ablations_zh[2]",
+   "problem": "“报告的是验证曲线上的最佳值”是推断，论文只说报告“best performance”，未说明挑选方式。",
+   "fix": "改为引用论文原话，并以发布权重名 *_best.ckpt 和代码中 val 读 test 数据作为证据。",
+   "evidence": "PDF p.12 Table 3 表注 “hence we report its best performance”；more_commands.sh “re10k_worefine_wobbcrossattn_best.ckpt”；src/dataset/dataset_re10k.py:247-252"
+  },
+  {
+   "location": "paper.ablations_zh[8]",
+   "problem": "“所有消融都是单次训练”无法从论文或代码证实。",
+   "fix": "改为“论文没有报告多次训练的方差”。",
+   "evidence": "PDF §4.3 与附录 A 均无方差或多种子说明"
+  },
+  {
+   "location": "paper.limitations_stated_zh[3]",
+   "problem": "“w/o cross-view attention 变体会过拟合”是消融结论，不是作者承认的方法局限。",
+   "fix": "删除该条（已在 ablations_zh 中）。",
+   "evidence": "PDF §5 Limitations 与附录 A Limitation 段只列反光/非朗伯表面、训练数据多样性和社会影响"
+  },
+  {
+   "location": "paper.limitations_unstated_zh[0]",
+   "problem": "“不含代价体本身”容易被读成高斯头与代价体无关；实际上代价体信息经粗视差、置信度和深度细化 U-Net 间接进入。",
+   "fix": "改为“不直接读取代价体，信息间接进入”。",
+   "evidence": "src/model/encoder/costvolume/depth_predictor_multiview.py:349-357（refine_unet 输入含 fullres_disps、pdf_max；raw_gaussians_in=[refine_out, images, proj_feat_in_fullres]）"
+  },
+  {
+   "location": "paper.limitations_unstated_zh[1]",
+   "problem": "“绝大多数”没有给出比例；“论文把结果当作同分布测试来报告”属于替作者定性；未提到 pixelSplat README 与 GitHub issue 已记录此 bug。",
+   "fix": "给出 92% 的统计，改为“论文没有提到这一差异”，补 pixelSplat README 与 issue #93。",
+   "evidence": "python 统计 assets/evaluation_index_{re10k,acid}.json：间隔 >45 的比例 0.921 / 0.919；src/dataset/view_sampler/view_sampler_bounded.py:60-62；repos/pixelsplat/README.md:130（Notes on Bugs）；GitHub 搜索 donydchen/mvsplat issues → #93 “Critical bug: View sampling incorrectly limits max_gap to min_gap”，2025-02-27，open"
+  },
+  {
+   "location": "paper.limitations_unstated_zh[2]",
+   "problem": "把“按验证曲线挑最佳步”写成确定事实，论文未说明挑选方式。",
+   "fix": "改为有证据的表述（论文原话 + 权重名 + 代码中 val=test）。",
+   "evidence": "PDF p.12 Table 3 表注；more_commands.sh；src/dataset/dataset_re10k.py:247-252"
+  },
+  {
+   "location": "paper.limitations_unstated_zh[4]",
+   "problem": "“可以用细化残差部分补偿”是未经验证的推断；未提到已有 GitHub issue 独立报告了这一不一致。",
+   "fix": "改为“能否补偿未经验证”，补 issue #106。",
+   "evidence": "src/model/encoder/costvolume/depth_predictor_multiview.py:38-44（K^{-1}[u,v,1]·depth，z 深度）；src/geometry/projection.py:99-105（方向单位化）；gaussian_adapter.py:84-85；GitHub 搜索 → donydchen/mvsplat#106 “Discrepancy: Cost-Volume build with z-depth but final depth is euclidean”，2026-01-06，open"
+  },
+  {
+   "location": "paper.limitations_unstated_zh[5]",
+   "problem": "“真实深度范围”措辞过强；未指出 pixelSplat 基线为旧版数字、目标帧含输入帧。",
+   "fix": "改为“数据集提供的深度范围”，补两点。",
+   "evidence": "scratchpad/repos/pixelsplat/README.md:9-20（Camera-ready Updates 表：re10k old 25.89/0.858/0.142 → new 26.09/0.863/0.136；acid old 28.14/0.839/0.150 → new 28.27/0.843/0.146）；assets/evaluation_index_re10k.json 统计 583/19422"
+  },
+  {
+   "location": "paper.lineage.predecessors[Splatter Image]",
+   "problem": "url 用 GitHub 仓库代替 arXiv（撰写 agent 未查到 arXiv 号）；“只处理单视角”过于绝对。",
+   "fix": "url 改为 https://arxiv.org/abs/2312.13150；改为“主要做单视角、物体级”。",
+   "evidence": "WebSearch “Splatter Image … arXiv 2312.13150” → arxiv.org/abs/2312.13150（Szymanowicz, Rupprecht, Vedaldi；摘要称可通过 cross-view attention 接受多张输入）"
+  },
+  {
+   "location": "paper.lineage.predecessors[ENeRF]",
+   "problem": "MVSplat 未引用 ENeRF，却写成“把这条思路搬到了高斯光栅化上”，像是继承关系。",
+   "fix": "标明是本导读的类比。",
+   "evidence": "PDF 参考文献 [1]–[54] 中无 ENeRF（Lin et al.）"
+  },
+  {
+   "location": "paper.lineage.successors[DepthSplat]",
+   "problem": "参数量只给 MODEL_ZOO 口径，与站内 DepthSplat 精读的“354M”容易被误认为冲突。",
+   "fix": "注明 360M 为 MODEL_ZOO 数字、论文为 354M。",
+   "evidence": "repos/depthsplat/MODEL_ZOO.md；anchor_depthsplat.json system_perf[0]"
+  },
+  {
+   "location": "paper.lineage.successors[LVSM]",
+   "problem": "写成“两个数字来自各自论文”，但 LVSM 的表中本身就列有 MVSplat 26.39。",
+   "fix": "改为 LVSM 表中直接对比，差距约 3.3 dB。",
+   "evidence": "anchor_lvsm.json results_zh（“对比：GS-LRM 28.10/0.892/0.114，MVSplat 26.39 …”）"
+  },
+  {
+   "location": "paper.lineage.successors[LGTM]",
+   "problem": "只写“2026”，未给出会议。",
+   "fix": "补为 ICLR 2026。",
+   "evidence": "WebSearch “Less Gaussians, Texture More … arXiv 2603.25745” → arxiv.org/pdf/2603.25745 首页 “Published as a conference paper at ICLR 2026”"
+  },
+  {
+   "location": "paper.lineage.successors[Fuse-and-Refine]",
+   "problem": "写“是否与 MVSplat 直接比较未核实”。",
+   "fix": "据两次检索摘要，其 RE10K 表列有 MVSplat 26.39 与 pixelSplat 26.09。",
+   "evidence": "WebSearch “Fuse-and-Refine … RealEstate10K MVSplat DepthSplat comparison table”与“… MVSplat 26.39 pixelSplat 26.09 GS-LRM 28.10”两次返回一致"
+  },
+  {
+   "location": "paper.lineage.successors[ReSplat]",
+   "problem": "“它同时回应了 MVSplat 的两个问题”是解读，写成了事实。",
+   "fix": "改为“可以看作”。",
+   "evidence": "repos/mvx_cvg_resplat/README.md（未提 MVSplat 的这两个问题，只在致谢中列出 MVSplat）"
+  },
+  {
+   "location": "paper.key_design_choices_zh[3].rationale",
+   "problem": "“会自然变得更透明，减少漂浮物”是没有实验支撑的因果断言。",
+   "fix": "改为作者动机，注明未单独验证。",
+   "evidence": "PDF §3.2 “Opacity α” 只给物理直觉；Table 3、附录 A 无不透明度来源的消融"
+  },
+  {
+   "location": "paper.training_zh",
+   "problem": "“报告的是验证曲线上的最佳步”为推断；bug 缺少外部佐证。",
+   "fix": "改为论文原话加权重名；补 pixelSplat README 与 issue #93。",
+   "evidence": "PDF p.12 Table 3 表注；more_commands.sh；repos/pixelsplat/README.md:130；donydchen/mvsplat#93"
+  },
+  {
+   "location": "story_zh 第 5–6 段",
+   "problem": "“比 pixelSplat 高 0.5 dB”“零样本比 ACID 上训练的 pixelSplat 还略好”都只对 pixelSplat 旧版数字成立；DTU 的 near/far 被说成“真实深度范围”。",
+   "fix": "注明旧版/新版数字（26.09、28.27）；改为“数据集提供的深度范围”。",
+   "evidence": "scratchpad/repos/pixelsplat/README.md:9-20（Camera-ready Updates 表：re10k old 25.89/0.858/0.142 → new 26.09/0.863/0.136；acid old 28.14/0.839/0.150 → new 28.27/0.843/0.146）；PDF p.23 附录 C"
+  },
+  {
+   "location": "walkthrough.mv1.pitfalls_zh",
+   "problem": "未提到约 3% 的目标帧就是输入帧；“真实深度范围”措辞过强。",
+   "fix": "补 583/19,422；改为“数据集提供的深度范围”。",
+   "evidence": "assets/evaluation_index_re10k.json 统计；config/experiment/dtu.yaml"
+  },
+  {
+   "location": "walkthrough.mv3.plain_zh",
+   "problem": "把 x + LN(f(x)) 的结构称为 post-norm；post-norm 通常指 LN(x + f(x))。",
+   "fix": "改为准确描述。",
+   "evidence": "src/model/encoder/backbone/multiview_transformer.py:407-414（message=norm1(merge(attn)); message=norm2(mlp(cat)); return source+message）"
+  },
+  {
+   "location": "walkthrough.mv6.plain_zh",
+   "problem": "“在近处更重要的场景里通常更安全”是无依据的推断。",
+   "fix": "删去该判断，只保留可证实的事实。",
+   "evidence": "PDF §3.1 Eq. 6 与附录均无视差/深度期望的比较"
+  },
+  {
+   "location": "walkthrough.mv7.plain_zh / numbers_zh",
+   "problem": "把 Table B 的 0.038 s 当作编码时间精确相减。",
+   "fix": "改为口径不明的粗略推算 5–6 ms。",
+   "evidence": "PDF p.18 Table B；p.8 Table 1 表注"
+  },
+  {
+   "location": "walkthrough.mv8.plain_zh",
+   "problem": "只说“初始化时”颜色由 0 阶决定，没有指出 sh_mask 在每次前向都生效。",
+   "fix": "改为常驻掩码，并说明其影响。",
+   "evidence": "src/model/encoder/common/gaussian_adapter.py:40-46、76（forward 中 sh * self.sh_mask）"
+  },
+  {
+   "location": "walkthrough.mv8.pitfalls_zh",
+   "problem": "“网络可用细化残差部分补偿”未经验证；“不含代价体本身”容易被误读为高斯头与代价体无关。",
+   "fix": "改为“未经验证”并补 issue #106；改为“不直接读取，信息间接进入”。",
+   "evidence": "depth_predictor_multiview.py:349-357；donydchen/mvsplat#106"
+  },
+  {
+   "location": "walkthrough.mv9.plain_zh",
+   "problem": "“400–600 帧”与 1/0.0015 s≈667 帧不符。",
+   "fix": "改为 MVSplat 约 670、pixelSplat 约 400 帧/秒。",
+   "evidence": "PDF p.10：0.0015 s vs 0.0025 s；p.8 Table 1 表注 “∼500FPS”"
+  },
+  {
+   "location": "walkthrough.mv10.plain_zh / pitfalls_zh",
+   "problem": "“只用于挑选消融模型”“按验证曲线取最佳步”为推断；“多数”未量化；bug 缺少外部佐证。",
+   "fix": "改为有证据的表述，给出 92%，补 pixelSplat README 与 issue #93。",
+   "evidence": "dataset_re10k.py:247-252；more_commands.sh；assets 统计 0.921；repos/pixelsplat/README.md:130；donydchen/mvsplat#93"
+  },
+  {
+   "location": "walkthrough.mv11",
+   "problem": "未指出表中 pixelSplat 为旧版数字；pixelSplat 计时来源未交代。",
+   "fix": "在 plain/numbers/pitfalls/check_a 中补新版数字与按新版的差距；补 pixelSplat 自报的 0.102/0.002 s。",
+   "evidence": "scratchpad/repos/pixelsplat/README.md:9-20（Camera-ready Updates 表：re10k old 25.89/0.858/0.142 → new 26.09/0.863/0.136；acid old 28.14/0.839/0.150 → new 28.27/0.843/0.146）；anchor_pixelsplat.json system_perf[0-1]"
+  },
+  {
+   "location": "walkthrough.mv12",
+   "problem": "（a）自测答案说“w/o cost volume”只能从“每个视角自己的特征”猜深度，但该消融保留了骨干 cross-attention 和 U-Net 的跨视角注意力；（b）“零样本略高于 ACID 训练的 pixelSplat”只对旧版成立；（c）“单次训练”“在测试集曲线上挑最佳步”无依据；（d）未发现 Table 2 表注笔误。",
+   "fix": "逐项改正并补表注笔误。",
+   "evidence": "depth_predictor_multiview.py:162、294-295（wo_cost_volume 时 raw_correlation_in=feat01，仍进 corr_refine_net）；backbone_multiview.py:56（只有 wo_backbone_cross_attn 才去掉 cross-attn）；PDF p.11 Table 2 表注；scratchpad/repos/pixelsplat/README.md:9-20（Camera-ready Updates 表：re10k old 25.89/0.858/0.142 → new 26.09/0.863/0.136；acid old 28.14/0.839/0.150 → new 28.27/0.843/0.146）"
+  },
+  {
+   "location": "reading_experiments[0,1,3,6,7]",
+   "problem": "Table 1/2 的解读没有指出 pixelSplat 为旧版数字和 Table 2 表注笔误；“稳定优势”“只训练一次”“节省约 150K 步”“共同的弱点”措辞过强或无据。",
+   "fix": "补新版数字与表注笔误；相应措辞改为有依据的表述。",
+   "evidence": "scratchpad/repos/pixelsplat/README.md:9-20（Camera-ready Updates 表：re10k old 25.89/0.858/0.142 → new 26.09/0.863/0.136；acid old 28.14/0.839/0.150 → new 28.27/0.843/0.146）；PDF p.11 Table 2、p.19 Table D、p.20 Fig. B"
+  },
+  {
+   "location": "tradeoffs[1].gain_zh",
+   "problem": "“只多约 5 ms”为口径不明的精确相减。",
+   "fix": "改为约 5–6 ms 的粗略推算。",
+   "evidence": "PDF p.18 Table B"
+  },
+  {
+   "location": "faq[0,4,5]",
+   "problem": "“只多约 5 ms”口径不明；“真实深度范围”措辞过强；“说明差别主要就在这一处”是解读。",
+   "fix": "相应改写。",
+   "evidence": "PDF p.18 Table A/B；附录 C"
+  },
+  {
+   "location": "exercises[2,3,5].concept_ids",
+   "problem": "练习用了进阶专题 id（a-learned-mvs、a-ff-3dgs、a-telepresence-sys），规范规定进阶 id 只能用于 walkthrough[].concept_ids。",
+   "fix": "换成基础概念 id（i-psv、d-mvs、n-3dgs、g-rig）。",
+   "evidence": "deepread_spec.md 第 6 节；verify_ha.json、verify_quark.json 的 exercises 只用基础 id"
+  },
+  {
+   "location": "exercises[1].task_zh",
+   "problem": "占位模块列表不全，照做时导入 src 包会因缺少 colorspacious/svg/cv2/plyfile/imageio 报错（除非另行安装）。",
+   "fix": "补全与实测脚本一致的占位列表。",
+   "evidence": "scratchpad/probe_mv.py 第 3–4 行 mock 列表；本次重跑 probe_mv.py 2/3 得到 11,955,734 参数与 means [1,131072,3]/[1,196608,3]"
+  },
+  {
+   "location": "walkthrough.mv8.equations[2].explain_zh",
+   "problem": "称论文的 Σ=R(θ)ᵀdiag(s)R(θ) 与代码的 R diag(s)² Rᵀ “是同一件事的简写”，但两者转置位置和是否平方都不同。",
+   "fix": "改为“记号差异，以代码为准”。",
+   "evidence": "PDF p.7 §3.2 “Σ = R(θ)^T diag(s) R(θ)”；src/model/encoder/common/gaussians.py build_covariance（rotation @ scale @ scaleᵀ @ rotationᵀ）"
+  },
+  {
+   "location": "paper.lineage.predecessors[pixelSplat].note_zh",
+   "problem": "“PSNR 从 25.89 升到 26.39”未注明 25.89 是 pixelSplat 旧版数字。",
+   "fix": "补注 camera-ready 版为 26.09。",
+   "evidence": "scratchpad/repos/pixelsplat/README.md:9-20"
+  }
+ ],
+ "diagram": {
+  "nodes": [
+   {
+    "id": "in",
+    "col": 0,
+    "row": 1,
+    "t": "输入视角",
+    "s": "2×256² + 位姿",
+    "k": "mv1"
+   },
+   {
+    "id": "cnn",
+    "col": 1,
+    "row": 1,
+    "t": "CNN 特征",
+    "s": "1/4 分辨率 128 维",
+    "k": "mv2"
+   },
+   {
+    "id": "trf",
+    "col": 1,
+    "row": 0,
+    "t": "跨视角注意力",
+    "s": "6 层 Swin 窗口",
+    "k": "mv3"
+   },
+   {
+    "id": "cv",
+    "col": 2,
+    "row": 1,
+    "t": "平面扫描代价体",
+    "s": "128 个逆深度候选",
+    "k": "mv4",
+    "data": true
+   },
+   {
+    "id": "cvu",
+    "col": 3,
+    "row": 1,
+    "t": "代价体细化",
+    "s": "2D U-Net+跨视角",
+    "k": "mv5"
+   },
+   {
+    "id": "soft",
+    "col": 3,
+    "row": 0,
+    "t": "softmax 深度",
+    "s": "视差期望+置信度",
+    "k": "mv6"
+   },
+   {
+    "id": "ref",
+    "col": 4,
+    "row": 1,
+    "t": "深度细化",
+    "s": "RGB 引导的 U-Net",
+    "k": "mv7"
+   },
+   {
+    "id": "head",
+    "col": 4,
+    "row": 2,
+    "t": "高斯参数头",
+    "s": "尺度·旋转·SH·α",
+    "k": "mv8"
+   },
+   {
+    "id": "gs",
+    "col": 5,
+    "row": 1,
+    "t": "3D 高斯并集",
+    "s": "131K 个 · 光栅化",
+    "k": "mv9",
+    "data": true
+   },
+   {
+    "id": "loss",
+    "col": 5,
+    "row": 0,
+    "t": "光度训练",
+    "s": "MSE+0.05 LPIPS",
+    "k": "mv10"
+   },
+   {
+    "id": "eval",
+    "col": 5,
+    "row": 2,
+    "t": "评测与速度",
+    "s": "26.39 dB · 44 ms",
+    "k": "mv11"
+   },
+   {
+    "id": "gen",
+    "col": 2,
+    "row": 0,
+    "t": "泛化与消融",
+    "s": "RE10K→ACID/DTU",
+    "k": "mv12"
+   }
+  ],
+  "edges": [
+   [
+    "in",
+    "cnn"
+   ],
+   [
+    "cnn",
+    "trf"
+   ],
+   [
+    "trf",
+    "cv"
+   ],
+   [
+    "cv",
+    "cvu"
+   ],
+   [
+    "cvu",
+    "soft"
+   ],
+   [
+    "soft",
+    "ref"
+   ],
+   [
+    "ref",
+    "head"
+   ],
+   [
+    "head",
+    "gs"
+   ],
+   [
+    "ref",
+    "gs"
+   ],
+   [
+    "gs",
+    "loss"
+   ],
+   [
+    "gs",
+    "eval"
+   ],
+   [
+    "cv",
+    "gen"
+   ]
+  ],
+  "out_from": "gs",
+  "out": "任意视角新图像（256×256，约 1.5 ms/张）"
+ }
+}

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Quark 导读 · 3D Telepresence: a field guide</title>
-<meta name="description" content="先看问题。">
+<meta name="description" content="先看问题。远程临场（telepresence）或自由视点视频要求这样一件事：几台固定相机在拍，观众的头在动，系统要在每一帧、每一个观众视角上立刻合成一张照片级的新视角图像。">
 <meta name="color-scheme" content="light dark">
 
 <script>
@@ -787,6 +787,7 @@ figcaption svg { vertical-align: -1px; }
     }
     spec.edges.forEach(function (e) { svg.appendChild(sv("path", { class: "dedge" + (e.fb ? " fb" : ""), d: e.d, "marker-end": "url(#" + (e.fb ? "ahf-" : "ah-") + anchorKey + ")" })); });
     spec.nodes.forEach(function (n) {
+      n.k = n.k || n.step;
       svg.appendChild(step(n.k, [
         sv("rect", { class: n.data ? "data" : null, x: n.x, y: n.y, width: n.w, height: n.h, rx: 3 }),
         sv("text", { class: "k", x: n.x + 10, y: n.y + 16, text: n.k }),

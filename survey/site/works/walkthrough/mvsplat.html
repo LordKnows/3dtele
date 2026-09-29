@@ -1,0 +1,970 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MVSplat 导读 · 3D Telepresence: a field guide</title>
+<meta name="description" content="先看任务。给你同一个房间的两张照片，以及拍这两张照片时相机的内参和位姿，要求在一次前向计算里重建出整个场景的 3D 表示，之后从任意新位置渲染出照片级的图像。">
+<meta name="color-scheme" content="light dark">
+
+<script>
+  // Apply a saved light/dark choice before first paint; without one the page follows the system setting.
+  try { var t = localStorage.getItem("atlas-theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) { /* storage unavailable */ }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Serif+SC:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/lxgwwenkai-regular.css">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]] },
+    options: { skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code", "input", "select", "button"] },
+    svg: { fontCache: "global" },
+    startup: {
+      typeset: false,
+      ready: function () {
+        window.MathJax.startup.defaultReady();
+        if (typeof window.__atlasMathReady === "function") window.__atlasMathReady();
+      }
+    }
+  };
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js"></script>
+<style>
+/* Tufte-style layout for Chinese long-form pages, after tufte-css (MIT, (c) 2014 Dave Liepmann; see LICENSE-tufte-css).
+   ET Book: MIT, (c) 2015 Dmitry Krasny, Bonnie Scranton, Edward Tufte (fonts/et-book/LICENSE).
+   ../../ is the page's path to the site root. */
+
+/* ---------- fonts: ET Book for Latin (self-hosted), Noto Serif SC for Chinese text, LXGW WenKai for notes ---------- */
+/* ET Book leaves curly quotes, dashes and ellipses to the Chinese font so they keep full width in Chinese prose,
+   and single guillemets (› ‹), which it lacks. */
+@font-face { font-family: "et-book"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-roman-line-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book"; font-weight: 400; font-style: italic; font-display: swap;
+  src: url("../../fonts/et-book/et-book-display-italic-old-style-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book"; font-weight: 700; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-bold-line-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+/* Notes pair Latin italic with upright Kai (the "italic ↔ 楷体" rule): the italic cut is registered as an upright
+   family so the browser never slants the Chinese glyphs. */
+@font-face { font-family: "et-book-note"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-display-italic-old-style-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book-osf"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-roman-old-style-figures.woff") format("woff"); }
+
+:root {
+  --bg: #fffff8;
+  --ink: #111111;
+  --ink-2: #3c3c36;
+  --muted: #74746a;
+  --rule: #d8d6c8;
+  --rule-2: #b9b6a4;
+  --accent: #a8322d;
+  --serif: "et-book", "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", Palatino, Georgia, serif;
+  --note: "et-book-note", "LXGW WenKai", "Kaiti SC", "STKaiti", "KaiTi", "et-book", serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --side: clamp(12rem, 21vw, 17rem);
+  --gap: 2.75rem;
+  --main: calc(100% - var(--side) - var(--gap));
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161614; --ink: #e2e0d6; --ink-2: #c3c1b6; --muted: #979589; --rule: #34332e; --rule-2: #4d4b44; --accent: #e8836f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161614; --ink: #e2e0d6; --ink-2: #c3c1b6; --muted: #979589; --rule: #34332e; --rule-2: #4d4b44; --accent: #e8836f;
+  color-scheme: dark;
+}
+
+/* ---------- base ---------- */
+* { box-sizing: border-box; }
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--serif); font-size: 1.15625rem; line-height: 1.85;
+  font-kerning: normal; font-variant-numeric: lining-nums;
+  /* Space between Chinese and Latin text where the source has none; squeeze adjacent CJK punctuation
+     (text-spacing-trim applies the fonts' halt / chws features). Browsers without them keep the source spacing. */
+  text-autospace: normal; text-spacing-trim: normal;
+  overflow-wrap: break-word;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+[hidden] { display: none !important; }
+a { color: inherit; text-decoration-line: underline; text-decoration-thickness: 1px; text-underline-offset: .18em; text-decoration-color: var(--rule-2); }
+a:hover { color: var(--accent); text-decoration-color: currentColor; }
+a:focus-visible, button:focus-visible, summary:focus-visible, label:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.skip { position: absolute; left: -999px; top: 0; }
+.skip:focus { left: 1rem; top: .5rem; background: var(--bg); padding: .2rem .5rem; z-index: 60; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+p { margin: 0; }
+p + p { margin-top: .9em; }
+
+/* ---------- top bar ---------- */
+.topbar { border-bottom: 1px solid var(--rule); }
+.bar-in { max-width: 67rem; margin: 0 auto; padding: 0 1.5rem; display: flex; align-items: center; gap: 2.2rem; min-height: 3.1rem; }
+.brand { font-size: 1rem; text-decoration: none; letter-spacing: .02em; white-space: nowrap; }
+.site-nav { flex: 1; }
+.menus { list-style: none; margin: 0; padding: 0; display: flex; gap: 1.6rem; }
+.menu { position: relative; }
+.menu-btn, .theme-btn, .burger {
+  font-family: "et-book", var(--serif); font-variant-caps: all-small-caps; letter-spacing: .08em; font-size: 1.12rem;
+  color: var(--ink-2); line-height: 3.1rem;
+}
+.menu-btn:hover, .theme-btn:hover, .burger:hover, .menu.open > .menu-btn { color: var(--accent); }
+.menu.cur > .menu-btn { color: var(--ink); box-shadow: inset 0 -1px 0 var(--ink); }
+.drop {
+  display: none; position: absolute; left: -1rem; top: 100%; z-index: 40; min-width: 13rem;
+  list-style: none; margin: 0; padding: .45rem 0; background: var(--bg); border: 1px solid var(--rule);
+}
+.menu.open > .drop { display: block; }
+.drop a { display: block; padding: .15rem 1rem; text-decoration: none; font-size: 1.02rem; color: var(--ink-2); white-space: nowrap; }
+.drop a:hover, .drop a:focus-visible { color: var(--accent); }
+.drop a.cur { color: var(--ink); }
+.drop a.cur::before { content: "›"; position: absolute; margin-left: -.7rem; color: var(--accent); }
+.theme-btn { margin-left: auto; }
+.burger { display: none; }
+
+/* ---------- article column + margin ---------- */
+main { display: block; }
+.art { max-width: 67rem; margin: 0 auto; padding: 2.6rem 1.5rem 3rem; counter-reset: sidenote-counter; }
+.art > *, .art section > * { width: var(--main); }
+.art > section { width: 100%; }
+.art .fullwidth { width: 100%; }
+section { padding-top: .6rem; }
+
+.crumbs { font-size: .86rem; color: var(--muted); letter-spacing: .01em; }
+.crumbs a { color: var(--muted); text-decoration: none; }
+.crumbs a:hover { color: var(--accent); }
+.crumbs .sep { margin: 0 .45em; color: var(--rule-2); }
+h1, h2, h3 { font-family: var(--serif); color: var(--ink); text-wrap: balance; }
+h1 { font-size: 2.3rem; font-weight: 400; line-height: 1.3; margin: .9rem 0 0; letter-spacing: .01em; }
+.subtitle { font-family: "et-book", var(--note); font-style: italic; font-size: 1.45rem; line-height: 1.3; color: var(--ink-2); margin-top: .35rem; }
+.meta { font-size: .92rem; color: var(--muted); margin-top: 1.1rem; }
+.meta a { color: var(--muted); }
+h2 { font-size: 1.42rem; font-weight: 600; line-height: 1.4; margin: 2.6rem 0 .9rem; }
+h3 { font-size: 1.12rem; font-weight: 600; line-height: 1.5; margin: 1.8rem 0 .5rem; }
+h3 .used { font-family: var(--note); font-weight: 400; font-size: .86rem; color: var(--muted); margin-left: .6em; }
+
+.epigraph { margin: 2.2rem 0 .6rem; }
+.epigraph blockquote { margin: 0; padding: 0 0 0 1.6rem; border-left: 1px solid var(--rule-2); }
+.epigraph p { font-family: var(--note); font-size: 1.12rem; line-height: 1.85; color: var(--ink-2); }
+
+.art ol, .art ul { margin: .6rem 0 0; padding-left: 1.6em; }
+.art li + li { margin-top: .45rem; }
+li::marker { font-family: "et-book-osf", var(--serif); color: var(--muted); }
+
+/* Equations: display math in the text column, scrolling sideways on narrow screens. */
+.eqs { display: block; }
+.eq + .eq { margin-top: 1.6rem; }
+.math-block { overflow-x: auto; overflow-y: hidden; margin: .4rem 0 .6rem; padding: .2rem 0; font-size: 1rem; }
+.math-block mjx-container { margin: 0 !important; }
+
+/* ---------- side notes & margin notes (floated into the right margin) ---------- */
+.sidenote, .marginnote {
+  float: right; clear: right; position: relative;
+  width: var(--side); margin-right: calc(-1 * (var(--side) + var(--gap))); margin-top: .3rem; margin-bottom: .6rem;
+  font-family: var(--note); font-size: .88rem; line-height: 1.6; color: var(--ink-2); text-align: left;
+  font-style: normal; font-weight: 400; letter-spacing: 0;
+}
+h3 .sidenote { margin-top: .2rem; }
+.sidenote-number { counter-increment: sidenote-counter; }
+.sidenote-number::after, .sidenote::before { font-family: "et-book-osf", var(--serif); position: relative; vertical-align: baseline; }
+.sidenote-number::after { content: counter(sidenote-counter); font-size: .75rem; top: -.55em; left: .08em; color: var(--ink-2); }
+.sidenote::before { content: counter(sidenote-counter) " "; font-size: .8rem; top: -.4em; }
+.note-label { font-family: var(--serif); font-weight: 600; font-size: .82rem; color: var(--muted); margin-right: .5em; }
+.marginnote .note-label { display: block; margin: 0 0 .1rem; }
+input.margin-toggle { display: none; }
+label.sidenote-number { display: inline; cursor: default; }
+label.margin-toggle:not(.sidenote-number) { display: none; }
+
+/* ---------- quiz, further reading, series ---------- */
+.quiz details { margin-top: .3rem; }
+.quiz summary { font-family: var(--note); font-size: .92rem; color: var(--muted); cursor: pointer; list-style: none; display: inline-block; }
+.quiz summary::-webkit-details-marker { display: none; }
+.quiz summary::before { content: "+ "; font-family: "et-book", var(--serif); }
+.quiz details[open] summary::before { content: "− "; }
+.quiz summary:hover { color: var(--accent); }
+.quiz details > p { margin-top: .3rem; padding-left: 1rem; border-left: 1px solid var(--rule); color: var(--ink-2); }
+
+/* Reference lists: a narrow label column (kind / year) and a hanging text column. */
+.art ul.refs { list-style: none; padding-left: 0; }
+.refs li { display: grid; grid-template-columns: 2.8rem minmax(0, 1fr); column-gap: .5rem; line-height: 1.6; }
+.refs li > :not(.kind):not(.yr) { grid-column: 2; }
+.refs .kind, .refs .yr { grid-column: 1; font-family: var(--note); font-size: .86rem; color: var(--muted); padding-top: .12rem; }
+.refs .yr { font-family: "et-book-osf", var(--serif); font-size: .95rem; padding-top: .05rem; }
+.refs .en { font-family: "et-book", var(--serif); font-style: italic; color: var(--muted); font-size: .92rem; line-height: 1.5; }
+.refs .gloss { font-family: var(--note); font-size: .88rem; color: var(--ink-2); margin-top: .1rem; }
+.art .refs li + li { margin-top: .75rem; }
+.art .papers li + li { margin-top: .35rem; }
+/* Without a label column the list is a plain stack (no grid, so nothing can land in a phantom second column). */
+.refs.noleft li { display: block; }
+.refs.wide-kind li { grid-template-columns: 6.2rem minmax(0, 1fr); }
+.refs .used { font-family: var(--note); font-size: .82rem; color: var(--muted); margin-left: .5em; }
+.refs.terms .plain-t { font-weight: 600; }
+.refs.terms .en { display: inline; margin-left: .6em; }
+.timeline li { line-height: 1.7; }
+.art .timeline li + li { margin-top: .4rem; }
+
+/* ---------- blocks: lede, run-in labels, notes ---------- */
+.lede { margin-top: 1.6rem; color: var(--ink-2); }
+.run-in { font-weight: 600; color: var(--ink); }
+p.note { font-family: var(--note); font-size: .9rem; color: var(--muted); margin-top: .1rem; }
+h2 .en, h3 .en { font-family: "et-book", var(--serif); font-style: italic; font-weight: 400; color: var(--muted); margin-left: .6em; font-size: .92em; }
+h2 a, h3 a { text-decoration-color: var(--rule); }
+.quiz-h { font-family: var(--note); font-size: .88rem; color: var(--muted); margin-top: 1.4rem; }
+.quiz-h + ol.quiz { margin-top: .2rem; }
+
+/* Index pages: a table of contents instead of a card grid. */
+.art ol.toc { list-style: none; padding-left: 0; margin-top: .4rem; }
+.art ol.toc > li + li { margin-top: .85rem; }
+.toc-t { line-height: 1.55; }
+.toc-t .en { font-family: "et-book", var(--serif); font-style: italic; color: var(--muted); margin-left: .6em; font-size: .95em; }
+.toc-meta { font-family: var(--note); font-size: .82rem; color: var(--muted); margin-left: .7em; white-space: nowrap; }
+.toc-s { font-family: var(--note); font-size: .9rem; line-height: 1.65; color: var(--ink-2); margin-top: .1rem; }
+.toc-lede { font-family: var(--note); color: var(--ink-2); font-size: .95rem; }
+h2.toc-h, h3.toc-h { margin-bottom: .3rem; }
+
+/* Tables: booktabs rules (top, under the header, bottom), no vertical lines, no fills. */
+.table-wrap { overflow-x: auto; margin: 1rem 0; }
+table.booktabs { border-collapse: collapse; width: 100%; font-size: .9rem; line-height: 1.6; border-top: 1.5px solid var(--ink); border-bottom: 1.5px solid var(--ink); }
+table.booktabs th { text-align: left; font-weight: 600; padding: .45rem .7rem .35rem 0; border-bottom: 1px solid var(--ink); white-space: nowrap; vertical-align: bottom; }
+table.booktabs td { padding: .45rem .9rem .45rem 0; vertical-align: top; border-top: 1px solid var(--rule); }
+table.booktabs tbody tr:first-child td { border-top: 0; }
+table.rank td { white-space: nowrap; font-variant-numeric: tabular-nums; }
+table.rank td:nth-child(2) { white-space: normal; }
+.art table.kv { border-collapse: collapse; margin: .6rem 0; font-size: .95rem; width: auto; }
+table.kv th { text-align: left; font-weight: 400; color: var(--muted); padding: .25rem 1.2rem .25rem 0; vertical-align: top; min-width: 5em; max-width: 12em; font-family: var(--note); }
+table.kv td { padding: .25rem 0; vertical-align: top; }
+
+/* Long articles: the table of contents sits at the top of the margin. */
+/* It sits in a full-width section, so it floats into the margin without a negative offset. */
+details.mtoc {
+  float: right; clear: right; width: var(--side); margin-right: 0; margin-bottom: 1rem;
+  font-family: var(--note); font-size: .86rem; line-height: 1.55; color: var(--ink-2);
+}
+details.mtoc summary { font-family: var(--serif); font-weight: 600; font-size: .82rem; color: var(--muted); list-style: none; cursor: default; }
+details.mtoc summary::-webkit-details-marker { display: none; }
+.art details.mtoc ol { list-style: none; padding: 0; margin: .3rem 0 0; }
+.art details.mtoc li + li { margin-top: .25rem; }
+details.mtoc a { text-decoration: none; }
+details.mtoc a:hover { text-decoration: underline; }
+
+/* Tools: search and filters with underlined inputs. */
+.tool { margin-top: 1rem; }
+.filters { display: flex; flex-wrap: wrap; gap: .6rem 1.6rem; align-items: baseline; font-family: var(--note); font-size: .92rem; color: var(--muted); }
+.filters label { display: inline-flex; gap: .5rem; align-items: baseline; }
+.filters input, .filters select {
+  font: inherit; color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid var(--rule-2); border-radius: 0;
+  padding: .15rem .1rem; min-width: 7rem;
+}
+.filters input[type="search"] { min-width: 14rem; }
+.filters select { max-width: 16rem; }
+.filters input:focus, .filters select:focus { outline: none; border-bottom-color: var(--accent); }
+.filters select option { background: var(--bg); color: var(--ink); }
+.filters .count { margin-left: auto; font-family: var(--mono); font-size: .8rem; }
+table.gl td.en { font-family: "et-book", var(--serif); width: 20%; }
+table.gl .abbr { color: var(--muted); }
+table.gl td.zh { white-space: nowrap; }
+table.gl td.def { color: var(--ink-2); min-width: 20rem; }
+table.gl td.c { font-size: .85rem; min-width: 9rem; padding-right: 0; }
+table.gl tr:target td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+table.db td.y { font-family: "et-book-osf", var(--serif); white-space: nowrap; }
+table.db td.t { min-width: 16rem; }
+table.db td.t small { display: block; color: var(--muted); font-size: .8rem; line-height: 1.45; margin-top: .15rem; }
+table.db td.tags { min-width: 7rem; font-family: var(--note); font-size: .8rem; color: var(--muted); }
+table.db td.tags span { display: block; }
+table.db .tier.milestone { color: var(--ink); font-weight: 600; }
+table.db td.s { min-width: 18rem; color: var(--ink-2); }
+table.db td.n { min-width: 12rem; font-size: .82rem; color: var(--ink-2); }
+
+/* Figures: the pipeline diagram and the timeline of classic papers, drawn in ink with one accent for interaction. */
+figure { margin: 1.4rem 0; }
+svg a { text-decoration: none; }
+.diagram-wrap, .lanes-wrap { position: relative; overflow-x: auto; }
+svg.diagram { width: 100%; min-width: 760px; height: auto; display: block; font-family: var(--note); }
+svg.diagram .dnode rect { fill: var(--bg); stroke: var(--ink-2); stroke-width: 1; }
+svg.diagram .dnode rect.data { stroke-dasharray: 4 3; }
+svg.diagram .dnode:hover rect, svg.diagram .dnode:focus rect { stroke: var(--accent); stroke-width: 1.5; }
+svg.diagram .dnode:focus { outline: none; }
+svg.diagram text { fill: var(--ink); }
+svg.diagram text.k { font-family: var(--mono); font-size: 10px; fill: var(--muted); }
+svg.diagram text.t { font-family: var(--serif); font-size: 13px; font-weight: 600; }
+svg.diagram text.s { font-size: 11px; fill: var(--ink-2); }
+svg.diagram .dedge { fill: none; stroke: var(--ink-2); stroke-width: 1; }
+svg.diagram .dedge.fb { stroke-dasharray: 4 3; }
+svg.diagram .dhead { fill: var(--ink-2); }
+svg.diagram .dloop { fill: none; stroke: var(--rule-2); stroke-dasharray: 2 3; }
+svg.diagram .dlabel { font-size: 12px; fill: var(--muted); }
+svg.diagram .dnote { font-size: 11px; fill: var(--muted); }
+svg.diagram a.dnode:hover .dnote { fill: var(--accent); }
+svg.lanes { width: 100%; min-width: 720px; height: auto; display: block; font-family: var(--note); }
+svg.lanes .grid { stroke: var(--rule); stroke-width: 1; }
+svg.lanes .axis { font-family: "et-book-osf", var(--serif); font-size: 12px; fill: var(--muted); }
+svg.lanes .lane-l { font-size: 12px; fill: var(--ink-2); }
+svg.lanes .brk { stroke: var(--muted); fill: none; }
+svg.lanes .hit { fill: transparent; }
+svg .dot { fill: var(--ink); }
+svg .dot.hollow { fill: var(--bg); stroke: var(--ink-2); stroke-width: 1.2; }
+svg.lanes a.m:hover .dot, svg.lanes a.m:focus .dot { fill: var(--accent); stroke: var(--accent); }
+svg.lanes a.m:focus { outline: none; }
+.vtip { position: absolute; z-index: 20; max-width: 20rem; padding: .45rem .7rem; background: var(--bg); border: 1px solid var(--rule-2); font-family: var(--note); font-size: .82rem; line-height: 1.5; pointer-events: none; }
+.vtip b { display: block; font-family: "et-book", var(--serif); font-weight: 400; font-size: .92rem; }
+.vtip small { display: block; color: var(--muted); }
+.vtip span { color: var(--accent); }
+figcaption { font-family: var(--note); font-size: .85rem; color: var(--muted); margin-top: .4rem; }
+figcaption svg { vertical-align: -1px; }
+
+.series { display: grid; grid-template-columns: 1fr auto 1fr; gap: 1rem; align-items: end; margin-top: 3.2rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: .98rem; }
+.series small { display: block; font-family: var(--note); font-size: .8rem; color: var(--muted); }
+.series .up { text-align: center; font-size: .88rem; }
+.series .up a { color: var(--muted); }
+.series .next { text-align: right; }
+
+.site-foot { max-width: 67rem; margin: 0 auto; padding: 1.2rem 1.5rem 2.5rem; font-size: .82rem; color: var(--muted); }
+.site-foot a { color: var(--muted); text-decoration: none; }
+
+/* ---------- hover preview ---------- */
+.xtip {
+  position: absolute; z-index: 50; max-width: min(22rem, calc(100vw - 16px)); padding: .55rem .8rem .6rem;
+  background: var(--bg); border: 1px solid var(--rule-2); color: var(--ink);
+  font-family: var(--note); font-size: .88rem; line-height: 1.6; pointer-events: none;
+}
+.xt-m { font-size: .76rem; color: var(--muted); }
+.xt-t { font-family: var(--serif); font-weight: 600; font-size: .95rem; line-height: 1.45; margin-top: .1rem; }
+.xt-e { font-family: "et-book", var(--serif); font-style: italic; color: var(--ink-2); line-height: 1.4; }
+.xt-s { margin-top: .35rem; color: var(--ink-2); }
+
+/* ---------- narrow screens: one column; notes fold behind their number or ⊕ ---------- */
+@media (max-width: 760px) {
+  body { font-size: 1.0625rem; line-height: 1.8; }
+  .bar-in { gap: 1rem; padding: 0 1rem; flex-wrap: wrap; }
+  .site-nav { order: 5; flex-basis: 100%; display: none; }
+  .topbar.nav-open .site-nav { display: block; }
+  .menus { flex-direction: column; gap: 0; padding-bottom: .6rem; }
+  .menu-btn { line-height: 2.4rem; width: 100%; text-align: left; }
+  .menu-btn::after { content: " +"; }
+  .menu.open > .menu-btn::after { content: " −"; }
+  .menu.cur > .menu-btn { box-shadow: none; }
+  .drop { position: static; border: 0; padding: 0 0 .4rem .9rem; min-width: 0; }
+  .drop a { padding: .2rem 0; white-space: normal; }
+  .burger { display: inline; }
+  .theme-btn { margin-left: auto; }
+  .art { padding: 1.6rem 1rem 2.4rem; }
+  .art > *, .art section > * { width: 100%; }
+  h1 { font-size: 1.85rem; }
+  .subtitle { font-size: 1.22rem; }
+  .epigraph blockquote { padding-left: 1rem; }
+  .epigraph p { font-size: 1.05rem; }
+  label.margin-toggle:not(.sidenote-number) { display: inline; cursor: pointer; color: var(--muted); font-family: "et-book", var(--serif); padding: 0 .15em; }
+  label.sidenote-number { cursor: pointer; }
+  .sidenote, .marginnote { display: none; }
+  .margin-toggle:checked + .sidenote, .margin-toggle:checked + .marginnote {
+    display: block; float: left; clear: both; width: 100%; margin: .6rem 0; padding-left: .8rem; border-left: 1px solid var(--rule-2);
+  }
+  .series { grid-template-columns: 1fr 1fr; }
+  .series .up { display: none; }
+  details.mtoc { float: none; width: 100%; margin: 0 0 1.2rem; padding-left: .8rem; border-left: 1px solid var(--rule-2); }
+  details.mtoc summary { cursor: pointer; }
+  details.mtoc summary::after { content: " +"; }
+  details.mtoc[open] summary::after { content: " −"; }
+  .filters { flex-direction: column; align-items: stretch; gap: .5rem; }
+  .filters label { justify-content: space-between; }
+  .filters input[type="search"], .filters input, .filters select { min-width: 0; flex: 1; }
+  .filters .count { margin-left: 0; }
+  .toc-meta { display: block; margin-left: 0; }
+  table.kv, table.kv tbody, table.kv tr, table.kv th, table.kv td { display: block; max-width: none; }
+  table.kv th { padding: .5rem 0 0; }
+}
+@media print {
+  .topbar, .site-foot, .series { display: none; }
+}
+
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<header class="topbar" id="topbar"></header>
+<main id="main"><article class="art"></article></main>
+<footer class="site-foot" id="site-foot"></footer>
+<script type="application/json" id="data">{"site": {"brand": "3D Telepresence: a field guide", "root": "../../", "path": "works/walkthrough/mvsplat.html", "nav": [{"key": "overview", "label": "Overview", "items": [["Introduction", "index.html"], ["Methodology", "overview/methodology.html"], ["How to use", "overview/how-to-use.html"]]}, {"key": "basics", "label": "Basics", "items": [["Routes", "basics/routes/index.html"], ["Foundations", "basics/foundations/index.html"], ["Advanced topics", "basics/advanced/index.html"], ["Classics", "basics/classics/index.html"], ["Glossary", "basics/glossary.html"]]}, {"key": "works", "label": "Works", "items": [["Papers", "works/papers/index.html"], ["Walkthrough", "works/walkthrough/index.html"], ["Field map", "works/field-map.html"], ["Sub areas", "works/areas/index.html"]]}, {"key": "future", "label": "Future", "items": [["Directions", "future/index.html"], ["Trends & Challenges", "future/trends.html"]]}], "navCur": "works", "navItem": "works/walkthrough/index.html", "crumbs": [["Works", ""], ["Walkthrough", "works/walkthrough/index.html"]], "date": "2026-09-28"}, "xref": {"adv-a-3dgs-ext": {"u": "basics/advanced/a-3dgs-ext.html", "t": "3D Gaussian Splatting 的扩展", "e": "Extensions of 3D Gaussian Splatting", "m": "Advanced topics", "s": "3DGS（Kerbl et al., SIGGRAPH 2023）把场景表示为数百万个带不透明度和 SH 颜色的各向异性 3D 高斯。"}, "adv-a-ff-3dgs": {"u": "basics/advanced/a-ff-3dgs.html", "t": "前馈 3DGS 与大重建模型", "e": "Feed-forward 3DGS & large reconstruction models", "m": "Advanced topics", "s": "3DGS（见 n-3dgs）渲染极快，但每个场景都要从 SfM 点出发优化几分钟到几十分钟，没法用在每帧都在变的临场通话中。"}, "adv-a-generalizable-ibr": {"u": "basics/advanced/a-generalizable-ibr.html", "t": "可泛化 NeRF 与学习式 IBR", "e": "Generalizable NeRF & learned IBR", "m": "Advanced topics", "s": "逐场景的 NeRF 需要几十上百张图和数小时的优化；传统 IBR（如 ULR，见 i-blending）速度快，但依赖稠密的视角或准确的代理几何。"}, "adv-a-learned-mvs": {"u": "basics/advanced/a-learned-mvs.html", "t": "学习式多视角立体与代价体", "e": "Learned MVS & cost volumes", "m": "Advanced topics", "s": "多视角立体（MVS）的任务是：已知 N 张图像的内外参（通常来自 SfM/COLMAP，见 g-sfm），为某个参考视角估计稠密深度图，再把多张深度图融合成点…"}, "adv-a-learned-stereo": {"u": "basics/advanced/a-learned-stereo.html", "t": "从深度立体匹配到立体基础模型", "e": "Deep stereo to stereo foundation models", "m": "Advanced topics", "s": "双目立体匹配处理的是一对已经做过立体校正（rectification）的左右图像。"}, "anchor-mvsplat": {"u": "works/papers/mvsplat.html", "t": "MVSplat 精读", "e": "MVSplat: Efficient 3D Gaussian Splatting from Sparse Multi-View Images", "m": "Papers · 论文精读", "s": "MVSplat 从 2 张（或更多）已知位姿的图像，一次前向预测像素对齐的 3D Gaussian，再用 3DGS 光栅化渲染新视角。"}, "concept-d-mvs": {"u": "basics/foundations/d-mvs.html", "t": "多视角立体（MVS）与平面扫描", "e": "Multi-view stereo & plane sweep", "m": "Foundations · M3 深度估计与三维重建", "s": "把双目推广到 N 个视角：先假设一组深度（一叠平面），把所有视角 warp 到参考视角或目标视角，看哪个深度上各视角的颜色或特征最一致。", "n": "多视角立体（MVS）与平面扫描"}, "concept-d-stereo": {"u": "basics/foundations/d-stereo.html", "t": "双目立体匹配：从 SGM 到 RAFT-Stereo", "e": "Stereo matching: from SGM to RAFT-Stereo", "m": "Foundations · M3 深度估计与三维重建", "s": "在校正后的左右图同一行上找对应像素得到视差 d，再用 Z=fb/d 换算成深度。", "n": "双目立体匹配"}, "concept-d-tsdf": {"u": "basics/foundations/d-tsdf.html", "t": "截断符号距离场（TSDF）与深度融合", "e": "Truncated signed distance fields & depth fusion", "m": "Foundations · M3 深度估计与三维重建", "s": "把每张深度图转成空间中各点到表面的有符号距离，截断到 ±τ 后按置信度在空间中加权平均，零等值面就是融合后的表面。", "n": "截断符号距离场（TSDF）与深度融合"}, "concept-f-image": {"u": "basics/foundations/f-image.html", "t": "数字图像：颜色、采样、插值与金字塔", "e": "Digital images: color, sampling, interpolation & pyramids", "m": "Foundations · M1 数学与图像基础", "s": "图像是对连续光场的离散采样。", "n": "数字图像"}, "concept-f-optim": {"u": "basics/foundations/f-optim.html", "t": "优化、鲁棒估计与梯度下降", "e": "Optimization, robust estimation & gradient descent", "m": "Foundations · M1 数学与图像基础", "s": "相机标定、光束法平差、立体匹配、网络训练，乃至 Quark 的网络结构本身，做的都是同一件事：定义一个误差，然后沿着让误差变小的方向迭代。", "n": "优化、鲁棒估计与梯度下降"}, "concept-f-prob": {"u": "basics/foundations/f-prob.html", "t": "概率、加权平均与递归滤波", "e": "Probability, weighted averaging & recursive filtering", "m": "Foundations · M1 数学与图像基础", "s": "多视角、多帧得到的深度都带有噪声，要把它们合成一个更可靠的估计，最好的办法是按置信度（方差的倒数）加权平均；把同样的想法用在时间轴上，就得到指数滑动平均（EMA）和卡尔曼滤波。", "n": "概率、加权平均与递归滤波"}, "concept-g-depth": {"u": "basics/foundations/g-depth.html", "t": "深度、视差与逆深度采样", "e": "Depth, disparity & inverse-depth sampling", "m": "Foundations · M2 相机与多视几何", "s": "双目中深度与视差成反比（Z = f·b/d），所以固定的像素匹配误差会变成随 Z² 增长的深度误差。", "n": "深度、视差与逆深度采样"}, "concept-g-epipolar": {"u": "basics/foundations/g-epipolar.html", "t": "对极几何、三角化与单应", "e": "Epipolar geometry, triangulation & homography", "m": "Foundations · M2 相机与多视几何", "s": "两台相机看同一个点时，该点在第二张图中只可能出现在一条极线上（x'ᵀF x = 0）；有了对应点就能三角化出 3D 位置；空间中的一个平面在两张图之间诱导的映射是一个 3×3 单应。", "n": "对极几何、三角化与单应"}, "concept-g-pinhole": {"u": "basics/foundations/g-pinhole.html", "t": "针孔相机模型：内参、外参、投影与反投影", "e": "Pinhole camera: intrinsics, extrinsics, projection & unprojection", "m": "Foundations · M2 相机与多视几何", "s": "针孔模型先用外参 [R|t] 把世界点变到相机坐标系，再用内参 K 投到像素；反过来，只有像素时只能确定一条射线，像素加上深度才能唯一确定一个 3D 点。", "n": "针孔相机模型"}, "concept-g-sfm": {"u": "basics/foundations/g-sfm.html", "t": "运动恢复结构（SfM）与光束法平差", "e": "Structure-from-Motion & bundle adjustment", "m": "Foundations · M2 相机与多视几何", "s": "SfM 只从一组照片出发，同时求出每台相机的内外参和一组稀疏 3D 点：先做特征匹配和几何验证，再逐步注册相机、三角化新点，并反复用光束法平差（BA）最小化重投影误差。", "n": "运动恢复结构（SfM）与光束法平差"}, "concept-i-psv": {"u": "basics/foundations/i-psv.html", "t": "平面扫描体与学习式视图合成", "e": "Plane-sweep volumes & learned view synthesis", "m": "Foundations · M5 基于图像的渲染（IBR）", "s": "平面扫描体（PSV）的做法是：把每张输入图按一组假设的深度平面重投影到目标相机（或参考相机），堆叠成“深度 × 高 × 宽 × 视角”的张量。", "n": "平面扫描体与学习式视图合成"}, "concept-l-attention": {"u": "basics/foundations/l-attention.html", "t": "注意力机制与 Transformer", "e": "Attention & Transformers", "m": "Foundations · M6 深度学习基础（3D 视觉视角）", "s": "注意力用 query 与一组 key 的缩放点积经 softmax 得到权重，再对 value 做加权平均。", "n": "注意力机制与 Transformer"}, "concept-l-cnn": {"u": "basics/foundations/l-cnn.html", "t": "卷积网络、残差块与 U-Net", "e": "CNNs, residual blocks & U-Net", "m": "Foundations · M6 深度学习基础（3D 视觉视角）", "s": "卷积用共享的小核在图像上滑动，提取局部特征；残差连接让深层网络容易训练；U-Net 用编码器下采样、解码器上采样和同尺度跳连，同时获得大感受野和像素级精度。", "n": "卷积网络、残差块与 U-Net"}, "concept-l-encoding": {"u": "basics/foundations/l-encoding.html", "t": "位置编码、傅里叶特征与射线编码", "e": "Positional encoding, Fourier features & ray encodings", "m": "Foundations · M6 深度学习基础（3D 视觉视角）", "s": "神经网络对低维坐标输入天生偏爱平滑函数，这叫频谱偏置。", "n": "位置编码、傅里叶特征与射线编码"}, "concept-l-iterative": {"u": "basics/foundations/l-iterative.html", "t": "学习式迭代细化与展开优化", "e": "Learned iterative refinement & unrolled optimization", "m": "Foundations · M6 深度学习基础（3D 视觉视角）", "s": "做法是把“渲染当前估计 → 与观测比较 → 更新”这个迭代优化过程，展开成固定的几步，每步的更新量由神经网络给出，整体端到端训练。", "n": "学习式迭代细化与展开优化"}, "concept-l-loss": {"u": "basics/foundations/l-loss.html", "t": "损失函数与训练实践", "e": "Losses & training practice", "m": "Foundations · M6 深度学习基础（3D 视觉视角）", "s": "损失函数决定网络眼中什么是“好图像”：L2 偏向均值（结果偏糊），L1 偏向中位数，SSIM 关注局部结构，LPIPS 用深度特征度量感知差异。", "n": "损失函数与训练实践"}, "concept-n-3dgs": {"u": "basics/foundations/n-3dgs.html", "t": "3D Gaussian Splatting（3D 高斯溅射）", "e": "3D Gaussian Splatting", "m": "Foundations · M7 神经渲染核心", "s": "3DGS 用数百万个带颜色、不透明度和各向异性协方差的 3D 高斯表示场景。", "n": "3D Gaussian Splatting（3D 高斯溅射）"}, "concept-n-generalizable": {"u": "basics/foundations/n-generalizable.html", "t": "可泛化 / 前馈式新视角合成", "e": "Generalizable / feed-forward novel view synthesis", "m": "Foundations · M7 神经渲染核心", "s": "可泛化（前馈式）新视角合成先在大量场景上训练一个网络，推理时只做一次前向：输入几张已标定的邻近视图，直接输出新视角图像，或者输出一个可以渲染的中间表示，全程不做逐场景优化。", "n": "可泛化 / 前馈式新视角合成"}, "concept-r-alpha": {"u": "basics/foundations/r-alpha.html", "t": "Alpha 合成与 over 算子", "e": "Alpha compositing & the over operator", "m": "Foundations · M4 图形学与渲染基础", "s": "alpha 表示一个像素被前景覆盖的比例。", "n": "Alpha 合成与 over 算子"}, "concept-r-appearance": {"u": "basics/foundations/r-appearance.html", "t": "反射模型、视角相关外观与光照", "e": "Reflectance, view-dependent appearance & lighting", "m": "Foundations · M4 图形学与渲染基础", "s": "表面颜色等于入射光乘以材质的反射分布（BRDF），再在半球上积分。", "n": "反射模型、视角相关外观与光照"}, "concept-r-raster": {"u": "basics/foundations/r-raster.html", "t": "光栅化、z-buffer 与点溅射（splatting）", "e": "Rasterization, z-buffer & point splatting", "m": "Foundations · M4 图形学与渲染基础", "s": "光栅化以图元为中心：把三角形或点投到屏幕上，再用 z-buffer 为每个像素保留最近的那个图元。", "n": "光栅化、z-buffer 与点溅射（splatting）"}, "concept-r-reps": {"u": "basics/foundations/r-reps.html", "t": "三维表示总览：点、网格、体素、隐式场、高斯", "e": "3D representations: points, meshes, voxels, implicit fields, Gaussians", "m": "Foundations · M4 图形学与渲染基础", "s": "点、网格、体素、隐式场、高斯和分层图像，在存储、渲染、编辑和时间一致性上各有取舍。", "n": "三维表示总览"}, "concept-v-metrics": {"u": "basics/foundations/v-metrics.html", "t": "图像与视频质量指标", "e": "Image & video quality metrics", "m": "Foundations · M8 视频、时间一致性、评测与系统", "s": "单帧指标（PSNR、SSIM、LPIPS、FLIP）回答“这一帧像不像真值”；时间与视角指标（warping error、tOF、TCC、STED、SDT/SDV、EPI）回答“误差随时间、随视点是否稳定”。", "n": "图像与视频质量指标"}, "guide-freesplat": {"u": "works/walkthrough/freesplat.html", "t": "FreeSplat 导读", "e": "", "m": "Walkthrough", "s": "设想你拿着手机在一个房间里慢慢走一圈，拍下几十张照片，希望一次前向推理就得到整个房间的 3D 表示，然后可以从任意位置去看。"}, "guide-gpsgaussian": {"u": "works/walkthrough/gpsgaussian.html", "t": "GPS-Gaussian 导读", "e": "", "m": "Walkthrough", "s": "先看场景。一个人站在一圈相机中间，8 台相机均匀摆在圆周上，相邻两台大约隔 45°。"}, "wpart-mvsplat-exercises": {"u": "works/walkthrough/mvsplat-exercises.html", "t": "MVSplat · 练习", "e": "", "m": "Walkthrough · MVSplat", "s": "6 道由浅入深的动手练习。"}, "wpart-mvsplat-experiments": {"u": "works/walkthrough/mvsplat-experiments.html", "t": "MVSplat · 阅读实验", "e": "", "m": "Walkthrough · MVSplat", "s": "论文里 8 组实验分别怎么读、真正说明了什么。"}, "wpart-mvsplat-faq": {"u": "works/walkthrough/mvsplat-faq.html", "t": "MVSplat · 常见问题", "e": "", "m": "Walkthrough · MVSplat", "s": "初读时最常问的 9 个问题。"}, "wpart-mvsplat-glossary": {"u": "works/walkthrough/mvsplat-glossary.html", "t": "MVSplat · 论文术语", "e": "", "m": "Walkthrough · MVSplat", "s": "读这篇论文会遇到的 22 个术语。"}, "wpart-mvsplat-tensor-trace": {"u": "works/walkthrough/mvsplat-tensor-trace.html", "t": "MVSplat · 张量追踪", "e": "", "m": "Walkthrough · MVSplat", "s": "逐阶段列出 16 个关键张量的形状与含义。"}, "wpart-mvsplat-tradeoffs": {"u": "works/walkthrough/mvsplat-tradeoffs.html", "t": "MVSplat · 设计权衡", "e": "", "m": "Walkthrough · MVSplat", "s": "7 个关键设计选择：换来了什么，付出了什么。"}}, "page": {"id": "guide-mvsplat", "head": {"title": "MVSplat 导读", "sub": "MVSplat: Efficient 3D Gaussian Splatting from Sparse Multi-View Images", "meta": ["12 步", {"k": "anchor-mvsplat", "t": "MVSplat 精读"}], "epigraph": "", "prereqs": [], "lede": "", "minutes": 42}, "body": [{"b": "sec", "h": null, "id": "story"}, {"b": "mtoc", "items": [{"u": "#walk-mvsplat-mv1", "t": "MV1 问题设定：2 张带位姿的 256×256 图像 → H×W×K 个像素对齐的 3D 高斯"}, {"u": "#walk-mvsplat-mv2", "t": "MV2 逐视角 CNN 特征：UniMatch 式浅层 ResNet，1/4 分辨率、128 通道"}, {"u": "#walk-mvsplat-mv3", "t": "MV3 多视角 Transformer：6 层 Swin 窗口 self + cross attention，每个视角对其余所有视角做交叉注意力"}, {"u": "#walk-mvsplat-mv4", "t": "MV4 代价体：在逆深度上均匀取 128 个候选，warp 另一视角特征并与本视角做点积相关"}, {"u": "#walk-mvsplat-mv5", "t": "MV5 代价体细化：128 通道 2D U-Net，16×16 处 3 层跨视角注意力，外加 1×1 残差"}, {"u": "#walk-mvsplat-mv6", "t": "MV6 softmax 深度：在 1/4 分辨率上对 128 个视差候选求期望，最大概率作为匹配置信度"}, {"u": "#walk-mvsplat-mv7", "t": "MV7 深度细化：特征上采样 4 倍 + 32 通道轻量 U-Net，输出残差视差与不透明度"}, {"u": "#walk-mvsplat-mv8", "t": "MV8 高斯参数：中心沿射线反投影、不透明度、尺度 [0.5,15]×像素足迹、四元数、4 阶球谐"}, {"u": "#walk-mvsplat-mv9", "t": "MV9 合并与渲染：各视角高斯直接取并集，3DGS 光栅化，渲染一张 256² 图约 1.5 ms"}, {"u": "#walk-mvsplat-mv10", "t": "MV10 训练：MSE + 0.05·LPIPS，Adam 2e-4，batch 14，300K 步，单张 A100；视角间隔实际为 25→45 帧"}, {"u": "#walk-mvsplat-mv11", "t": "MV11 评测协议与主结果：RE10K 26.39 dB、ACID 28.25 dB，0.044 s 与 12.0M 参数"}, {"u": "#walk-mvsplat-mv12", "t": "MV12 跨数据集泛化、几何质量与消融：RE10K→ACID 28.15、→DTU 13.94；去掉代价体掉 3.3 dB"}]}, {"b": "p", "t": "先看任务。给你同一个房间的两张照片，以及拍这两张照片时相机的内参和位姿，要求在一次前向计算里重建出整个场景的 3D 表示，之后从任意新位置渲染出照片级的图像。NeRF 和 3DGS 能把渲染做得又快又好，但它们要对每个场景做几分钟到几小时的优化，而且需要几十上百张图。“前馈式”方法反过来：在成千上万个场景上训练一个网络，测试时对新场景只跑一次前向。2023 年底的 pixelSplat 把这条路线和 3DGS 结合起来：网络为每个像素预测若干个 3D 高斯，渲染用光栅化，速度比逐像素体渲染的方法快几个数量级。\n\n问题出在高斯放在哪里。一个像素对应一条射线，高斯中心必须落在这条射线上的某个深度。pixelSplat 的做法是让网络看着经过极线 Transformer 增强的特征，直接输出这条射线上每个深度桶的概率，再从这个分布里采样深度。这等于要求网络从单个像素的特征“猜”出它离相机多远。MVSplat 的作者认为这件事本质上含糊：特征里并没有显式写着“我在 2.3 米处”。结果是 pixelSplat 的渲染图看着还行，底下的 3D 高斯却漂浮得到处都是，深度图满是噪点；原论文要额外做 5 万步带深度正则的微调才能得到像样的几何。\n\nMVSplat 的核心直觉来自多视角立体（MVS）这门老手艺：深度不该靠猜，而该靠“对”。假设某个像素的真实深度是 d，把另一张图的内容按深度 d 投影回来，两边应该长得一样；深度错了，就会对到别的东西上。所以作者在 1/4 分辨率的特征图上做平面扫描：在 near=1 到 far=100 之间按逆深度均匀取 128 个候选深度，对每个候选把另一视角的特征 warp 过来，与本视角特征做点积。这样得到一个“代价体”，每个像素有 128 个相似度分数，峰值所在就是最可能的表面位置。网络的任务从“回归深度”变成了“在 128 个候选里挑出匹配最好的”，这正是神经网络擅长、也更容易泛化的事。\n\n整条流水线是这样的。浅层 CNN 把两张 256×256 图变成 64×64×128 的特征，再过 6 层带自注意力和跨视角注意力的 Swin 窗口 Transformer，让两张图的特征互相“知道”对方。接着构建代价体，与特征拼在一起送进一个 2D U-Net 细化，U-Net 最低分辨率处的跨视角注意力帮助处理弱纹理和只在一个视角可见的区域。然后在深度维上做 softmax：加权平均给出深度，最大值给出“匹配置信度”。深度上采样到全分辨率后，一个很小的 U-Net 预测残差并输出不透明度，两层卷积再给出协方差和球谐颜色。两个视角的高斯直接合并，送进 3DGS 光栅化器。训练只用渲染图的 MSE 加 0.05 倍 LPIPS，从不看深度真值。\n\n结果很干脆。在 RealEstate10K（2 张输入、3 张目标、256×256）上 PSNR 26.39，比论文所引的 pixelSplat 高 0.5 dB，LPIPS 从 0.142 降到 0.128（pixelSplat 后来的 camera-ready 版为 26.09 / 0.136，按新版差距约 0.3 dB）；参数从 125.4M 降到 12.0M，编码加渲染从 0.104 秒降到 0.044 秒，约 22 fps；深度图平滑，点云干净。只在室内视频上训练的模型直接用到户外航拍的 ACID 上，与在 ACID 上专门训练的 pixelSplat 旧版结果相当（28.15 对 28.14；pixelSplat 新版为 28.27）；用到物体中心的 DTU 上也好一截，多给一张输入图时继续变好。去掉代价体，PSNR 掉 3.3 dB，渲染结果像两张输入图叠在一起。\n\n也要带着几分警惕去读。DTU 上约 14 dB 的图像并不能用，而且测试时 near/far 直接用了数据集提供的深度范围。表 1 里 pixelSplat 的数字是它的旧版结果，按 pixelSplat camera-ready 版比较，RE10K 上的差距缩小到约 0.3 dB，ACID 上基本持平。官方代码与论文有好几处出入：softmax 在 1/4 分辨率上做，求的是视差而不是深度的期望；默认模型的不透明度来自细化网络，并不直接等于匹配置信度；训练输入帧间隔被一个刻意保留的 bug 固定为 25→45 帧；渲染器只算到 3 阶球谐。它还是一个静态、单帧、低分辨率的方法。\n\n对学 3D 临场的人来说，MVSplat 是把经典几何与前馈 3DGS 接起来的枢纽：背后是针孔投影、平面诱导单应、逆深度采样、MVS 代价体与注意力；之后，DepthSplat 加入单目深度基础模型，FreeSplat 与 Fuse-and-Refine 处理多视角冗余，NoPoSplat 与 AnySplat 去掉位姿，LVSM 则扔掉所有 3D 偏置。把它和 Quark（逐视角分层深度 + IBR）、Ha et al.（TSDF 引导的时间一致融合）对照，就能看清“一次重建、任意渲染”的 3DGS 路线在多观看者、双目显示上的优势，以及它在时间稳定性和高分辨率上还欠缺什么。"}, {"b": "sec", "h": "流水线", "id": "pipeline"}, {"b": "p", "t": "点击方框跳到对应步骤。"}, {"b": "slot", "name": "diagram", "which": "mvsplat", "label": "MVSplat 流程图", "spec": {"w": 960, "nodes": [{"x": 10, "y": 124, "w": 135, "h": 64, "t": "输入视角", "s": "2×256² + 位姿", "step": "mv1"}, {"x": 167, "y": 124, "w": 135, "h": 64, "t": "CNN 特征", "s": "1/4 分辨率 128 维", "step": "mv2"}, {"x": 167, "y": 24, "w": 135, "h": 64, "t": "跨视角注意力", "s": "6 层 Swin 窗口", "step": "mv3"}, {"x": 323, "y": 124, "w": 135, "h": 64, "t": "平面扫描代价体", "s": "128 个逆深度候选", "step": "mv4", "data": true}, {"x": 480, "y": 124, "w": 135, "h": 64, "t": "代价体细化", "s": "2D U-Net+跨视角", "step": "mv5"}, {"x": 480, "y": 24, "w": 135, "h": 64, "t": "softmax 深度", "s": "视差期望+置信度", "step": "mv6"}, {"x": 637, "y": 124, "w": 135, "h": 64, "t": "深度细化", "s": "RGB 引导的 U-Net", "step": "mv7"}, {"x": 637, "y": 224, "w": 135, "h": 64, "t": "高斯参数头", "s": "尺度·旋转·SH·α", "step": "mv8"}, {"x": 793, "y": 124, "w": 135, "h": 64, "t": "3D 高斯并集", "s": "131K 个 · 光栅化", "step": "mv9", "data": true}, {"x": 793, "y": 24, "w": 135, "h": 64, "t": "光度训练", "s": "MSE+0.05 LPIPS", "step": "mv10"}, {"x": 793, "y": 224, "w": 135, "h": 64, "t": "评测与速度", "s": "26.39 dB · 44 ms", "step": "mv11"}, {"x": 323, "y": 24, "w": 135, "h": 64, "t": "泛化与消融", "s": "RE10K→ACID/DTU", "step": "mv12"}], "edges": [{"d": "M145,156 L167,156"}, {"d": "M234,124 L234,88"}, {"d": "M302,56 C312,56 312,156 323,156"}, {"d": "M458,156 L480,156"}, {"d": "M548,124 L548,88"}, {"d": "M615,56 C626,56 626,156 637,156"}, {"d": "M704,188 L704,224"}, {"d": "M772,256 C782,256 782,156 793,156"}, {"d": "M772,156 L793,156"}, {"d": "M860,124 L860,88"}, {"d": "M860,188 L860,224"}, {"d": "M390,124 L390,88"}, {"d": "M860,188 L860,204 L939,204 L939,306"}], "out": {"x": 833, "y": 324, "text": "任意视角新图像（256×256，约 1.5 ms/张）"}, "h": 336}}, {"b": "sec", "h": "读之前先掌握", "id": "before"}, {"b": "refs", "items": [{"k": "concept-g-pinhole", "gloss": "代价体构建、高斯中心反投影、渲染时的投影全都建立在 x ≃ K[R|t]X 上。代码里的内参是按图像宽高归一化的（第一行除以宽、第二行除以高），构建代价体时要再乘回 64 这样的特征图尺寸，不熟悉内参的含义就看不懂这些换算。"}, {"k": "concept-g-epipolar", "gloss": "把另一视角的特征按某个正对平面 warp 过来，等价于用平面诱导单应 H = K_j(R + t nᵀ/d)K_i^{-1} 做变换；同一个像素在不同候选深度下的对应点连成一条极线。pixelSplat 的“极线 Transformer”和 MVSplat 的“平面扫描”是在同一条极线上取样的两种方式。"}, {"k": "concept-g-depth", "gloss": "MVSplat 在 [1/far, 1/near] 上均匀取 128 个视差候选，而不是在深度上均匀取；softmax 期望也是在视差上求的。要理解“近处采样密、远处稀”以及“视差期望的倒数不等于深度期望”，必须先熟悉逆深度。"}, {"k": "concept-d-stereo", "gloss": "代价体、相关（correlation）、softmax 回归（soft-argmin）都是学习式双目匹配的标准部件。MVSplat 的骨干与 warp 代码直接来自统一光流、双目与深度的 UniMatch。"}, {"k": "concept-d-mvs", "gloss": "MVSplat 的几何核心就是一个“去掉 3D CNN、不用深度真值”的 MVSNet：平面扫描、代价体、代价体正则、深度回归。论文 §2 也专门讨论了它与 MVS 流水线的异同（不做点云融合、直接取并集）。"}, {"k": "concept-i-psv", "gloss": "平面扫描体是学习式视图合成里反复出现的结构。MVSplat 存的不是 warp 后的颜色，而是 warp 后特征与参考特征的点积，这是 PSV 的“匹配代价”版本。"}, {"k": "concept-l-attention", "gloss": "特征骨干有 6 层 self-attention + cross-attention，两个 U-Net 的最低分辨率处还有跨视角 self-attention。需要理解 Q/K/V、softmax(QKᵀ/√d)，以及 Swin 的局部窗口和 shifted window。"}, {"k": "concept-l-cnn", "gloss": "代价体细化和深度细化都是 2D U-Net（带跳连的编码器-解码器），特征提取是残差 CNN。把 128 个深度候选当作“通道”交给 2D U-Net，是 MVSplat 省掉 3D 卷积的关键。"}, {"k": "concept-n-3dgs", "gloss": "输出是一组 3D 高斯：中心、协方差（尺度 + 四元数）、不透明度、球谐颜色，用可微光栅化渲染。要看懂高斯头的 84 个输出通道各是什么，以及为什么 4 阶球谐实际只渲染到 3 阶，需要熟悉 3DGS 的参数化和渲染器。"}, {"k": "concept-r-alpha", "gloss": "光栅化时高斯按深度排序后做前到后的 alpha 合成；不透明度与匹配置信度挂钩、“w/o cost volume”时两张图的叠影，都要用 alpha 合成来理解。"}, {"k": "concept-n-generalizable", "gloss": "MVSplat 属于跨场景训练、测试时只前向一次的可泛化新视角合成。论文 Table 1 的对手（pixelNeRF、GPNR、AttnRend、MuRF、pixelSplat）覆盖了这一领域的几条主要技术路线。"}, {"k": "concept-v-metrics", "gloss": "结果以 PSNR、SSIM、LPIPS 报告，LPIPS 也是训练损失的一部分。要能把 0.5 dB 换算成 MSE 比例，并理解为什么作者强调 LPIPS 的改善“更符合人眼感知”。"}]}, {"b": "sec", "h": "MV1 · 问题设定：2 张带位姿的 256×256 图像 → H×W×K 个像素对齐的 3D 高斯", "id": "walk-mvsplat-mv1", "sn": {"label": "论文位置", "t": "§3 开头，Eq. (1)；§4.1 Datasets / Metrics；附录 C 末段（near/far）；src/dataset/dataset_re10k.py；src/dataset/shims/crop_shim.py；config/experiment/re10k.yaml"}}, {"b": "p", "t": "输入：K 张 RGB 图 I_i∈ℝ^{H×W×3}（默认 K=2，H=W=256），每张的内参 K_i（代码中按宽高归一化）与外参（代码中为 4×4 的相机到世界矩阵，OpenCV 约定），以及固定的 near/far（RE10K、ACID 为 1 与 100）。输出：H×W×K 个 3D 高斯 {(μ_j, α_j, Σ_j, c_j)}，之后可在任意目标位姿下光栅化成图像。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-g-pinhole"}, {"k": "concept-g-sfm"}, {"k": "concept-n-generalizable"}, {"k": "concept-n-3dgs"}, {"k": "adv-a-ff-3dgs"}]}}, {"b": "p", "t": "Eq. (1) 把整个方法写成一个映射 f_θ：输入若干张带相机参数的图像，输出一组高斯。关键词有三个。第一是“前馈”：θ 在大量场景上训练好后固定不变，测试时新场景只跑一次网络，不做逐场景优化（n-generalizable）。第二是“像素对齐”：每个输入像素恰好产生一个高斯，高斯中心被约束在这个像素的射线上，网络只需要决定“沿射线走多远”（g-pinhole）。所以高斯总数是固定的 H×W×K，2 张 256² 图就是 131,072 个。第三是“已知位姿”：相机参数由数据集给出，MVSplat 不估计位姿，这是它能做平面扫描的前提（g-sfm）。\n\n数据方面，RealEstate10K 是 YouTube 上的房产漫游视频，67,477 个训练场景、7,289 个测试场景；ACID 是无人机航拍的自然场景，11,075 与 1,972 个。原始帧 360×640，代码先按短边缩放到 256×455，再中心裁剪成 256×256，同时修改内参。训练样本从同一段视频里取两帧作为输入，再取 4 帧作为要渲染的目标；测试时每个场景 2 个输入、3 个目标，目标帧都夹在两个输入帧之间，所以本质上是“插值”而不是“外推”。\n\nnear/far 看似不起眼，却决定了代价体的深度候选范围。RE10K 与 ACID 的相机尺度来自数据集的估计，作者按经验把深度范围固定为 1 到 100；DTU 则使用数据集给出的 2.125 到 4.525。对固定的 3D 临场阵列，这一对数可以直接由舱体几何给定。", "mn": {"label": "类比", "t": "像给一位建模师两张不同角度拍的房间照片，并告诉他每张照片是在哪儿、用什么镜头拍的。他的工作不是凭空雕一个房间，而是给每张照片的每个像素钉一颗彩色小球，只需决定这颗球沿视线钉多深、多大、多透明。"}}, {"b": "eqs", "eqs": [{"tex": "f_{\\theta}:\\ \\{(\\mathbf{I}^i,\\mathbf{P}^i)\\}_{i=1}^{K}\\ \\mapsto\\ \\{(\\boldsymbol{\\mu}_j,\\alpha_j,\\boldsymbol{\\Sigma}_j,\\mathbf{c}_j)\\}_{j=1}^{H\\times W\\times K}", "explain_zh": "论文 Eq. (1)。I^i 是第 i 张图，P^i=K^i[R^i|t^i] 是它的投影矩阵；μ_j 是高斯中心，α_j 是不透明度，Σ_j 是 3×3 协方差，c_j 是用球谐系数表示的颜色；θ 是网络参数；右侧下标说明每个像素一个高斯，共 H×W×K 个。"}, {"tex": "\\boldsymbol{\\mu}_{i,uv}=\\mathbf{o}_i+z_{i,uv}\\,\\hat{\\mathbf{r}}_{i,uv},\\qquad \\hat{\\mathbf{r}}_{i,uv}=\\frac{\\mathbf{R}_i^{c2w}\\,\\mathbf{K}_i^{-1}[u,v,1]^{\\top}}{\\lVert \\mathbf{K}_i^{-1}[u,v,1]^{\\top}\\rVert}", "explain_zh": "按代码改写（gaussian_adapter.py、geometry/projection.py）。o_i 是相机光心，R_i^{c2w} 是相机到世界的旋转，r̂ 是经过像素 (u,v) 的单位射线方向，z 是网络预测的“深度”。注意代码把 z 乘在单位方向上，即当作沿射线的距离（见 mv8 的易错点）。"}]}, {"b": "p", "t": "默认 K=2，H=W=256，高斯数 131,072（代码 probe：means 形状 [1,131072,3]）。RE10K：67,477 训练 / 7,289 测试场景；ACID：11,075 / 1,972（论文 §4.1）。评测索引中 RE10K 有 6,474 个有效场景、ACID 1,595 个，每个 2 输入 + 3 目标，输入帧间隔 45–136 帧（assets/*.json 统计）。near/far：RE10K、ACID 1/100，DTU 2.125/4.525（附录 C、config/experiment）。", "label": "具体数字"}, {"b": "p", "t": "像素对齐把 3D 问题降为“每像素一个深度 + 若干属性”的 2D 预测，可以直接用 2D 网络；已知位姿让几何线索能通过显式投影获得。没有采用：单图重建（Splatter Image、Flash3D，§2 认为场景级单图重建本质上病态）、逐场景优化（慢）、无位姿输入（后来的 NoPoSplat 才去掉）。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）“稀疏视角”在这里指 2 张相隔几十帧的视频帧，重叠度通常很高，不是 2 台相距几米的相机。（2）测试目标都位于两个输入帧之间（RE10K 的 19,422 个目标中还有 583 个就是输入帧本身），论文没有外推评测，而头显观看者经常会走到阵列外侧。（3）near/far 是按数据集固定的超参数，换场景时要重新设；DTU 的零样本测试使用了数据集提供的深度范围（2.125–4.525）。（4）所有实验都在 256×256 下进行，没有高分辨率结果。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "如果把输入视角从 2 张增加到 3 张，MVSplat 输出的高斯数量怎么变？渲染一张目标图的时间大致怎么变？", "a": "高斯数 = H×W×K，从 131,072 增加到 196,608（代码 probe 在 3 视角时 means 为 [1,196608,3]），线性增长。光栅化时间大致随高斯数增长，所以渲染会稍慢，但仍在毫秒量级；编码时间也会增加，因为每个视角都要算一次代价体，且注意力的 key 数随 V−1 增长。"}]}, {"b": "sec", "h": "MV2 · 逐视角 CNN 特征：UniMatch 式浅层 ResNet，1/4 分辨率、128 通道", "id": "walk-mvsplat-mv2", "sn": {"label": "论文位置", "t": "§3.1 “Multi-view feature extraction”；附录 C “Network architectures”；src/model/encoder/backbone/unimatch/backbone.py（CNNEncoder）；src/model/encoder/backbone/backbone_multiview.py（normalize_images、extract_feature）"}}, {"b": "p", "t": "输入：K 张 256×256 RGB（取值 [0,1]，先按 ImageNet 均值方差归一化）。输出：每张图一个 [128, 64, 64] 的特征图 F_i^{cnn}。这份 CNN 特征既送进 Transformer，也在深度细化阶段作为高分辨率细节的来源再次使用。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-l-cnn"}, {"k": "concept-f-image"}, {"k": "concept-d-stereo"}, {"k": "adv-a-learned-stereo"}]}}, {"b": "p", "t": "第一步是把像素变成适合做匹配的描述子（l-cnn、f-image）。直接比较 RGB 很脆弱：光照、噪声、重复纹理都会让“看起来一样”的像素其实不是同一点。卷积特征把每个位置周围的局部结构编码成 128 维向量，比单个像素颜色更有区分度。\n\n网络很浅：一层 7×7、步长 2 的卷积（64 通道），然后三组各两个残差块，通道数依次为 64、96、128，只有 96 通道那组做一次步长 2 的下采样，最后用 1×1 卷积投到 128 维。归一化用 InstanceNorm，它对每张图单独归一化，可以抵消不同数据集之间整体亮度和对比度的差异。总下采样倍数是 4，256² 输入得到 64² 特征。代码里通过把 UniMatch 的 num_output_scales 设为 0 来让第三组不再下采样（注释写着“hack to get 1/4 features”）；UniMatch 原本用于光流时是 1/8。\n\n为什么是 1/4 而不是全分辨率？后面要在每个像素上对 128 个深度候选做 warp 和点积，计算量和显存都与像素数成正比；1/4 分辨率把这部分开销降为 1/16。细节损失由后面的上采样和全分辨率深度细化来补。这一部分的参数只有约 1.05M（代码实测），训练前从 UniMatch 的 GMDepth 模型载入。", "mn": {"label": "类比", "t": "像先把两张照片各自缩成 1/4 大小的“素描”，但每个素描点不只记颜色，还记下周围一小块的纹理特点，方便之后在两张素描之间找对应。"}}, {"b": "eqs", "eqs": [{"tex": "\\tilde{\\mathbf{I}}=\\frac{\\mathbf{I}-\\boldsymbol{m}}{\\boldsymbol{s}},\\quad \\boldsymbol{m}=(0.485,0.456,0.406),\\ \\boldsymbol{s}=(0.229,0.224,0.225)", "explain_zh": "按代码改写（backbone_multiview.py normalize_images）。I 是 [0,1] 范围的 RGB；m、s 是 ImageNet 的逐通道均值与标准差，与 UniMatch 预训练时一致。"}, {"tex": "\\mathbf{F}^{cnn}_i=\\mathrm{Conv}_{1\\times1}\\Big(\\mathcal{B}_{128}\\big(\\mathcal{B}_{96}^{\\downarrow2}(\\mathcal{B}_{64}(\\mathrm{Conv}_{7\\times7}^{\\downarrow2}(\\tilde{\\mathbf{I}}_i)))\\big)\\Big)\\in\\mathbb{R}^{128\\times\\frac{H}{4}\\times\\frac{W}{4}}", "explain_zh": "按代码改写（unimatch/backbone.py）。B_c 表示两个输出通道为 c 的残差块（conv3×3–IN–ReLU 两次加跳连），上标 ↓2 表示该组第一个块步长为 2；H/4×W/4 为 64×64。"}]}, {"b": "p", "t": "输出 [B·V,128,64,64]，默认推理时为 [2,128,64,64]（代码 probe）。参数 1,049,120（probe）。附录 C 说“6 个残差块，最后 4 个块每 2 块下采样一半”，代码实际是 stem 卷积与 96 通道组各下采样一次，第三组不下采样；总倍数都是 4。", "label": "具体数字"}, {"b": "p", "t": "论文强调深度模型“纯 2D 卷积和注意力”；复用 UniMatch 的结构可以直接加载它在光流与 ScanNet 深度上预训练的匹配特征（Table D：随机初始化要 450K 步才追平）。没有采用：pixelSplat 的 DINO ViT-B/8 骨干（参数大）、全分辨率特征。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）CNN 特征本身不跨视角，两张图各自独立编码；跨视角交互从下一步 Transformer 才开始。（2）附录 C 对下采样位置的文字描述与代码不一致，以代码为准。（3）CNN 特征在深度细化阶段会被再次使用（与 Transformer 特征拼接后上采样），不要以为它只是 Transformer 的输入。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "为什么这里用 InstanceNorm 而不是 BatchNorm？这对跨数据集泛化可能有什么帮助？", "a": "InstanceNorm 对每张图、每个通道单独做均值方差归一化，不依赖 batch 统计，也不保留训练集的全局统计量；于是一张整体偏暗或对比度不同的图（例如户外航拍）会被拉回相似的分布。UniMatch 原本就用 InstanceNorm，MVSplat 沿用它。论文把泛化优势主要归因于代价体只看“相对相似度”，InstanceNorm 可以看作同一方向上的辅助因素（这是合理的解读，论文未单独验证）。"}]}, {"b": "sec", "h": "MV3 · 多视角 Transformer：6 层 Swin 窗口 self + cross attention，每个视角对其余所有视角做交叉注意力", "id": "walk-mvsplat-mv3", "sn": {"label": "论文位置", "t": "§3.1 “Multi-view feature extraction”；附录 C；附录 Table B；src/model/encoder/backbone/multiview_transformer.py（TransformerLayer、TransformerBlock、batch_features、single_head_split_window_attention）；backbone_multiview.py（feature_add_position_list）；config/model/encoder/costvolume.yaml（multiview_trans_attn_split: 2）"}}, {"b": "p", "t": "输入：K 个 CNN 特征 [128,64,64]。输出：跨视角感知的 Transformer 特征 F_i∈ℝ^{128×64×64}，用于构建代价体，也与 CNN 特征一起用于后续上采样。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-l-attention"}, {"k": "concept-l-encoding"}, {"k": "concept-d-stereo"}, {"k": "concept-g-epipolar"}, {"k": "adv-a-learned-stereo"}]}}, {"b": "p", "t": "代价体要比较的是“同一个 3D 点在两张图里的特征”，如果两张图的特征是各自独立算出来的，同一点在两边可能被编码得不太一样（视角不同、局部遮挡不同）。UniMatch/GMFlow 的经验是：在匹配之前让两张图的特征互相看一眼，特征会变得更“可对应”（l-attention）。\n\n每个 Transformer 块有两层。第一层是 self-attention：每张图内部的像素互相交流，扩大感受野，弱纹理区域可以借用周围的上下文。第二层是 cross-attention：query 来自当前视角，key/value 来自其他视角，于是每个像素的特征里混入了“另一张图里与我相似的地方长什么样”。只有 cross-attention 层后面接 FFN，FFN 的输入是原特征与注意力输出的拼接。代码里 LayerNorm 作用在注意力分支和 FFN 分支的输出上，再与输入做残差相加（x + LN(f(x))），既不是标准的 pre-norm，也不是 post-norm。\n\n在 64×64=4,096 个 token 上做全局注意力代价太高，所以用 Swin 的局部窗口：把特征切成 2×2 个 32×32 的窗口，每个窗口 1,024 个 token 只在窗口内做注意力；奇数层把窗口平移半个窗口（shifted window），让相邻窗口之间也能交换信息。多于 2 个视角时，代码把其余 V−1 个视角在同一窗口里的 token 拼起来当 key/value，做一次 softmax，参数和 2 视角时完全相同，所以训练用 2 视角、测试用 3 视角可以直接运行。\n\n位置编码是正弦编码，在每个窗口内部加。单头注意力，通道 128，共 6 块，约 3.15M 参数，训练前从 UniMatch 载入。", "mn": {"label": "类比", "t": "像两位侦探各自拿着一张现场照片，先各自在自己的照片上来回看（self-attention），再隔着桌子互相描述“我这里有个红色门把手，你那边在哪”（cross-attention）。为了省时间，他们把照片切成四块，每次只对照同一块区域，下一轮再把切块位置错开半格。"}}, {"b": "eqs", "eqs": [{"tex": "\\mathrm{Attn}(\\mathbf{Q},\\mathbf{K},\\mathbf{V})=\\mathrm{softmax}\\!\\left(\\frac{\\mathbf{Q}\\mathbf{K}^{\\top}}{\\sqrt{C}}\\right)\\mathbf{V},\\quad \\mathbf{Q}=\\mathbf{X}_i\\mathbf{W}_q,\\ \\mathbf{K}=[\\mathbf{X}_j]_{j\\neq i}\\mathbf{W}_k,\\ \\mathbf{V}=[\\mathbf{X}_j]_{j\\neq i}\\mathbf{W}_v", "explain_zh": "cross-attention。X_i 是视角 i 在某个 32×32 窗口里的 1,024 个 token（每个 128 维），[X_j]_{j≠i} 是其余所有视角同一窗口的 token 拼接（(V−1)×1,024 个）；W_q、W_k、W_v 是 128×128 的无偏置线性层；C=128 是缩放因子；单头。self-attention 时 K、V 也来自 X_i。"}, {"tex": "\\mathbf{m}=\\mathrm{LN}\\big(\\mathbf{W}_o\\,\\mathrm{Attn}(\\cdot)\\big),\\qquad \\mathbf{m}\\leftarrow\\mathrm{LN}\\big(\\mathrm{MLP}([\\mathbf{X}_i,\\mathbf{m}])\\big),\\qquad \\mathbf{X}_i\\leftarrow\\mathbf{X}_i+\\mathbf{m}", "explain_zh": "按代码改写（TransformerLayer.forward）。W_o 是输出投影（代码里叫 merge），LN 是 LayerNorm；MLP 为 256→1024→128，带 GELU，只在 cross-attention 层使用（self-attention 层 no_ffn=True）。最后一步是残差相加。"}, {"tex": "N_{\\text{tok}}^{\\text{win}}=\\frac{H}{4s}\\cdot\\frac{W}{4s}=\\frac{256}{8}\\cdot\\frac{256}{8}=1024,\\qquad N_{\\text{key}}=(V-1)\\,N_{\\text{tok}}^{\\text{win}}", "explain_zh": "窗口大小。s=2 是每个方向的切分数（attn_splits），H/4=64；一个窗口 1,024 个 query token，cross-attention 的 key 数随其他视角数 V−1 线性增长。"}]}, {"b": "p", "t": "6 块（每块 self + cross），单头，d_model=128，FFN 扩展 4 倍，2×2 窗口，奇数层 shifted window（multiview_transformer.py 第 552–553 行）；参数 3,150,336（probe）。Table B：换成 Epipolar Transformer 后 base 编码 0.038→0.055 s、PSNR 26.12→26.09；Table 3：去掉 cross-attention 26.12→25.19 并过拟合。", "label": "具体数字"}, {"b": "p", "t": "作者的证据是 Table B：窗口注意力不需要沿极线采样，质量相同而更快。合理的解读是：32×32 的窗口相当于原图 128×128 像素，足以覆盖多数视差，真正的几何约束再交给代价体。没有采用：pixelSplat/GPNR 的 Epipolar Transformer（沿极线采 32 个点，较慢）、全局注意力（4,096² 的注意力矩阵）、不做跨视角交互（掉 0.9 dB 并过拟合）。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）窗口注意力不利用极线几何：视差大到对应点跨出窗口（约 32 个 1/4 分辨率像素）时，cross-attention 找不到它，几何约束要到代价体才真正用上。（2）多视角时把其他视角 token 拼起来做一次 softmax，而不是逐视角注意再平均。（3）Table 3 的“w/o cross-view attention”只去掉骨干里的 cross-attention，U-Net 里的跨视角注意力仍保留。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "训练时只有 2 个视角，测试时给 3 个视角，cross-attention 层的参数够用吗？它的计算有什么变化？", "a": "够用。W_q、W_k、W_v 是作用在单个 token 上的线性层，与 token 数量无关；3 视角时每个视角的 key/value 由另外两个视角同一窗口的 2,048 个 token 组成，softmax 在更长的序列上归一化。变化在于计算量与 key 数成正比，并且注意力权重的分布与训练时不同（分母里多了一个视角的 token），这可能带来一定的分布偏移，但论文的 DTU 3 视角实验显示 MVSplat 仍然变好（14.30 对 2 视角的 13.94 dB）。"}]}, {"b": "sec", "h": "MV4 · 代价体：在逆深度上均匀取 128 个候选，warp 另一视角特征并与本视角做点积相关", "id": "walk-mvsplat-mv4", "sn": {"label": "论文位置", "t": "§3.1 “Cost volume construction”，Eq. (2)–(4)；§4.1（128 个候选）；附录 C（near/far）；src/model/encoder/costvolume/depth_predictor_multiview.py（warp_with_pose_depth_candidates 第 10–70 行、prepare_feat_proj_data_lists 第 73–123 行、forward 第 292–318 行）"}}, {"b": "p", "t": "输入：各视角 Transformer 特征 F_i [128,64,64]、归一化内参（乘以 64 还原为特征图像素单位）、相对位姿、near/far。输出：每个视角一个代价体 C^i∈ℝ^{128(D)×64×64}，与 F_i 拼接成 256 通道送入下一步。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-d-mvs"}, {"k": "concept-i-psv"}, {"k": "concept-g-epipolar"}, {"k": "concept-g-depth"}, {"k": "concept-d-stereo"}, {"k": "adv-a-learned-mvs"}]}}, {"b": "p", "t": "这是全文的核心（d-mvs、i-psv）。以视角 i 为参考，想象在它前方放 128 块与像平面平行的“玻璃板”，第 m 块离相机 d_m。对每块板，把视角 i 每个像素的射线与板的交点投影到视角 j，在 j 的特征图上双线性采样，得到“假设这里深度为 d_m 时，另一张图在对应位置的特征”F^{j→i}_{d_m}。如果 d_m 恰好是真实深度，两边看到的是同一个 3D 点，特征应当相似，点积大；否则对到的是别的东西，点积小。把 128 个点积排起来，就是这个像素的匹配曲线，峰值就是表面。对一块平面来说，这个 warp 正好是平面诱导单应（g-epipolar）；随 d_m 变化，对应点在视角 j 中沿极线滑动。\n\n候选深度怎么取？代码在 [1/far, 1/near]=[0.01, 1] 上用 linspace 均匀取 128 个视差，也就是逆深度均匀采样（g-depth）。这样近处候选很密、远处很稀，符合“视差误差大致恒定、深度误差随 Z² 增长”的立体测量规律：深度约 2 处相邻候选相差约 0.03（数据集单位），深度约 10 处相差约 0.8，深度约 50 处相差几十。\n\n相关函数是点积再除以 √C（C=128），与注意力里的缩放同理，让数值范围不随通道数变化。越界的投影补零。多于 2 个视角时，对每个其他视角各算一个代价体，再逐像素取平均，所以输入视角数可以任意。最后把代价体（128 通道）和本视角的 Transformer 特征（128 通道）拼接：前者告诉网络“哪里匹配”，后者告诉网络“这里长什么样”，弱纹理处匹配不可靠时可以依赖语义与上下文。", "mn": {"label": "类比", "t": "像拿一把 128 格的刻度尺去量深度：每一格都假设“东西就在这儿”，然后看另一张照片在对应位置的内容是否对得上，对得最好的那一格就是答案。刻度在近处刻得密、远处刻得疏。"}}, {"b": "eqs", "eqs": [{"tex": "\\frac{1}{d_m}=\\frac{1}{d_{far}}+\\frac{m-1}{D-1}\\left(\\frac{1}{d_{near}}-\\frac{1}{d_{far}}\\right),\\quad m=1,\\dots,D", "explain_zh": "按代码改写（prepare_feat_proj_data_lists）。D=128 个候选；d_near=1、d_far=100（RE10K/ACID）；候选在视差 1/d 上等间距，间距 (1−0.01)/127≈0.0078。"}, {"tex": "\\mathbf{F}^{j\\to i}_{d_m}(\\mathbf{p})=\\mathbf{F}^j\\Big(\\pi\\big(\\mathbf{K}_j(\\mathbf{R}_{ji}\\,d_m\\,\\mathbf{K}_i^{-1}\\tilde{\\mathbf{p}}+\\mathbf{t}_{ji})\\big)\\Big)", "explain_zh": "论文 Eq. (2) 中 warp 算子 W 的具体形式（按代码改写）。p̃=[u,v,1]ᵀ 是视角 i 的像素齐次坐标；K_i^{-1}p̃ 是 z=1 平面上的射线，乘 d_m 得到候选 3D 点；R_{ji}、t_{ji} 是视角 i 到 j 的相对位姿；K_j 投影到视角 j，π 是透视除法；F^j(·) 表示双线性采样（grid_sample，越界补零）。"}, {"tex": "C^i_{d_m}(\\mathbf{p})=\\frac{\\mathbf{F}^i(\\mathbf{p})\\cdot\\mathbf{F}^{j\\to i}_{d_m}(\\mathbf{p})}{\\sqrt{C}},\\qquad \\mathbf{C}^i=\\big[C^i_{d_1},\\dots,C^i_{d_D}\\big]\\in\\mathbb{R}^{\\frac{H}{4}\\times\\frac{W}{4}\\times D}", "explain_zh": "论文 Eq. (3)–(4)。F^i(p) 是参考视角 128 维特征，· 是点积，C=128；把 D 个候选的相关拼起来得到代价体。多于 2 个视角时，对不同 j 的 C^i 逐像素取平均。"}, {"tex": "\\mathbf{H}_{ji}(d)=\\mathbf{K}_j\\left(\\mathbf{R}_{ji}+\\frac{\\mathbf{t}_{ji}\\,\\mathbf{n}^{\\top}}{d}\\right)\\mathbf{K}_i^{-1},\\quad \\mathbf{n}=(0,0,1)^{\\top}", "explain_zh": "等价的平面诱导单应。对正对视角 i 的平面 z=d，上一式的逐点投影可以写成 3×3 矩阵 H 对整张图的变换；n 是平面法向（在视角 i 坐标系中）。这就是经典平面扫描（Collins 1996，MVSNet）。"}]}, {"b": "p", "t": "D=128（experiment 配置；costvolume.yaml 默认值是 32，不加 +experiment 时会得到一个不同的模型）。视差间距 0.0078；实际候选中，深度 2 附近依次为 1.965、1.996、2.027，深度 10 附近为 8.98、9.66、10.44，深度 50 附近为 39.1、56.2、100（数据集单位，按 linspace 计算）。warp 特征张量 [2,128(C),128(D),64,64]，约 1.34 亿个 float32，约 537 MB（按形状计算）；代价体 [2,128,64,64]；拼接后 [2,256,64,64]（probe）。", "label": "具体数字"}, {"b": "p", "t": "论文的理由：把问题从“从图像特征回归 3D”变成“学做特征匹配”，降低学习难度，模型又小又快（§1）；相关性是相对量，跨数据集不受特征绝对尺度影响（§4.2）。逆深度均匀采样是 MVS 与双目的通行做法（论文未单独解释）。没有采用：pixelSplat 从特征直接预测深度分布（Table 3 掉 3.3 dB）、MVSNet 的方差代价、全分辨率代价体（显存 16 倍）。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）代价体按“正对平面”（相机 z 深度）构建，而后面放高斯时却把深度当作沿单位射线的距离，两者在图像边角不一致（见 mv8）。（2）near/far 直接决定候选范围：真实表面若在 near 之内或 far 之外，代价体里根本没有正确答案；far=100 时约一半的候选（65 个）落在深度 2 以内，远景非常粗。（3）代价体只在 1/4 分辨率上计算，细小结构（栏杆、发丝）可能在这一步就丢失。（4）遮挡区域与只有一个视角可见的区域不存在正确匹配，代价曲线是平的，必须靠后面的 U-Net 与上下文补全。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "如果把 near/far 从 1/100 改成 0.5/200，候选总数不变，深度 2 附近相邻候选的间距会变大还是变小？这对预训练模型有什么影响？", "a": "视差区间从 [0.01,1] 变成 [0.005,2]，间距从 0.99/127≈0.0078 变为 1.995/127≈0.0157，约翻倍；深度 2 附近相邻候选的深度间距也约翻倍，匹配变粗。对预训练模型来说，代价体第 m 个通道对应的物理深度全部改变了，而 U-Net 与 softmax 头是按原来的“通道 ↔ 深度”关系训练的，softmax 期望会给出错位的深度，画质通常会下降。这正是练习 3 要验证的敏感性。"}]}, {"b": "sec", "h": "MV5 · 代价体细化：128 通道 2D U-Net，16×16 处 3 层跨视角注意力，外加 1×1 残差", "id": "walk-mvsplat-mv5", "sn": {"label": "论文位置", "t": "§3.1 “Cost volume refinement”，Eq. (5)；附录 C；Table 3 “w/o U-Net”与 Fig. 6；src/model/encoder/costvolume/depth_predictor_multiview.py 第 161–191、320–328 行；src/model/encoder/costvolume/ldm_unet/unet.py（UNetModel、AttentionBlock、QKVAttentionLegacy）"}}, {"b": "p", "t": "输入：拼接后的 [C^i, F_i]，每个视角 [256,64,64]。输出：细化后的代价体 C̃^i∈ℝ^{128(D)×64×64}。代码中所有视角沿 batch 维排成 (v b) 顺序，一起送入 U-Net。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-l-cnn"}, {"k": "concept-l-attention"}, {"k": "concept-d-mvs"}, {"k": "adv-a-learned-mvs"}]}}, {"b": "p", "t": "原始代价体在两类地方靠不住：一是弱纹理或重复纹理区域，匹配曲线平坦或多峰；二是只有一个视角能看到的区域（画面左右两侧、被遮挡处），根本不存在正确匹配。解决办法是让网络看到更大范围的上下文，把可靠区域的深度“传播”过去（l-cnn、a-learned-mvs）。\n\n传统 MVSNet 用 3D CNN 在 (D,H,W) 上正则化代价体，计算量大。MVSplat 把 128 个深度候选直接当作 2D 卷积的通道：先用 3×3 卷积把 256 通道压到 128，经 GroupNorm 与 GELU，送入一个通道数始终为 128 的 2D U-Net（来自 latent diffusion 的实现），它做两次 2× 下采样，在最低的 16×16 分辨率处共有 3 个注意力层（下采样路径 1 个，上采样路径 2 个），最后再用 3×3 卷积输出 128 个通道。代码还加了一条 1×1 卷积把输入直接映射到 128 通道，与 U-Net 输出相加，作为残差捷径。\n\n这里的注意力是“跨视角 self-attention”：代码把所有视角 16×16=256 个 token 拼成一条 512 长的序列（2 视角时）一起做注意力，于是视角 i 的代价体可以参考视角 j 的代价体。这对遮挡特别有用：视角 i 中被挡住的地方，视角 j 可能看得很清楚。这种“把多视角特征展平后做 self-attention”的做法，附录 C 说是借鉴了 MVDream、LGM 等多视角生成模型。\n\n消融（Table 3）：把整个 U-Net 换成一层卷积，base 模型的 PSNR 从 26.12 掉到 25.45，退化集中在只有一张图能看到的两侧（Fig. 6）。这个 U-Net 约 5.86M 参数，占整个模型的一半左右。", "mn": {"label": "类比", "t": "像一群人各自给自己面前的地板量了深度，有些人站在阴影里量不准。U-Net 让每个人参考旁边人的读数（空间传播），最低分辨率的注意力层则相当于把两个房间的记录员叫到一起对账（跨视角交流）。"}}, {"b": "eqs", "eqs": [{"tex": "\\tilde{\\mathbf{C}}^i=\\mathbf{C}^i+\\Delta\\mathbf{C}^i\\quad(\\text{论文 Eq. 5})", "explain_zh": "论文写法：U-Net 输出残差 ΔC^i，加到初始代价体上。C^i、ΔC^i 都是 H/4×W/4×D。"}, {"tex": "\\tilde{\\mathbf{C}}^i=\\mathrm{Conv}_{3\\times3}\\Big(\\mathrm{UNet}\\big(\\mathrm{GELU}(\\mathrm{GN}(\\mathrm{Conv}_{3\\times3}[\\mathbf{C}^i,\\mathbf{F}^i]))\\big)\\Big)+\\mathrm{Conv}_{1\\times1}[\\mathbf{C}^i,\\mathbf{F}^i]", "explain_zh": "按代码改写（第 167–191、324–328 行）。[·,·] 是通道拼接（128+128=256）；GN 为 8 组 GroupNorm；UNet 通道 128、channel_mult [1,1,1]、每级 1 个残差块；最后的 3×3 卷积输出 D=128 通道；1×1 卷积（256→128）是可学习的残差捷径，而不是论文所写的恒等加 C^i。"}, {"tex": "\\mathbf{A}=\\mathrm{softmax}\\!\\left(\\frac{\\mathbf{Q}\\mathbf{K}^{\\top}}{\\sqrt{d_h}}\\right),\\quad \\mathbf{Q},\\mathbf{K}\\in\\mathbb{R}^{(V\\cdot 256)\\times d_h},\\ d_h=32,\\ 4\\ \\text{heads}", "explain_zh": "U-Net 最低分辨率处的跨视角注意力（按代码改写）。每个视角 16×16=256 个 token，V 个视角拼成一条序列（QKVAttentionLegacy 中 (v b) n t → b n (v t)）；通道 128 按每头 32 维分成 4 个头；代码把 1/√d_h 拆成对 Q、K 各乘 d_h^{-1/4}，数值上等价。"}]}, {"b": "p", "t": "输入 [2,256,64,64]，输出 [2,128,64,64]（probe）。U-Net 内部分辨率 64→32→16，16×16 处 3 个 AttentionBlock（4 头 × 32 通道），probe 计数确认；论文 §3.1 “three cross-view attention layers at the lowest resolution” 一致。参数：U-Net 含首尾卷积 5,862,144，1×1 残差 32,896。Table 3：w/o U-Net 25.45 / 0.847 / 0.150，base 26.12 / 0.864 / 0.133。", "label": "具体数字"}, {"b": "p", "t": "论文强调不用 3D 卷积以保证效率，且跨视角注意力与视角数无关（§3.1）。把特征 F 与代价体拼接的理由论文没有单独说明，合理的解读是：匹配失效时网络还能依据外观与语义推断深度。没有采用：3D CNN 正则（MVSNet、MVSNeRF、MuRF 的 (2+1)D CNN）、不细化直接 softmax（Table 3 掉 0.7 dB）。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）把 D 当通道意味着 U-Net 的卷积核在深度维上是“全连接”的：第 m 个输出通道可以任意组合 128 个输入候选，这比 3D 卷积自由，但也把网络与“候选数、候选深度含义”绑死，训练后不能随意改 D 或 near/far。（2）注意力只在 16×16 上做，跨视角交流的粒度很粗（每个 token 对应原图 16×16 个像素）。（3）论文 Eq. 5 的“恒等残差”在代码里是可学习的 1×1 卷积。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "为什么说“w/o U-Net”的退化集中在画面两侧，而不是中间？", "a": "两张图有重叠也有各自独有的部分。中间区域两个视角都能看到，代价体有清晰峰值，一层卷积加 softmax 就能得到不错的深度；画面左右两侧往往只在一张图里出现，warp 到另一视角时落在图外（补零）或对到错误内容，匹配曲线没有可信峰值。这时只能靠 U-Net 的大感受野从邻近可靠区域传播深度、并借助特征猜测，去掉 U-Net 后这些区域的高斯位置就会乱，渲染出现伪影（Fig. 6）。"}]}, {"b": "sec", "h": "MV6 · softmax 深度：在 1/4 分辨率上对 128 个视差候选求期望，最大概率作为匹配置信度", "id": "walk-mvsplat-mv6", "sn": {"label": "论文位置", "t": "§3.1 “Depth estimation”，Eq. (6)；§3.2 “Opacity α”；src/model/encoder/costvolume/depth_predictor_multiview.py 第 193–198、330–344 行"}}, {"b": "p", "t": "输入：细化代价体 C̃^i [128,64,64]。输出：粗视差图 [1,64,64]、匹配分布 p [128,64,64]、置信度 max_m p_m [1,64,64]；随后粗视差双线性、置信度最近邻上采样到 [1,256,256]。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-d-stereo"}, {"k": "concept-g-depth"}, {"k": "concept-f-prob"}, {"k": "adv-a-learned-stereo"}, {"k": "adv-a-learned-mvs"}]}}, {"b": "p", "t": "代价体给的是 128 个分数，要变成一个连续的深度值，经典做法是 soft-argmin（d-stereo、a-learned-stereo）：先用 softmax 把分数变成一个概率分布，再对候选值求加权平均。它可微，能给出比候选间距更细的亚格点精度，比取 argmax 更适合端到端训练。\n\n代码先把 C̃ 再过两层卷积（128→256→128）得到 logits，然后在深度维做 softmax，得到每个像素的分布 p。注意两点与论文 Eq. (6) 不同：（1）softmax 在 1/4 分辨率（64×64）上做，而不是在“上采样到全分辨率的代价体”上做；上采样的对象是得到的粗视差图，用双线性插值放大 4 倍。（2）加权平均的对象是视差候选 1/d_m，不是深度候选 d_m，最终深度取期望视差的倒数。分布单峰且尖锐时两者几乎相同；分布多峰时差别很大（见数值例）。在视差上平均会偏向近处的峰；这对画质是好是坏，论文没有讨论，也没有做对比实验。\n\n同一个分布还给出一个副产品：最大概率 max_m p_m，论文称为匹配置信度。p 越尖锐，说明这个像素越确定地落在某个表面上；在遮挡、弱纹理、天空这类地方，p 很平，最大值接近 1/128。论文认为它与不透明度的物理含义相近（§3.2），代码把它最近邻上采样后交给下一步。", "mn": {"label": "类比", "t": "像 128 位评委给“表面在第几格”投票，softmax 把票数变成比例，再按比例平均出一个位置；得票最多那一格的得票率就是“共识程度”。代码的平均是在“倒数刻度”（视差）上做的，所以当评委分成近、远两派时，结果会偏向近的那一派。"}}, {"b": "eqs", "eqs": [{"tex": "\\mathbf{V}^i=\\mathrm{softmax}(\\hat{\\mathbf{C}}^i)\\,\\mathbf{G},\\quad \\mathbf{G}=[d_1,\\dots,d_D]^{\\top}\\quad(\\text{论文 Eq. 6})", "explain_zh": "论文写法：Ĉ^i 是上采样到 H×W 的细化代价体，softmax 沿深度维，G 是深度候选向量，V^i∈ℝ^{H×W} 为深度图。"}, {"tex": "p_m=\\frac{\\exp(\\ell_m)}{\\sum_{k=1}^{D}\\exp(\\ell_k)},\\quad \\bar{\\delta}=\\sum_{m=1}^{D}p_m\\,\\frac{1}{d_m},\\quad \\hat{z}=\\frac{1}{\\mathrm{Up}_{\\times4}(\\bar{\\delta})},\\quad \\kappa=\\max_m p_m", "explain_zh": "按代码改写（第 330–344 行）。ℓ_m 是 depth_head_lowres 输出的第 m 个 logit（64×64 分辨率）；δ̄ 是期望视差；Up_{×4} 为双线性上采样；ẑ 是粗深度（进入 mv7 前还会被细化）；κ 是匹配置信度，取值范围 [1/128, 1]，用最近邻上采样。"}, {"tex": "\\frac{1}{\\mathbb{E}_p[1/d]}\\le\\mathbb{E}_p[d]", "explain_zh": "由 Jensen 不等式（1/x 在 x>0 上是凸函数），期望视差的倒数不大于期望深度，等号只在分布集中于一点时成立。所以代码的深度估计系统性地偏近，分布越分散偏得越多。"}]}, {"b": "p", "t": "数值例：一个像素的分布一半在 d=2（视差 0.5）、一半在 d=10（视差 0.1）。代码的做法：期望视差 0.3，深度 1/0.3≈3.33；论文 Eq. 6 的做法：期望深度 6.0。两者都不在任何真实表面上，说明多峰时 soft-argmin 本身就不可靠，这也是 mv7 要细化的原因之一。置信度范围：完全均匀时 1/128≈0.0078，完全确定时 1。depth_head_lowres 参数 590,208（probe）。", "label": "具体数字"}, {"b": "p", "t": "soft-argmin 可微、有亚格点精度，是学习式双目与 MVS 的标准做法；在 1/4 分辨率上 softmax 省下 16 倍计算。为何对视差求期望，论文未解释，合理的解读是候选本身在视差上均匀。放弃的是 pixelSplat 的“从分布采样深度 + 重参数化”，softmax 期望是确定性的。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）论文 Eq. 6 与代码不一致：代码在 1/4 分辨率上 softmax、对视差求期望、再双线性放大，而不是对全分辨率代价体做 softmax、对深度求期望。复现以代码为准。（2）双线性放大视差会在物体边缘产生介于前景与背景之间的“中间深度”，形成飞点，需要 mv7 的细化来修。（3）置信度 κ 只反映分布是否尖锐，不代表深度一定正确：重复纹理可能给出尖锐但错误的峰。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "如果某像素的匹配分布非常平坦（例如对着一面白墙），代码会给出什么深度？置信度是多少？这对高斯意味着什么？", "a": "分布接近均匀时，期望视差约为所有候选视差的平均值 (0.01+1)/2≈0.505，深度约 1.98，这是一个与图像内容无关的“默认深度”；置信度接近 1/128≈0.008。完整模型会把这个低置信度交给深度细化 U-Net，由它结合上下文修正深度并输出较低的不透明度；在 base 模型里置信度直接作为不透明度，这些高斯几乎透明，不会在渲染中产生明显漂浮物，但该区域也就缺少有效内容。"}]}, {"b": "sec", "h": "MV7 · 深度细化：特征上采样 4 倍 + 32 通道轻量 U-Net，输出残差视差与不透明度", "id": "walk-mvsplat-mv7", "sn": {"label": "论文位置", "t": "§3.1 “Depth refinement”；附录 C；Table 3 “base + refine” 对 “base”；附录 Table B（base 编码 0.038 s）；src/model/encoder/costvolume/depth_predictor_multiview.py 第 200–260、346–405 行"}}, {"b": "p", "t": "输入：RGB（3）、由 Transformer 特征与 CNN 特征上采样得到的全分辨率特征（压到 32 通道）、上采样粗视差（1）、上采样置信度（1），共 37 通道 × 256×256。输出：细化 U-Net 特征 refine_out [32,256,256]，由它经两层卷积得到残差视差 Δδ 与不透明度 logit；最终深度 z=1/clamp(δ̄↑+Δδ, 1/far, 1/near)。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-l-cnn"}, {"k": "concept-l-iterative"}, {"k": "concept-l-attention"}, {"k": "concept-g-depth"}, {"k": "adv-a-learned-mvs"}]}}, {"b": "p", "t": "到上一步为止，深度只在 64×64 上算过，边缘是双线性放大出来的，比较糊；置信度也是块状的。深度细化要做的是把全分辨率的图像信息重新引进来，修边缘、补细节（l-iterative、l-cnn）。\n\n先准备全分辨率特征：把 Transformer 特征与 CNN 特征拼接（256 通道），3×3 卷积到 128 通道，双线性放大 4 倍再过 GELU，得到 [128,256,256]；这份特征后面还会被高斯头使用。再用一个 3×3 卷积压成 32 通道，与原始 RGB、粗视差、置信度拼成 37 通道，送入一个 32 通道的 2D U-Net：4 次 2× 下采样（256→16），在 16×16 处共 3 层跨视角注意力（1 头 × 32 维），结构与 mv5 的 U-Net 相同，只是更窄更深。\n\n输出头是两层卷积（32→64→2）。第 1 个通道是残差视差 Δδ，加到上采样的粗视差上，再截断到 [1/far, 1/near]，取倒数得到最终深度；第 2 个通道过 sigmoid 就是不透明度。因为 RGB 在输入里，细化网络可以学会“深度边缘要与颜色边缘对齐”，修掉 mv6 双线性放大造成的边缘飞点。\n\n作者把不含这一步的模型叫作 base：base 中细化 U-Net 被替换为一层卷积，深度直接取粗深度，不透明度直接取置信度。完整模型比 base 高 0.27 dB（26.39 对 26.12）；附录 Table B 中 base 的时间为 0.038 s，与完整模型的 0.043 s（编码）或 0.044 s（合计）相比约多 5–6 ms（Table B 未说明是否含渲染，这只是粗略推算）。", "mn": {"label": "类比", "t": "像先用粗笔在缩略图上勾出轮廓，再拿着原图用细笔描边：原图告诉你边缘到底在哪一个像素上，粗稿只负责大致位置。"}}, {"b": "eqs", "eqs": [{"tex": "\\mathbf{E}^i=\\mathrm{GELU}\\Big(\\mathrm{Up}_{\\times4}\\big(\\mathrm{Conv}_{3\\times3}[\\mathbf{F}^i,\\mathbf{F}^{cnn}_i]\\big)\\Big)\\in\\mathbb{R}^{128\\times H\\times W}", "explain_zh": "按代码改写（upsampler，第 200–211、347 行）。F^i 是 Transformer 特征、F^{cnn}_i 是 CNN 特征（各 128 通道，64×64）；Up 为双线性插值（align_corners=True）。E^i 在高斯头中还会被用到。"}, {"tex": "[\\Delta\\delta,\\ o]=\\mathrm{Conv}\\circ\\mathrm{GELU}\\circ\\mathrm{Conv}\\Big(\\mathrm{UNet}_{32}\\big([\\mathbf{I}^i,\\ \\mathrm{Conv}(\\mathbf{E}^i),\\ \\mathrm{Up}(\\bar{\\delta}),\\ \\mathrm{Up}(\\kappa)]\\big)\\Big)", "explain_zh": "按代码改写（refine_unet 与 to_disparity）。I^i 为 RGB（3 通道）；Conv(E^i) 把特征压到 32 通道；δ̄ 与 κ 来自 mv6；UNet_32 是 32 通道、channel_mult [1,1,1,1,1]、16× 下采样处加注意力的 U-Net；两层卷积输出 2 个通道：Δδ（残差视差）和 o（不透明度 logit）。"}, {"tex": "z=\\frac{1}{\\mathrm{clamp}\\big(\\mathrm{Up}(\\bar{\\delta})+\\Delta\\delta,\\ 1/d_{far},\\ 1/d_{near}\\big)},\\qquad \\alpha=\\sigma(o)", "explain_zh": "最终深度与不透明度。clamp 保证深度落在 [near, far] 内；σ 为 sigmoid。代码中的 opacity mapping（initial=final=0）对 α 是恒等映射。"}]}, {"b": "p", "t": "细化 U-Net 输入 [2,37,256,256]、输出 [2,32,256,256]；to_disparity 输出 [2,2,256,256]（probe）。参数：upsampler 295,040，refine_unet 545,728，to_disparity 19,650（probe）。Table 3：base+refine 26.39，base 26.12；完整模型编码 0.043 s、合计 0.044 s（§4.2、Table 1），base 0.038 s（Table B，未注明是否含渲染），差约 5–6 ms（粗略推算）。", "label": "具体数字"}, {"b": "p", "t": "论文只说细化能“进一步提升深度质量”。合理的解读是：代价体只在 1/4 分辨率上工作，而像素对齐高斯在边缘处差 1 个像素就会形成飞点，用 RGB 引导的轻量网络做残差修正，比全分辨率代价体便宜得多。论文未讨论级联代价体或 RAFT 式迭代更新等替代方案。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）论文 §3.2 说不透明度“由两层卷积从匹配置信度预测”，在代码中这两层卷积作用于细化 U-Net 的 32 通道输出，置信度只是 U-Net 的一个输入通道，并不是直接输入；只有 base 模型才把置信度直接当不透明度。（2）残差视差与不透明度共用一个输出头，两者的梯度会相互影响。（3）clamp 会让超出 [near, far] 的真实表面被“压”在边界上，远景或贴近镜头的物体会被放错位置。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "为什么细化网络的输入里要放原始 RGB？只用代价体特征不行吗？", "a": "代价体与 Transformer 特征都在 1/4 分辨率，放大后无法精确定位边缘；原始 RGB 是唯一具有全分辨率细节的输入，物体边缘通常对应颜色边缘。把 RGB 放进来，细化网络可以学到“深度跳变应落在颜色跳变处”，从而修正双线性放大在边缘处产生的中间深度（飞点）。这类“图像引导的深度上采样”在双目与 MVS 中很常见。"}]}, {"b": "sec", "h": "MV8 · 高斯参数：中心沿射线反投影、不透明度、尺度 [0.5,15]×像素足迹、四元数、4 阶球谐", "id": "walk-mvsplat-mv8", "sn": {"label": "论文位置", "t": "§3.2 “Gaussian Parameters Prediction”；附录 Table C（每像素高斯数）；src/model/encoder/encoder_costvolume.py 第 190–213 行；src/model/encoder/common/gaussian_adapter.py；src/model/encoder/common/gaussians.py；config/model/encoder/costvolume.yaml（gaussian_adapter）"}}, {"b": "p", "t": "输入：深度 z、不透明度 α、高斯头输出（由 refine_out 32 + RGB 3 + 全分辨率特征 128 = 163 通道经两层卷积得到的 84 通道）、相机参数。输出：每个像素一个高斯：中心 μ（3）、协方差 Σ（3×3，世界系）、SH 系数（3×25）、不透明度（1）。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-n-3dgs"}, {"k": "concept-g-pinhole"}, {"k": "concept-r-appearance"}, {"k": "concept-r-reps"}, {"k": "adv-a-ff-3dgs"}]}}, {"b": "p", "t": "高斯头是两层 3×3 卷积（163→168→84），84 个通道依次是：2 个子像素偏移、3 个尺度、4 个四元数、75 个球谐系数（RGB 三个通道 × 25 个系数，即 4 阶）（n-3dgs、r-reps）。\n\n中心：像素坐标先加一个 (sigmoid−0.5)×像素大小的偏移，允许在 ±半个像素内移动，然后沿这条射线的单位方向走 z 的距离（g-pinhole）。论文没有提这个偏移。\n\n尺度：sigmoid 把输出映射到 [0.5, 15]，再乘以 z×0.1×(1/f_x+1/f_y)。一个像素在深度 z 处的物理宽度约为 z/f，所以这个设计让高斯的标准差落在约 0.1 到 3 个“像素足迹”之间，远处的高斯自动更大，与像素级表示的采样密度匹配。旋转用四元数，归一化后与尺度组成 Σ=RSSᵀRᵀ，再用相机到世界的旋转转到世界坐标系。\n\n颜色：用球谐函数表示视角相关颜色（r-appearance）。代码对高阶系数乘了一个很小的掩码（1 阶 0.025，2 阶 0.00625，3 阶约 0.0016，4 阶约 0.0004）。这个掩码每次前向都会乘上，不只作用于初始化：网络的原始输出要放大约 40 倍，1 阶系数才能恢复到未加掩码时的量级，所以颜色主要由 0 阶决定。另外，所用的光栅化器只计算到 3 阶，4 阶的 27 个输出通道实际上不参与渲染。\n\n不透明度：来自 mv7 的 sigmoid 输出。论文把它和匹配置信度联系起来：匹配越确定，越可能是表面，越不透明。附录 Table C 显示，把每像素高斯数从 1 增到 3，PSNR 只从 26.39 升到 26.54，渲染从 0.0015 s 变成 0.0023 s，作者因此选择 1 个。", "mn": {"label": "类比", "t": "像给每个像素发一颗形状可调的彩色棉花糖：钉在视线上指定的深度，大小按距离自动放大，形状可以压扁、旋转去贴合表面，颜色可以随看的角度略有变化，透明度则取决于“我有多确定这里真有东西”。"}}, {"b": "eqs", "eqs": [{"tex": "\\boldsymbol{\\mu}=\\mathbf{o}+z\\,\\hat{\\mathbf{r}}\\big(\\mathbf{x}+(\\sigma(\\mathbf{e})-0.5)\\odot\\boldsymbol{\\ell}\\big)", "explain_zh": "按代码改写（encoder_costvolume.py 第 198–200 行、gaussian_adapter.py 第 84–85 行）。x 是像素中心的归一化坐标，e 是高斯头的前 2 个通道，ℓ=(1/W,1/H) 是像素大小，r̂(·) 返回单位射线方向，o 是相机光心，z 是 mv7 的深度。"}, {"tex": "\\mathbf{s}=\\big[s_{min}+(s_{max}-s_{min})\\,\\sigma(\\hat{\\mathbf{s}})\\big]\\cdot z\\cdot 0.1\\left(\\frac{1}{f_x}+\\frac{1}{f_y}\\right),\\quad s_{min}=0.5,\\ s_{max}=15", "explain_zh": "按代码改写（gaussian_adapter.py 第 62–69、98–109 行）。ŝ 是 3 个尺度通道；f_x、f_y 为像素单位焦距（代码用归一化内参的逆乘以像素大小得到 1/f）；当 f_x≈f_y=f 时，s 约为 [0.1, 3]×z/f，即 0.1–3 个像素足迹。"}, {"tex": "\\boldsymbol{\\Sigma}_{w}=\\mathbf{R}^{c2w}\\,\\mathbf{R}(\\mathbf{q})\\,\\mathrm{diag}(\\mathbf{s})^2\\,\\mathbf{R}(\\mathbf{q})^{\\top}\\,(\\mathbf{R}^{c2w})^{\\top},\\qquad \\mathbf{q}\\leftarrow\\frac{\\mathbf{q}}{\\lVert\\mathbf{q}\\rVert}", "explain_zh": "协方差。q 是 4 维四元数（代码为 xyzw 顺序），R(q) 为对应的旋转矩阵；diag(s)² 为尺度平方；R^{c2w} 把相机系下的协方差转到世界系。论文 §3.2 写作 Σ=R(θ)ᵀ diag(s) R(θ)，转置位置和尺度是否平方都与代码不同，应视为记号上的差异，以代码（build_covariance：R S Sᵀ Rᵀ）为准。"}, {"tex": "\\mathbf{c}(\\mathbf{d})=\\max\\Big(0,\\ \\sum_{l=0}^{3}\\sum_{m=-l}^{l}w_l\\,k_{lm}\\,Y_{lm}(\\mathbf{d})+0.5\\Big),\\quad w_0=1,\\ w_l=0.1\\cdot0.25^{l}", "explain_zh": "按代码与光栅化器改写。k_lm 是网络预测的 SH 系数，w_l 是 sh_mask，Y_lm 是球谐基，d 是观察方向；求和只到 l=3，因为 pixelSplat 修改版光栅化器（forward.cu computeColorFromSH）只处理到 3 阶，网络预测的 l=4 系数不起作用；颜色加 0.5 后截断为非负，没有 sigmoid。"}]}, {"b": "p", "t": "高斯头 [2,163,256,256]→[2,84,256,256]，84 = 2 + 3 + 4 + 75（probe；d_in=82 另加 2 个偏移），参数 373,716。高斯 131,072 个：means [1,131072,3]、cov [1,131072,3,3]、SH [1,131072,3,25]、opacity [1,131072]（probe）。Table C：每像素 3 个高斯 26.54，渲染 0.0023 s。", "label": "具体数字"}, {"b": "p", "t": "这些参数化都沿用 pixelSplat 的 GaussianAdapter（0.5/15、sh_degree 4 相同），论文未解释。合理的解读是：尺度乘以深度与 1/f，网络只需预测“以像素足迹为单位”的无量纲量；SH 掩码让训练先学漫反射颜色。每像素 1 个高斯来自 Table C 的速度与质量权衡。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）深度语义不一致：代价体按正对平面构建（z 为相机坐标系深度），中心却放在“光心 + z×单位射线方向”，即把 z 当作沿射线的距离；偏离光轴 θ 的像素，真实 z 坐标只有 z·cosθ，以水平视场 60° 的方形图像为例（假设值），角点处约 0.78 倍。能否由细化残差补偿、补偿了多少，都未经验证；仓库 issue #106（2026-01）也提出了同一问题。（2）4 阶 SH 的 27 个通道不参与渲染。（3）论文说协方差与颜色的输入含“refined cost volume”，代码中高斯头不直接读取代价体，代价体的信息只经粗视差与置信度、通过深度细化 U-Net 间接进入。（4）颜色只在 0 处截断，可能超过 1。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "深度 z 从 2 增加到 4（其他不变），同一个尺度通道输出对应的高斯标准差怎么变？这样设计的好处是什么？", "a": "尺度公式里有一个 z 的线性因子，所以标准差也翻倍。一个像素在深度 z 处覆盖的物理宽度约为 z/f，也随 z 线性增长；把 z 乘进去以后，网络输出的 ŝ 表示的是“相对于像素足迹的大小”，与场景尺度和距离无关，远近物体可以用同一套输出范围，训练更稳定，也更容易跨数据集迁移。"}]}, {"b": "sec", "h": "MV9 · 合并与渲染：各视角高斯直接取并集，3DGS 光栅化，渲染一张 256² 图约 1.5 ms", "id": "walk-mvsplat-mv9", "sn": {"label": "论文位置", "t": "Fig. 2；§2 “Multi-View Stereo” 段（union 代替点云融合）；Table 1 标题（渲染约 500 FPS）；§4.2 “Assessing model efficiency”；src/model/encoder/encoder_costvolume.py 第 230–247 行；src/model/decoder/decoder_splatting_cuda.py；src/model/decoder/cuda_splatting.py（render_cuda）；requirements.txt（diff-gaussian-rasterization-modified）"}}, {"b": "p", "t": "输入：K 组各 H×W 个高斯；目标视角的内外参、near/far。输出：目标视角 RGB [3,256,256]（背景黑色），可以对任意多个目标视角重复渲染而不必重新编码。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-n-3dgs"}, {"k": "concept-r-raster"}, {"k": "concept-r-alpha"}, {"k": "concept-d-mvs"}, {"k": "adv-a-3dgs-ext"}]}}, {"b": "p", "t": "传统 MVS 流水线在得到各视角深度图之后，还要做一致性检查和点云融合，把多个视角看到的同一个表面合并成一份（d-mvs、d-tsdf）。MVSplat 不做这一步：把每个视角的高斯直接拼在一起（Fig. 2 里的 ∪），交给 3DGS 光栅化器（n-3dgs、r-raster）。光栅化器把每个 3D 高斯投影成屏幕上的 2D 椭圆，按深度排序后做前到后的 alpha 合成（r-alpha）。重叠区域的两层高斯，靠不透明度与排序自然地“挑”出前面那层。论文认为这正是 3DGS 表示的便利之处：并集本身就是一个合法的全局表示（§2）。\n\n代码细节：渲染前把整个世界坐标除以 near，避免数值问题（RE10K 的 near=1，所以不改变什么）；光栅化器是 pixelSplat 作者修改过的 3DGS CUDA 实现（主要改动是让 SH 的坐标约定与 e3nn 一致），它只计算到 3 阶球谐。渲染一张 256² 图约 0.0015 s，pixelSplat（每像素 3 个高斯）约 0.0025 s，按单次渲染时间折算，MVSplat 约 670 帧/秒、pixelSplat 约 400 帧/秒（Table 1 表注笼统写作约 500 FPS）。\n\n这一步决定了 MVSplat 在系统层面的一个关键性质：“一次重建、任意渲染”。编码约 43 ms 只做一次，之后每多一个观看视角只多约 1.5 ms。对多观看者或双目显示，这比每个视角都要重跑网络的 IBR 或 LVSM 类方法划算得多。代价是表示有冗余：重叠区域出现两份近似重复的高斯，数量随视角数线性增长。", "mn": {"label": "类比", "t": "像两位画家各自在透明胶片上画了自己看到的场景，然后直接把两张胶片叠在一起投影，而不是先坐下来商量合成一张。叠的地方颜色一样就看不出来，差一点就会有重影。"}}, {"b": "eqs", "eqs": [{"tex": "\\mathcal{G}=\\bigcup_{i=1}^{K}\\big\\{(\\boldsymbol{\\mu}_{i,uv},\\alpha_{i,uv},\\boldsymbol{\\Sigma}_{i,uv},\\mathbf{c}_{i,uv})\\big\\}_{u,v},\\qquad |\\mathcal{G}|=K\\cdot H\\cdot W", "explain_zh": "并集。i 是输入视角，(u,v) 是像素；没有去重，总数固定为 K·H·W。代码中就是把 b v r srf spp 几个维度 reshape 成一维（encoder_costvolume.py 第 230–247 行）。"}, {"tex": "\\mathbf{C}(\\mathbf{x})=\\sum_{n}\\mathbf{c}_n\\,\\alpha_n'(\\mathbf{x})\\prod_{k<n}\\big(1-\\alpha_k'(\\mathbf{x})\\big),\\qquad \\alpha_n'(\\mathbf{x})=\\alpha_n\\exp\\!\\Big(-\\tfrac12(\\mathbf{x}-\\boldsymbol{\\mu}_n')^{\\top}\\boldsymbol{\\Sigma}_n'^{-1}(\\mathbf{x}-\\boldsymbol{\\mu}_n')\\Big)", "explain_zh": "3DGS 光栅化。n 按到目标相机的深度从近到远排序；μ'_n 与 Σ'_n 是投影到屏幕的 2D 均值与协方差（Σ'=JWΣWᵀJᵀ）；α_n 是 mv7 的不透明度；c_n 是按观察方向由 SH 求出的颜色；x 是像素位置。背景色为黑色，加在剩余透射率上。"}, {"tex": "T_{\\text{total}}(N_v)\\approx T_{\\text{enc}}+N_v\\,T_{\\text{render}}\\approx 43\\,\\text{ms}+N_v\\times1.5\\,\\text{ms}", "explain_zh": "按论文数字写成的成本模型（§4.2）。N_v 是要渲染的目标视角数。单视角约 44.5 ms（论文合计写 0.044 s，约 22 fps）；双目约 46 ms；10 个视点约 58 ms。编码在 256²、2 视角下测得，GPU 型号论文未写。"}]}, {"b": "p", "t": "高斯数 131,072（2 视角）；pixelSplat 约 393K（Fig. 1）。渲染：MVSplat 0.0015 s，pixelSplat 0.0025 s；每像素 3 个高斯时 0.0023 s（Table C）。背景色 [0,0,0]（config/dataset/re10k.yaml）。每个高斯若按 3 位置 + 6 协方差 + 75 SH + 1 不透明度共 85 个 float32 存储，131K 个约 45 MB（推算）。", "label": "具体数字"}, {"b": "p", "t": "并集省去显式融合，对输入视角数也没有限制；可微光栅化让深度、不透明度、协方差都能从渲染误差得到梯度。论文把这看作相对传统 MVS 的“独特优势”（§2）。没有采用：深度图融合（点云或 TSDF）、体渲染（pixelNeRF、MuRF 的逐像素采样）、按目标视角重新推理（IBR 类方法）。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）并集不是融合：两视角深度稍有不一致时，重叠区域会出现前后两层高斯，视角移动时可能表现为轻微重影或闪烁；视角越多冗余越大（FreeSplat 的 PTF、Fuse-and-Refine 的体素融合就是针对这一点）。（2）“约 500 FPS”只是渲染部分，不含 43 ms 的编码；视频逐帧推理时帧率由编码决定，约 22 fps。（3）光栅化器只算到 3 阶 SH，网络的 4 阶输出被忽略。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "一个 3D 临场场景需要同时给 4 个观看者、每人双目渲染，用 MVSplat 每帧大约要多少时间？如果换成每个目标视角都要重跑整个网络的方法（编码+渲染 44 ms/视角）呢？", "a": "共 8 个目标视角。MVSplat：编码一次 43 ms + 8×1.5 ms ≈ 55 ms。若每个视角都要完整推理：8×44 ms ≈ 352 ms。这就是“一次重建、任意渲染”在多观看者、双目、光场显示上的价值；当然，前提是 256² 的分辨率和 2 视角输入能满足需求，而这在真实系统中通常不成立。"}]}, {"b": "sec", "h": "MV10 · 训练：MSE + 0.05·LPIPS，Adam 2e-4，batch 14，300K 步，单张 A100；视角间隔实际为 25→45 帧", "id": "walk-mvsplat-mv10", "sn": {"label": "论文位置", "t": "§3.3；§4.1 “Implementation details”；附录 C “More training details”；附录 Table D；config/experiment/re10k.yaml；config/main.yaml；config/dataset/view_sampler_dataset_specific_config/bounded_re10k.yaml；src/dataset/view_sampler/view_sampler_bounded.py 第 25–113 行；src/model/model_wrapper.py 第 540–565 行；src/loss/loss_mse.py、loss_lpips.py；src/dataset/dataset_re10k.py 第 247–252 行"}}, {"b": "p", "t": "输入：RE10K（或 ACID）视频片段，每个样本 2 个输入帧、4 个目标帧，256×256。输出：训练好的编码器权重（re10k.ckpt 或 acid.ckpt）。只用 RGB 监督。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-l-loss"}, {"k": "concept-f-optim"}, {"k": "concept-v-metrics"}, {"k": "adv-a-ff-3dgs"}]}}, {"b": "p", "t": "损失很简单（l-loss）：把 4 个目标视角渲染出来，与真值比 MSE（权重 1）和 LPIPS（VGG 版，权重 0.05），从第 0 步起就同时使用（默认 loss 配置里 LPIPS 要 150K 步后才启用，实验配置把它改成了 0）。没有深度监督，没有几何正则。深度之所以能学好，是因为代价体把“深度对不对”变成了“两边特征对不对得上”，而渲染误差会通过可微光栅化把梯度传回高斯中心、再传回 softmax 分布（f-optim）。\n\n优化器 Adam，峰值学习率 2e-4，OneCycleLR：前 1% 的步数（约 3,000 步）从 8e-6 余弦升到 2e-4，之后余弦退火到约 8e-10；梯度裁剪 0.5；batch 14（每个元素是一个场景的 2+4 张图）；300,001 步；单张 80 GB A100。骨干用 UniMatch 深度模型初始化，随机初始化 300K 步只有 26.01（Table D）。\n\n视角采样有一个值得注意的细节。配置文件写的是：输入两帧的间隔前 150K 步从 25–45 逐渐放宽到 45–192。但 view_sampler_bounded.py 里保留了一个 bug（注释写明是为了与最初的 pixelSplat 配置保持一致；pixelSplat README 的“Notes on Bugs”也记录了它，MVSplat 仓库 issue #93 至今未关闭），把上限赋成了下限，于是间隔恒等于当前下限：从第 0 步的 25 帧线性增加到第 150K 步的 45 帧，之后一直是 45 帧。目标帧从两输入帧之间均匀抽取。训练时还以 50% 概率整体水平翻转。另外，代码里的“验证集”读取的是测试集数据，附录 Fig. A 的验证曲线就来自这里。", "mn": {"label": "类比", "t": "像教学生看立体图：一开始给他两张只差一点点的照片（间隔 25 帧），慢慢拉大到 45 帧；每次让他把两张照片“拼”成一个 3D 模型，再从中间几个位置拍照，与真实照片对比打分。老师从不告诉他正确的深度，只告诉他拍出来的照片像不像。"}}, {"b": "eqs", "eqs": [{"tex": "\\mathcal{L}=\\frac{1}{N}\\sum_{t=1}^{4}\\big\\lVert\\hat{\\mathbf{I}}_t-\\mathbf{I}_t\\big\\rVert_2^2+0.05\\cdot\\frac{1}{4}\\sum_{t=1}^{4}\\mathrm{LPIPS}_{\\text{VGG}}\\big(\\hat{\\mathbf{I}}_t,\\mathbf{I}_t\\big)", "explain_zh": "§3.3 与 loss_mse.py、loss_lpips.py。Î_t 是第 t 个目标视角的渲染图，I_t 是真值；N 是 4 个目标视角所有像素与通道的总数（代码用 mean）；LPIPS 使用 VGG 特征、输入按 [0,1] 归一化。"}, {"tex": "g(s)=25+\\left\\lfloor 20\\cdot\\min\\!\\Big(\\frac{s}{150000},1\\Big)\\right\\rfloor", "explain_zh": "按代码推得的实际输入帧间隔（view_sampler_bounded.py schedule 与第 62 行的 bug）。s 为训练步数，g 为两输入帧的索引差；配置中的上限 192 从未生效。"}, {"tex": "\\eta(s)=\\begin{cases}\\eta_0+\\frac{\\eta_{max}-\\eta_0}{2}\\big(1-\\cos\\frac{\\pi s}{S_1}\\big), & s\\le S_1\\\\ \\eta_{end}+\\frac{\\eta_{max}-\\eta_{end}}{2}\\big(1+\\cos\\frac{\\pi(s-S_1)}{S-S_1}\\big), & s>S_1\\end{cases}", "explain_zh": "OneCycleLR（anneal_strategy='cos'）的学习率。η_max=2e-4；η_0=η_max/25=8e-6 与 η_end=η_0/10⁴=8e-10 是 PyTorch 默认的 div_factor、final_div_factor；S=max_steps+10≈300,011，S_1≈0.01·S≈3,000。配置里的 warm_up_steps: 2000 只在 cosine_lr=false 时使用。"}]}, {"b": "p", "t": "batch 14，max_steps 300,001，Adam lr 2e-4，gradient_clip_val 0.5，checkpoint 每 20K 步、全部保留（config）。损失权重 MSE 1、LPIPS 0.05（论文与 config 一致）。每步看到 14 个场景、28 张输入图、56 张目标图；300K 步共 420 万个场景样本（推算）。训练硬件：单张 A100（README：80 GB）；训练时长与显存峰值未报告。RE10K 67,477 个训练场景（论文）。Table D：UniMatch 初始化 26.39；随机初始化 300K 26.01、450K 26.29。", "label": "具体数字"}, {"b": "p", "t": "只用光度损失，是为了能在没有深度真值的大规模视频上训练（§2）。输入间隔由小到大的课程沿用 pixelSplat（附录 C），合理的解读是先在小基线上学会找对应、再面对更大视差。没有采用：深度监督、几何正则、pixelSplat 的额外深度正则微调。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）配置与实际不符：bounded_re10k.yaml 的 45–192 帧没有生效，实际训练间隔最多 45 帧，而测试索引中的间隔是 45–136 帧（RE10K 平均约 66），约 92% 的测试样本基线比训练时最大的还大；pixelSplat 实际行为相同，所以两者的比较仍公平。（2）验证集即测试集；Table 3 中“w/o cross-view attention”报告的是“best performance”（发布的权重名带 _best，选取方式论文未说明），等于用测试数据选模型。（3）costvolume.yaml 的默认值（32 个候选等）与论文模型不同，必须带 +experiment=re10k。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "如果把 LPIPS 权重设为 0，只用 MSE 训练，你预计 PSNR 与 LPIPS 两个指标分别会怎么变？为什么？", "a": "PSNR 可能持平甚至略升，因为 MSE 直接优化的就是 PSNR；LPIPS 很可能变差，渲染图更糊。原因是在不确定区域（遮挡、弱纹理、单视角可见处），MSE 的最优解是多种可能颜色的平均，即模糊结果；LPIPS 在深度特征空间比较，会惩罚这种模糊。论文没有做这个消融，这是基于损失性质的推断；论文强调 MVSplat 在 LPIPS 上的提升比 PSNR 更明显，与加入 LPIPS 损失也有关系。"}]}, {"b": "sec", "h": "MV11 · 评测协议与主结果：RE10K 26.39 dB、ACID 28.25 dB，0.044 s 与 12.0M 参数", "id": "walk-mvsplat-mv11", "sn": {"label": "论文位置", "t": "§4.1–4.2；Table 1；Fig. 1、Fig. 3；src/evaluation/metrics.py；src/model/model_wrapper.py（test_step、on_test_end）；src/misc/benchmarker.py；assets/evaluation_index_re10k.json、evaluation_index_acid.json；more_commands.sh"}}, {"b": "p", "t": "输入：官方评测索引中的每个测试场景（2 个输入帧 + 3 个目标帧），256×256。输出：每个场景 3 张渲染图的平均 PSNR / SSIM / LPIPS，再对所有场景求平均；编码与渲染的平均耗时；参数量。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-v-metrics"}, {"k": "concept-n-generalizable"}, {"k": "adv-a-ff-3dgs"}, {"k": "adv-a-generalizable-ibr"}]}}, {"b": "p", "t": "评测沿用 pixelSplat 的协议（v-metrics）。RE10K 的评测索引有 7,194 个键，其中 6,474 个有效；ACID 有 1,848 个键，1,595 个有效。每个场景的两个输入帧相距 45–136 帧，3 个目标帧都在两者之间。PSNR 先把图像截到 [0,1] 再算，SSIM 用 skimage 的 11×11 高斯窗，LPIPS 用 VGG 版本。每个场景先对 3 个目标取平均，再对场景取平均。\n\n主结果（Table 1）：RE10K 上 MVSplat 26.39 / 0.869 / 0.128，pixelSplat 25.89 / 0.858 / 0.142，MuRF 26.10；ACID 上 28.25 对 pixelSplat 28.14。RE10K 上 +0.50 dB 意味着 MSE 约降到 0.89 倍；ACID 上只有 +0.11 dB，基本打平。还要注意，表中 pixelSplat 是旧版数字：pixelSplat 的 CVPR camera-ready 和官方仓库已更新为 RE10K 26.09 / 0.863 / 0.136、ACID 28.27 / 0.843 / 0.146，按新版比较，RE10K 领先 0.30 dB，ACID 上 PSNR 反而低 0.02 dB。作者强调 LPIPS 的改善，它更接近人的感知。Fig. 3 展示了重复纹理（窗框）、单视角可见物体（扶手、灯罩）和远处大物体（桥）上的优势。\n\n效率：编码 0.043 s、渲染 0.0015 s，合计 0.044 s，约 22 fps；pixelSplat 0.102 + 0.0025 ≈ 0.104 s。参数 12.0M（代码实测 11,955,734），pixelSplat 125.4M。但表中还有更小的模型：MuRF 5.3M、GPNR 9.6M，只是它们慢得多（0.186 s、13.3 s）。计时 GPU 论文没写；代码计时用 time.time()、没有显式 CUDA 同步，并跳过前 5 个场景作为预热。", "mn": {"label": "类比", "t": "像一场有统一考卷的考试：每位考生（方法）都看同样两张照片，画同样三个中间视角，按三项评分取平均。MVSplat 分数略高，交卷还最快；但要注意，其中几位考生的成绩是从上一届（pixelSplat 论文）的成绩单上抄来的。"}}, {"b": "eqs", "eqs": [{"tex": "\\mathrm{PSNR}=-10\\log_{10}\\mathrm{MSE},\\qquad \\frac{\\mathrm{MSE}_{\\text{MVSplat}}}{\\mathrm{MSE}_{\\text{pixelSplat}}}=10^{-(26.39-25.89)/10}\\approx0.89", "explain_zh": "代码中的 PSNR（图像先 clip 到 [0,1]，MAX=1）。PSNR 每高 0.5 dB，MSE 约乘 0.89；注意这是逐场景 PSNR 的平均，不等于平均 MSE 的 PSNR。"}, {"tex": "\\overline{\\mathrm{PSNR}}=\\frac{1}{S}\\sum_{s=1}^{S}\\frac{1}{3}\\sum_{t=1}^{3}\\mathrm{PSNR}\\big(\\hat{\\mathbf{I}}_{s,t},\\mathbf{I}_{s,t}\\big)", "explain_zh": "评测平均方式（model_wrapper.py test_step 与 on_test_end）。S 为测试场景数（RE10K 索引中 6,474 个有效场景），t 为 3 个目标视角。SSIM、LPIPS 同样处理。"}]}, {"b": "p", "t": "Table 1（时间 s / 参数 M / RE10K / ACID 的 PSNR）：pixelNeRF 5.299 / 28.2 / 20.43 / 20.97；GPNR 13.340 / 9.6 / 24.11 / 25.28；AttnRend 1.325 / 125.1 / 24.78 / 26.88；MuRF 0.186 / 5.3 / 26.10 / 28.09；pixelSplat 0.104 / 125.4 / 25.89 / 28.14；MVSplat 0.044 / 12.0 / 26.39 / 28.25（SSIM、LPIPS 见本篇的论文精读）。Fig. 1 写 pixelSplat 参数 125.1M，与表中 125.4M 不一致；高斯数 393K 对 131K。评测索引：RE10K 6,474 个有效场景，ACID 1,595 个。pixelSplat camera-ready 版：RE10K 26.09 / 0.863 / 0.136，ACID 28.27 / 0.843 / 0.146（pixelSplat README）。RE10K 的 19,422 个目标帧中有 583 个（3.0%）就是输入帧（assets 统计）。", "label": "具体数字"}, {"b": "p", "t": "沿用 pixelSplat 的数据、分辨率与索引，才能直接引用前人数字、做到“同卷考试”。作者对最相关的 NeRF 类强基线 MuRF 用官方代码重训；pixelNeRF、GPNR、AttnRend、pixelSplat 的数字取自 pixelSplat 论文。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）只有 MuRF 是重训的，其他基线数字取自 pixelSplat 论文，而且用的是 pixelSplat 的旧版结果（camera-ready 版已更新为 RE10K 26.09、ACID 28.27）。（2）论文说“lightweight model size”，但 MuRF（5.3M）与 GPNR（9.6M）其实更小；“10 倍更少参数”只相对 pixelSplat 与 AttnRend 成立。（3）目标帧都在两输入帧之间，属于插值；没有外推、没有高分辨率、没有多次训练的方差。（4）计时 GPU 未说明。pixelSplat 论文自己报告编码 0.102 s、渲染 0.002 s，MVSplat 正文写成编码 0.102 s、渲染 0.0025 s，是否在同一硬件上重测，论文没有交代。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "RE10K 上 MVSplat 比 pixelSplat 高 0.50 dB，ACID 上只高 0.11 dB。你会怎么解释这个差别？还需要什么信息才能判断？", "a": "可能的解释有三种：ACID 是户外航拍，远景多、视差小，代价体在远处候选稀疏、匹配线索弱，优势变小；ACID 训练集小（11,075 个场景，约为 RE10K 的 1/6），轻量模型的优势不明显；或者差距本身就在训练随机性的范围内。要判断，需要多次训练的方差、按场景深度范围或基线大小分组的结果，以及两方法在同一硬件、同一代码下重跑的数字，论文都没有给出。另外，如果换成 pixelSplat camera-ready 版的数字，RE10K 的差距只剩 0.30 dB，ACID 上 MVSplat 反而低 0.02 dB，两处差距都很小，更需要方差信息才能下结论。"}]}, {"b": "sec", "h": "MV12 · 跨数据集泛化、几何质量与消融：RE10K→ACID 28.15、→DTU 13.94；去掉代价体掉 3.3 dB", "id": "walk-mvsplat-mv12", "sn": {"label": "论文位置", "t": "§4.2 “Assessing geometry reconstruction / cross-dataset generalization / more-view quality”；Table 2、Table 3；Fig. 4、Fig. 5、Fig. 6；附录 A（Table A–D，Fig. A、Fig. B）；config/experiment/dtu.yaml；src/scripts/generate_dtu_evaluation_index.py；more_commands.sh"}}, {"b": "p", "t": "输入：只在 RE10K 上训练的模型，以及各消融模型。输出：ACID、DTU（2/3 视角）上的零样本分数；深度图与 3D 高斯的定性对比；Table 3 与附录各消融的数字。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-d-mvs"}, {"k": "concept-v-metrics"}, {"k": "concept-n-generalizable"}, {"k": "adv-a-generalizable-ibr"}, {"k": "adv-a-learned-mvs"}]}}, {"b": "p", "t": "泛化（a-generalizable-ibr）：作者认为代价体存的是“相对相似度”，不随特征绝对大小变化，所以换数据集更稳；pixelSplat 从特征直接回归深度分布，特征分布一变就出问题（§4.2）。RE10K→ACID：MVSplat 28.15、pixelSplat 27.64，前者略高于在 ACID 上训练的旧版 pixelSplat（28.14），但低于其 camera-ready 版（28.27）。RE10K→DTU（16 个物体场景，每个 4 个目标视角）：13.94 对 12.89；3 个输入视角时 MVSplat 升到 14.30，pixelSplat 反而降到 12.52。但 14 dB 左右的图像离可用还很远，而且 DTU 测试时 near/far 用的是数据集提供的 2.125 与 4.525，代价体候选集中在物体所在的深度范围内。\n\n几何（Fig. 4、附录 Fig. D）：只有定性图。pixelSplat 的高斯点云有大量漂浮物、深度图噪点多，而且原作要额外做 5 万步带深度正则的微调才能改善；MVSplat 只用光度监督就得到平滑深度。论文没有给出任何深度误差指标。\n\n消融（Table 3，都在不含深度细化的 base 上做）：base 26.12；去掉代价体 22.83（−3.29 dB，两图直接叠在一起）；去掉骨干 cross-attention 25.19（并过拟合，报告最佳步）；去掉 U-Net 25.45；加上深度细化 26.39。附录还显示：把代价体装进 pixelSplat 可到 26.63（Table A），Swin 与 Epipolar Transformer 质量相同而前者更快（Table B）。", "mn": {"label": "类比", "t": "像一个只在室内房产视频里练过“看立体”的学生，被带到海边和实验室的转台前：他靠的是“两边对不对得上”这条通用规律，所以比死记室内外观的同学发挥得好；但在转台这种陌生场景里，两人的绝对成绩都很低。"}}, {"b": "eqs", "eqs": [{"tex": "\\Delta_{\\text{PSNR}}^{\\text{w/o CV}}=22.83-26.12=-3.29\\ \\text{dB}\\ \\Rightarrow\\ \\frac{\\mathrm{MSE}_{\\text{w/o CV}}}{\\mathrm{MSE}_{\\text{base}}}\\approx10^{0.329}\\approx2.1", "explain_zh": "去掉代价体后 MSE 约翻倍，是所有消融中最大的退化；LPIPS 从 0.133 增到 0.197（+0.064，论文称约 50% 的相对退化）。"}, {"tex": "\\mathrm{gap}(\\text{DTU})=13.94-12.89=+1.05\\ \\text{dB},\\qquad \\mathrm{gap}(\\text{ACID})=28.15-27.64=+0.51\\ \\text{dB}", "explain_zh": "Table 2 的领先幅度。论文据此说“源与目标域差距越大，优势越明显”，LPIPS 上尤其明显（DTU 0.385 对 0.560）。"}]}, {"b": "p", "t": "Table 2：RE10K→ACID pixelSplat 27.64 / 0.830 / 0.160，MVSplat 28.15 / 0.841 / 0.147；RE10K→DTU 12.89 / 0.382 / 0.560 对 13.94 / 0.473 / 0.385。DTU 3 视角：MVSplat 14.30、pixelSplat 12.52。Table 3 与附录 Table A–D 的数字见本篇的论文精读。DTU 设置：16 个 scan，目标视角 32、24、23、44，输入 33、31（3 视角加 43），near/far 2.125/4.525（代码与配置）。Table 2 表注把 ACID 上训练的 pixelSplat 写成 28.14 / 0.843 / 0.144，后两个数其实是 Table 1 中 MVSplat 自己的 ACID 结果（pixelSplat 为 0.839 / 0.150），属于表注笔误。", "label": "具体数字"}, {"b": "p", "t": "作者用跨数据集与“更多视角”实验支撑“代价体更具几何意义、更可泛化”的核心论点，用 Table A 说明这一思想对其他架构同样有效。消融为何只在 base 上做，论文没有说明（合理的推测是节省训练成本）。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）DTU 的绝对质量很低，“泛化更好”只是相对 pixelSplat 而言；DTU 使用数据集提供的深度范围，不是真正“什么都不知道”的零样本。（2）几何质量只有定性图，没有深度误差或点云指标。（3）Table A 的混合模型（pixelSplat + 代价体深度）比 MVSplat 本身还好（26.63 对 26.39），但它的参数量与速度没有报告，合理的解读是 MVSplat 的领先主要来自代价体，而不是其余部分的设计（论文只用它说明代价体思想的通用性）。（4）论文没有报告多次训练的方差；“w/o cross-view attention”报告的是“best performance”，而代码的验证数据就是测试集。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "为什么“去掉代价体”的模型渲染出来像两张输入图叠在一起？这说明它的高斯位置出了什么问题？", "a": "没有代价体时，网络只能从 Transformer 特征直接回归 128 维深度分布。这些特征经过了跨视角注意力，U-Net 里也仍有跨视角注意力，但没有任何按候选深度做的显式几何对应（与 pixelSplat 类似，但连极线采样也没有）。两个视角各自回归的深度彼此不一致，于是视角 1 的高斯与视角 2 的高斯落在不同的 3D 位置上，同一个物体变成两份错开的副本。从目标视角看过去，两份副本各自投影到不同的位置，就像两张输入图半透明地叠在一起（Fig. 6，§4.3：“fail to align within the same 3D space”）。代价体通过显式匹配把两视角的深度绑定到同一表面，所以能对齐。"}]}, {"b": "sec", "h": "配套文章", "id": "parts"}, {"b": "toc", "groups": [{"items": [{"k": "wpart-mvsplat-tensor-trace", "t": "MVSplat · 张量追踪", "en": "", "s": "逐阶段列出 16 个关键张量的形状与含义。"}, {"k": "wpart-mvsplat-experiments", "t": "MVSplat · 阅读实验", "en": "", "s": "论文里 8 组实验分别怎么读、真正说明了什么。"}, {"k": "wpart-mvsplat-tradeoffs", "t": "MVSplat · 设计权衡", "en": "", "s": "7 个关键设计选择：换来了什么，付出了什么。"}, {"k": "wpart-mvsplat-faq", "t": "MVSplat · 常见问题", "en": "", "s": "初读时最常问的 9 个问题。"}, {"k": "wpart-mvsplat-exercises", "t": "MVSplat · 练习", "en": "", "s": "6 道由浅入深的动手练习。"}, {"k": "wpart-mvsplat-glossary", "t": "MVSplat · 论文术语", "en": "", "s": "读这篇论文会遇到的 22 个术语。"}]}]}], "toc": true, "series": {"prev": {"k": "guide-gpsgaussian"}, "next": {"k": "guide-freesplat"}, "up": {"u": "works/walkthrough/index.html", "t": "Walkthrough 目录"}}}}</script>
+<script>
+(function () {
+  "use strict";
+  // ================= lib: DOM, text and math helpers shared by every page =================
+  // A page script defines rich(text) (inline cross-links); paras() and eqList() call it.
+  var DATA;
+  try { DATA = JSON.parse(document.getElementById("data").textContent); } catch (e) { DATA = {}; }
+  var meta = DATA.meta || {};
+
+  // ---------- DOM helpers: all text goes through textContent; external links are https-only ----------
+  function safeUrl(u) { if (typeof u !== "string") return null; var s = u.trim(); return /^https:\/\/[^\s"'<>]+$/i.test(s) ? s : null; }
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "class") n.className = v;
+      else if (k === "text") n.textContent = String(v);
+      else if (k === "href") { var u = safeUrl(v); if (u) { n.setAttribute("href", u); n.setAttribute("target", "_blank"); n.setAttribute("rel", "noopener noreferrer"); } }
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c === null || c === undefined || c === false) return; n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return n;
+  }
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function sv(tag, attrs, kids) {
+    var n = document.createElementNS(SVGNS, tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "text") n.textContent = String(v);
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c) n.appendChild(c); });
+    return n;
+  }
+  function arr(x) { return Array.isArray(x) ? x : []; }
+  function str(x) { return typeof x === "string" ? x : (x === null || x === undefined ? "" : String(x)); }
+  function paras(text) { return str(text).split(/\n\s*\n/).map(function (t) { return t.trim(); }).filter(Boolean).map(function (t) { return el("p", null, rich(t)); }); }
+  function link(title, url) { return safeUrl(url) ? el("a", { href: url, text: title }) : el("span", { text: title }); }
+  function ul(items, map) { return el("ul", { class: "plain" }, arr(items).map(function (x) { return el("li", null, [map ? map(x) : str(x)]); })); }
+  function fmtCit(n) { n = Number(n); if (!(n >= 0)) return "—"; if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k"; return String(n); }
+
+  // ---------- math (MathJax, typeset lazily) ----------
+  var mathReady = false, mathQueue = [];
+  function mathUsable() { return !!(window.MathJax && typeof window.MathJax.typesetPromise === "function"); }
+  function flushMath() { mathReady = true; var q = mathQueue.slice(); mathQueue = []; q.forEach(typeset); }
+  window.__atlasMathReady = flushMath;
+  // MathJax may finish loading before this script runs (cached/async), so also poll for it.
+  var mathPoll = setInterval(function () { if (mathUsable()) { clearInterval(mathPoll); flushMath(); } }, 200);
+  setTimeout(function () { clearInterval(mathPoll); }, 30000);
+  function typeset(node) {
+    if (!node) return;
+    if (!mathReady && mathUsable()) mathReady = true;
+    if (!mathReady || !mathUsable()) { mathQueue.push(node); return; }
+    try { window.MathJax.typesetPromise([node]).catch(function () { /* leave raw TeX visible */ }); } catch (e) { /* leave raw TeX visible */ }
+  }
+  function eqList(eqs) {
+    eqs = arr(eqs).filter(function (q) { return q && str(q.tex).trim(); });
+    if (!eqs.length) return null;
+    return el("div", { class: "eqs" }, eqs.map(function (q) {
+      return el("div", { class: "eq" }, [el("div", { class: "math-block", text: "\\[" + str(q.tex) + "\\]" }), q.explain_zh ? el("p", null, rich(q.explain_zh)) : null]);
+    }));
+  }
+  document.addEventListener("toggle", function (e) { var t = e.target; if (t && t.tagName === "DETAILS" && t.open) typeset(t); }, true);
+
+  // ================= frame (Tufte site): links, notes, hover previews, top bar, theme =================
+  var SITE = DATA.site || {};
+  var ROOT = str(SITE.root);
+  var XREF = DATA.xref || {};
+  function hasX(key) { return Object.prototype.hasOwnProperty.call(XREF, key); }
+  // Custom page parts (search tools, diagrams, charts) register here; blocks.js calls them for {"b": "slot"} blocks.
+  var SLOTS = {};
+
+  // ---------- internal links: urls are relative to the site root; pages sit at different depths ----------
+  var SAFE_PATH = /^[A-Za-z0-9][A-Za-z0-9._\/-]*(\?[A-Za-z0-9=&._-]+)?(#[A-Za-z0-9._-]+)?$/;
+  function relHref(u) {
+    u = str(u);
+    if (/^#[A-Za-z0-9._-]+$/.test(u)) return u;
+    if (!SAFE_PATH.test(u)) return null;
+    var cut = u.indexOf("#"), path = cut < 0 ? u : u.slice(0, cut);
+    if (path === SITE.path) return cut < 0 ? "#" : u.slice(cut);
+    return ROOT + u;
+  }
+  function pageLink(u, text, cls) {
+    var h = relHref(u);
+    if (!h) return el("span", { class: cls || null, text: text });
+    var a = el("a", { class: cls || null, text: text });
+    a.setAttribute("href", h);
+    return a;
+  }
+  // A link to a known entry (concept, topic, paper, step...). data-xref drives the hover preview.
+  function xlink(key, text, cls) {
+    if (!hasX(key)) return text ? document.createTextNode(text) : null;
+    var x = XREF[key], a = pageLink(x.u, text || x.n || x.t, cls);
+    a.setAttribute("data-xref", key);
+    return a;
+  }
+
+  // Concept / topic ids mentioned in prose ("见 g-pinhole") become links labelled with the entry's short name.
+  var ID_RE = /(a-[a-z0-9]+(?:-[a-z0-9]+)*|[fgdrilnv]-[a-z0-9]+)/g;
+  var CJK = /[　-〿㐀-鿿＀-￯]/;
+  function rich(text) {
+    var s = str(text), out = [], last = 0, m;
+    ID_RE.lastIndex = 0;
+    while ((m = ID_RE.exec(s)) !== null) {
+      var id = m[1], prev = m.index > 0 ? s.charAt(m.index - 1) : "", next = s.charAt(m.index + id.length);
+      var key = hasX("concept-" + id) ? "concept-" + id : (hasX("adv-" + id) ? "adv-" + id : null);
+      if (!key || /[A-Za-z0-9_\-]/.test(prev) || /[A-Za-z0-9_]/.test(next)) continue;
+      // The prose spaces ids off from Chinese text; a Chinese label needs no such space.
+      var before = s.slice(last, m.index);
+      if (/ $/.test(before) && CJK.test(before.charAt(before.length - 2))) before = before.slice(0, -1);
+      if (before) out.push(document.createTextNode(before));
+      out.push(xlink(key, null, "xref"));
+      last = m.index + id.length;
+      if (s.charAt(last) === " " && CJK.test(s.charAt(last + 1))) last++;
+    }
+    if (last < s.length) out.push(document.createTextNode(s.slice(last)));
+    return out;
+  }
+  function lines(text) { return str(text).split(/\n+/).map(function (t) { return t.trim(); }).filter(Boolean).map(function (t) { return el("p", null, rich(t)); }); }
+
+  // ---------- side notes (numbered) and margin notes (unnumbered); on phones they fold behind a toggle ----------
+  var noteSeq = 0;
+  function sidenote(kids) {
+    var id = "sn-" + (++noteSeq);
+    return el("span", { class: "note-wrap" }, [
+      el("label", { for: id, class: "margin-toggle sidenote-number", "aria-label": "旁注" }),
+      el("input", { type: "checkbox", id: id, class: "margin-toggle" }),
+      el("span", { class: "sidenote" }, kids)
+    ]);
+  }
+  function marginnote(kids) {
+    var id = "mn-" + (++noteSeq);
+    return el("span", { class: "note-wrap" }, [
+      el("label", { for: id, class: "margin-toggle", "aria-label": "边注", text: "⊕" }),
+      el("input", { type: "checkbox", id: id, class: "margin-toggle" }),
+      el("span", { class: "marginnote" }, kids)
+    ]);
+  }
+  function noteLabel(text) { return el("span", { class: "note-label", text: text }); }
+
+  // ---------- article scaffolding ----------
+  var main = document.getElementById("main");
+  var art = main.querySelector("article");
+  function section(id, title, kids) {
+    var s = el("section", { id: id }, [title ? el("h2", { text: title }) : null].concat(kids));
+    art.appendChild(s);
+    return s;
+  }
+  function articleHead(o) {
+    var crumbs = el("nav", { class: "crumbs", "aria-label": "位置" });
+    arr(SITE.crumbs).forEach(function (c, i) {
+      if (i) crumbs.appendChild(el("span", { class: "sep", text: "›", "aria-hidden": "true" }));
+      crumbs.appendChild(c[1] ? pageLink(c[1], c[0]) : el("span", { text: c[0] }));
+    });
+    art.appendChild(el("header", { class: "art-head" }, [
+      crumbs,
+      el("h1", { text: o.title }),
+      o.subtitle ? el("p", { class: "subtitle", text: o.subtitle }) : null,
+      o.meta ? el("p", { class: "meta" }, o.meta) : null
+    ]));
+    if (o.epigraph) art.appendChild(el("div", { class: "epigraph" }, [el("blockquote", null, [el("p", null, rich(o.epigraph))])]));
+  }
+  // Previous / next in the series, each with its hover preview.
+  function seriesNav(prevKey, nextKey, indexUrl, indexLabel) {
+    var nav = el("nav", { class: "series", "aria-label": "同系列" });
+    nav.appendChild(el("div", { class: "prev" }, prevKey && hasX(prevKey) ? [el("small", { text: "上一篇" }), xlink(prevKey)] : []));
+    nav.appendChild(el("div", { class: "up" }, indexUrl ? [pageLink(indexUrl, indexLabel)] : []));
+    nav.appendChild(el("div", { class: "next" }, nextKey && hasX(nextKey) ? [el("small", { text: "下一篇" }), xlink(nextKey)] : []));
+    art.appendChild(nav);
+  }
+
+  // ---------- hover preview for internal links: mouse (after 300 ms) or keyboard focus; never on touch ----------
+  var tip = null, tipTimer = 0, tipFor = null;
+  function hideTip() {
+    clearTimeout(tipTimer);
+    if (tip) tip.hidden = true;
+    if (tipFor) { tipFor.removeAttribute("aria-describedby"); tipFor = null; }
+  }
+  function showTip(a) {
+    var key = a.getAttribute("data-xref");
+    if (!hasX(key)) return;
+    var x = XREF[key];
+    if (!tip) { tip = el("div", { class: "xtip", id: "xtip", role: "tooltip" }); document.body.appendChild(tip); }
+    tip.textContent = "";
+    if (x.m) tip.appendChild(el("div", { class: "xt-m", text: x.m }));
+    tip.appendChild(el("div", { class: "xt-t", text: x.t }));
+    if (x.e) tip.appendChild(el("div", { class: "xt-e", text: x.e }));
+    if (x.s) tip.appendChild(el("p", { class: "xt-s", text: x.s }));
+    tip.hidden = false;
+    var r = a.getClientRects()[0] || a.getBoundingClientRect(), vw = document.documentElement.clientWidth;
+    var w = tip.offsetWidth, h = tip.offsetHeight;
+    var left = Math.max(8, Math.min(r.left, vw - w - 8));
+    var top = r.bottom + 6;
+    if (top + h > window.innerHeight - 8 && r.top - h - 6 > 8) top = r.top - h - 6;
+    tip.style.left = Math.round(left + window.pageXOffset) + "px";
+    tip.style.top = Math.round(top + window.pageYOffset) + "px";
+    a.setAttribute("aria-describedby", "xtip");
+    tipFor = a;
+  }
+  function xrefTarget(e) { return e.target && e.target.closest ? e.target.closest("a[data-xref]") : null; }
+  document.addEventListener("pointerover", function (e) {
+    var a = xrefTarget(e);
+    if (!a || e.pointerType !== "mouse" || a === tipFor) return;
+    clearTimeout(tipTimer);
+    tipTimer = setTimeout(function () { showTip(a); }, 300);
+  });
+  document.addEventListener("pointerout", function (e) {
+    var a = xrefTarget(e);
+    if (!a || (e.relatedTarget && a.contains(e.relatedTarget))) return;
+    hideTip();
+  });
+  document.addEventListener("focusin", function (e) {
+    var a = xrefTarget(e);
+    if (a && a.matches(":focus-visible")) showTip(a);
+  });
+  document.addEventListener("focusout", function (e) { if (xrefTarget(e)) hideTip(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") hideTip(); });
+  window.addEventListener("scroll", function () { if (tipFor && !tipFor.matches(":focus-visible")) hideTip(); }, { passive: true });
+
+  // ---------- top bar: four menus with dropdowns (hover or click on desktop, a folding list on phones) ----------
+  var wide = window.matchMedia("(min-width: 761px)");
+  function setOpen(li, open) {
+    var btn = li.querySelector(".menu-btn");
+    if (open) Array.prototype.forEach.call(li.parentNode.children, function (o) { if (o !== li) setOpen(o, false); });
+    li.classList.toggle("open", open);
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (!open) li._hover = false;
+  }
+  function buildTopbar() {
+    var bar = document.getElementById("topbar");
+    var menus = el("ul", { class: "menus", id: "menus" });
+    arr(SITE.nav).forEach(function (m) {
+      var id = "menu-" + m.key;
+      var btn = el("button", { type: "button", class: "menu-btn", "aria-expanded": "false", "aria-controls": id, text: m.label });
+      var list = el("ul", { class: "drop", id: id }, arr(m.items).map(function (it) {
+        var a = pageLink(it[1], it[0]);
+        if (it[1] === SITE.navItem) a.classList.add("cur");
+        if (it[1] === SITE.path) a.setAttribute("aria-current", "page");
+        return el("li", null, [a]);
+      }));
+      var li = el("li", { class: "menu" + (m.key === SITE.navCur ? " cur" : "") }, [btn, list]);
+      btn.addEventListener("click", function () {
+        // A click on a menu the mouse already opened keeps it open instead of closing it again.
+        if (li._hover) { li._hover = false; return; }
+        setOpen(li, !li.classList.contains("open"));
+      });
+      btn.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowDown") { e.preventDefault(); setOpen(li, true); var f = list.querySelector("a"); if (f) f.focus(); }
+      });
+      li.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse" && wide.matches) { setOpen(li, true); li._hover = true; } });
+      li.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse" && wide.matches) setOpen(li, false); });
+      li.addEventListener("focusout", function (e) { if (wide.matches && !li.contains(e.relatedTarget)) setOpen(li, false); });
+      li.addEventListener("keydown", function (e) { if (e.key === "Escape" && li.classList.contains("open")) { setOpen(li, false); btn.focus(); } });
+      menus.appendChild(li);
+    });
+    var burger = el("button", { type: "button", class: "burger", "aria-expanded": "false", "aria-controls": "menus", text: "Menu" });
+    burger.addEventListener("click", function () {
+      var open = !bar.classList.contains("nav-open");
+      bar.classList.toggle("nav-open", open);
+      burger.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    var themeBtn = el("button", { type: "button", class: "theme-btn" });
+    function darkNow() {
+      var t = document.documentElement.getAttribute("data-theme");
+      return t ? t === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+    function paintThemeBtn() {
+      var dark = darkNow();
+      themeBtn.textContent = dark ? "Light" : "Dark";
+      themeBtn.setAttribute("aria-label", dark ? "切换到浅色" : "切换到深色");
+    }
+    themeBtn.addEventListener("click", function () {
+      var next = darkNow() ? "light" : "dark";
+      var system = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      // Choosing what the system already shows drops the override, so the page follows the system again.
+      if (next === system) document.documentElement.removeAttribute("data-theme");
+      else document.documentElement.setAttribute("data-theme", next);
+      try { if (next === system) localStorage.removeItem("atlas-theme"); else localStorage.setItem("atlas-theme", next); } catch (e) { /* storage unavailable */ }
+      paintThemeBtn();
+    });
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintThemeBtn);
+    paintThemeBtn();
+    bar.appendChild(el("div", { class: "bar-in" }, [pageLink("index.html", SITE.brand || "", "brand"), el("nav", { class: "site-nav", "aria-label": "站点导航" }, [menus]), themeBtn, burger]));
+    document.addEventListener("click", function (e) {
+      if (!bar.contains(e.target)) Array.prototype.forEach.call(menus.children, function (li) { setOpen(li, false); });
+    });
+  }
+
+  function finishPage() {
+    buildTopbar();
+    var foot = document.getElementById("site-foot");
+    if (foot) foot.appendChild(el("p", null, [pageLink("index.html", SITE.brand || ""), SITE.date ? " · 内容截至 " + SITE.date : ""]));
+    typeset(main);
+    // Deep links (#id): the page is rendered by script, so jump once it exists and again after fonts settle.
+    var h = window.location.hash ? window.location.hash.slice(1) : "";
+    if (h && /^[A-Za-z0-9._~-]+$/.test(h) && document.getElementById(h)) {
+      var moved = false;
+      ["wheel", "touchstart", "keydown", "mousedown"].forEach(function (ev) { window.addEventListener(ev, function () { moved = true; }, { once: true, passive: true }); });
+      var settle = function () { var t = document.getElementById(h); if (t && !moved) t.scrollIntoView({ block: "start" }); };
+      settle();
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { window.requestAnimationFrame(settle); });
+      [400, 1200, 2500].forEach(function (ms) { setTimeout(settle, ms); });
+    }
+  }
+
+  // ================= slot: walkthrough pipeline diagram (nodes link to the steps on the same page) =================
+  function diagramQuark() {
+    return {
+      w: 960, h: 300,
+      nodes: [
+        { x: 10, y: 118, w: 132, h: 64, t: "输入视角 × M", s: "RGB + 相机，M = 8", k: "q1" },
+        { x: 162, y: 118, w: 140, h: 64, t: "编码", s: "特征金字塔 + 射线编码 γ", k: "q2" },
+        { x: 322, y: 118, w: 132, h: 64, t: "初始化 LDM", s: "24 层 × 36×64", k: "q4" },
+        { x: 322, y: 212, w: 132, h: 58, t: "LDM 参数化", s: "等视差锚点 + 视差带", k: "q3", data: true },
+        { x: 496, y: 64, w: 118, h: 58, t: "Render", s: "LDM → 输入视角 Ĩ", k: "q5" },
+        { x: 640, y: 64, w: 118, h: 58, t: "Update", s: "对比 Ĩ 与观测 → Δ", k: "q6" },
+        { x: 568, y: 160, w: 118, h: 58, t: "Fuse", s: "One-to-many attention", k: "q7" },
+        { x: 800, y: 64, w: 150, h: 64, t: "上采样后激活", s: "3.75× 到 1080p", k: "q9" },
+        { x: 800, y: 170, w: 150, h: 64, t: "IBR 混合 + over", s: "全分辨率像素凸组合", k: "q10" }
+      ],
+      loop: { x: 480, y: 26, w: 294, h: 250, label: "Update & Fuse × 5（由粗到细）", noteK: "q8", note: "每步分辨率 ×2，Layer Collapse 层数 ÷2" },
+      edges: [
+        { d: "M142,150 L162,150" }, { d: "M302,150 L322,150" },
+        { d: "M388,212 L388,182" },
+        { d: "M454,150 C470,150 470,93 496,93" },
+        { d: "M614,93 L640,93" },
+        { d: "M699,122 C699,150 686,189 686,189" },
+        { d: "M568,189 C520,189 530,122 540,122", fb: true },
+        { d: "M774,96 L800,96" },
+        { d: "M875,128 L875,170" },
+        { d: "M875,234 L875,268" }
+      ],
+      out: { x: 875, y: 285, text: "新视角图像（1080p，≈30 ms/帧）" }
+    };
+  }
+  function diagramHa() {
+    return {
+      w: 960, h: 330,
+      nodes: [
+        { x: 10, y: 128, w: 136, h: 64, t: "K 个 RGB-D 视角", s: "t 时刻，K = 4", k: "h1" },
+        { x: 10, y: 236, w: 136, h: 58, t: "深度来源", s: "RAFT-Stereo / 传感器", k: "h2", data: true },
+        { x: 176, y: 26, w: 164, h: 64, t: "逐视角前向 splat", s: "像素大小的不透明高斯", k: "h3" },
+        { x: 372, y: 26, w: 150, h: 64, t: "Iₖ, αₖ, Dₖ", s: "K 份目标视角图像", k: "h3", data: true },
+        { x: 176, y: 128, w: 110, h: 64, t: "差分掩码 M", s: "哪里在动", k: "h4" },
+        { x: 304, y: 128, w: 110, h: 64, t: "深度 EMA", s: "只滤静止区域", k: "h5" },
+        { x: 432, y: 128, w: 140, h: 64, t: "图像空间 TSDF", s: "sₖ 截断 τ，加权", k: "h6" },
+        { x: 590, y: 128, w: 128, h: 64, t: "光线步进", s: "零交叉 → 深度 𝒟ᵗ", k: "h8" },
+        { x: 432, y: 240, w: 140, h: 58, t: "上一帧深度 𝒟ᵗ⁻¹", s: "时间反馈 ω_tmp", k: "h9" },
+        { x: 752, y: 60, w: 160, h: 72, t: "几何引导混合 U-Net", s: "9K+1 通道输入", k: "h10" },
+        { x: 752, y: 190, w: 160, h: 64, t: "wₖ、w_BG、I_BG", s: "混合出最终图像", k: "h11" }
+      ],
+      edges: [
+        { d: "M78,236 L78,192" },
+        { d: "M146,146 C160,146 160,58 176,58" },
+        { d: "M146,160 L176,160" },
+        { d: "M340,58 L372,58" },
+        { d: "M286,160 L304,160" }, { d: "M414,160 L432,160" }, { d: "M572,160 L590,160" },
+        { d: "M502,240 L502,192" },
+        { d: "M654,192 C654,270 600,269 572,269", fb: true },
+        { d: "M522,58 C640,58 700,84 752,84" },
+        { d: "M718,160 C735,160 735,112 752,112" },
+        { d: "M832,132 L832,190" },
+        { d: "M832,254 L832,292" }
+      ],
+      out: { x: 832, y: 312, text: "输出图像 ℐᵗ（≈40–100 ms/帧，不含立体深度）" },
+      notes: [{ x: 600, y: 300, text: "虚线：下一帧回灌" }]
+    };
+  }
+  function drawDiagram(spec, anchorKey, title) {
+    var svg = sv("svg", { class: "diagram", viewBox: "0 0 " + spec.w + " " + spec.h, role: "img", "aria-label": title });
+    svg.appendChild(sv("defs", null, [
+      sv("marker", { id: "ah-" + anchorKey, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" }, [sv("path", { d: "M0,0 L10,5 L0,10 z", class: "dhead" })]),
+      sv("marker", { id: "ahf-" + anchorKey, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" }, [sv("path", { d: "M0,0 L10,5 L0,10 z", class: "dhead fb" })])
+    ]));
+    function step(k, kids) {
+      var a = sv("a", { class: "dnode", "aria-label": "跳到步骤 " + k.toUpperCase() }, kids);
+      a.setAttribute("href", "#walk-" + anchorKey + "-" + k);
+      return a;
+    }
+    if (spec.loop) {
+      var lp = spec.loop;
+      svg.appendChild(sv("rect", { class: "dloop", x: lp.x, y: lp.y, width: lp.w, height: lp.h, rx: 4 }));
+      svg.appendChild(sv("text", { class: "dlabel", x: lp.x + 14, y: lp.y + 22, text: lp.label }));
+      svg.appendChild(step(lp.noteK, [sv("text", { class: "dnote", x: lp.x + 14, y: lp.y + lp.h - 14, text: "▸ " + lp.note + "（" + lp.noteK + "）" })]));
+    }
+    spec.edges.forEach(function (e) { svg.appendChild(sv("path", { class: "dedge" + (e.fb ? " fb" : ""), d: e.d, "marker-end": "url(#" + (e.fb ? "ahf-" : "ah-") + anchorKey + ")" })); });
+    spec.nodes.forEach(function (n) {
+      n.k = n.k || n.step;
+      svg.appendChild(step(n.k, [
+        sv("rect", { class: n.data ? "data" : null, x: n.x, y: n.y, width: n.w, height: n.h, rx: 3 }),
+        sv("text", { class: "k", x: n.x + 10, y: n.y + 16, text: n.k }),
+        sv("text", { class: "t", x: n.x + 10, y: n.y + 35, text: n.t }),
+        sv("text", { class: "s", x: n.x + 10, y: n.y + 52, text: n.s })
+      ]));
+    });
+    if (spec.out) svg.appendChild(sv("text", { class: "dnote", x: spec.out.x, y: spec.out.y, "text-anchor": "middle", text: spec.out.text }));
+    arr(spec.notes).forEach(function (n) { svg.appendChild(sv("text", { class: "dnote", x: n.x, y: n.y, text: n.text })); });
+    return svg;
+  }
+  SLOTS.diagram = function (b) {
+    // Laid-out specs come with the page (routes.layout_diagram); the first two deep reads keep their hand-drawn ones.
+    if (b.spec && /^[a-z0-9]+$/.test(str(b.which))) {
+      return el("figure", { class: "fullwidth diagram-fig" }, [el("div", { class: "diagram-wrap" }, [drawDiagram(b.spec, b.which, str(b.label))])]);
+    }
+    var which = b.which === "ha" ? "ha" : "quark";
+    var spec = which === "quark" ? diagramQuark() : diagramHa();
+    return el("figure", { class: "fullwidth diagram-fig" }, [el("div", { class: "diagram-wrap" }, [drawDiagram(spec, which, (which === "quark" ? "Quark" : "Ha et al.") + " 流程图")])]);
+  };
+
+  // ================= article: a page composed as blocks in routes.py =================
+  (function () {
+    var PG = DATA.page || {};
+    var H = PG.head || {};
+    if (PG.id) art.id = PG.id;
+
+    // A link dict from routes.py: {k} an entry with hover preview, {u, t} a page of this site, {url, t} an external page.
+    function part(x) {
+      if (x === null || x === undefined) return null;
+      if (typeof x === "string") return x;
+      if (x.k) return xlink(x.k, x.t || null);
+      if (x.u) return pageLink(x.u, x.t || x.u);
+      if (x.url) return link(x.t || x.url, x.url);
+      return x.t ? str(x.t) : null;
+    }
+    function noteNodes(n) {
+      var kids = [noteLabel(n.label)];
+      if (n.t) kids = kids.concat(rich(n.t));
+      arr(n.links).forEach(function (l, i) { if (i) kids.push(el("br")); kids.push(part(l)); });
+      return kids;
+    }
+    function runIn(label) { return el("b", { class: "run-in", text: label + "：" }); }
+    function multiline(text) {
+      var out = [];
+      str(text).split("\n").forEach(function (line, i) { if (i) out.push(el("br")); out = out.concat(rich(line)); });
+      return out;
+    }
+
+    // ---------- head ----------
+    var meta = [];
+    if (arr(H.prereqs).length) {
+      meta.push(marginnote([noteLabel("阅读前需要")].concat(arr(H.prereqs).map(function (p, i) {
+        var a = part(p);
+        return i ? el("span", null, ["；", a]) : a;
+      }))));
+    }
+    var sep = false;
+    arr(H.meta).concat(H.minutes > 1 ? ["约 " + H.minutes + " 分钟"] : []).forEach(function (x) {
+      var n = part(x);
+      if (!n || (typeof n === "string" && !n.trim())) return;
+      if (sep) meta.push(" · ");
+      meta.push(n);
+      sep = !(typeof x === "string" && /：$/.test(x));
+    });
+    articleHead({ title: H.title, subtitle: H.sub, meta: meta.length ? meta : null, epigraph: H.epigraph });
+    if (str(H.lede).trim()) art.appendChild(el("div", { class: "lede" }, paras(H.lede)));
+
+    // ---------- blocks ----------
+    function heading(tag, b) {
+      var title = b.url && safeUrl(b.url) ? link(b.t, b.url) : (b.k ? part({ k: b.k, t: b.t }) : str(b.t));
+      var h = el(tag, { id: b.id || null }, [title]);
+      if (b.sn) h.appendChild(sidenote(noteNodes(b.sn)));
+      if (b.en) h.appendChild(el("span", { class: "en", text: b.en }));
+      if (b.tag) h.appendChild(el("span", { class: "used", text: b.tag }));
+      return h;
+    }
+    function withNotes(nodes, b) {
+      if (nodes.length && b.mn) nodes[0].insertBefore(marginnote(noteNodes(b.mn)), nodes[0].firstChild);
+      if (nodes.length && b.label) nodes[0].insertBefore(runIn(b.label), nodes[0].firstChild);
+      return nodes;
+    }
+    function listItem(x) {
+      if (typeof x === "string") return el("li", null, rich(x));
+      return el("li", null, (x.label ? [runIn(x.label)] : []).concat(rich(x.t)));
+    }
+    function refsList(items, cls) {
+      var left = items.some(function (x) { return x.left; });
+      return el("ul", { class: "refs " + (cls || "") + (left ? "" : " noleft") }, items.map(function (x) {
+        var body = [x.k || x.u || x.url ? part(x) : el("span", { class: "plain-t", text: x.t })];
+        if (x.tag) body.push(el("span", { class: "used", text: x.tag }));
+        if (x.sub) body.push(el("div", { class: "en", text: x.sub }));
+        if (str(x.gloss).trim()) body.push(el("div", { class: "gloss" }, multiline(x.gloss)));
+        var kids = left ? [el("span", { class: /^\d{4}$/.test(str(x.left)) ? "yr" : "kind", text: str(x.left) })] : [];
+        return el("li", { id: x.id || null }, kids.concat([el("div", null, body)]));
+      }));
+    }
+    var TY = { book: "教材", course: "课程", paper: "论文", tutorial: "教程", code: "代码", video: "视频", blog: "文章" };
+    function tocGroups(groups, level) {
+      var out = [];
+      arr(groups).forEach(function (g) {
+        if (g.h) out.push(el(level, { class: "toc-h" }, [g.k || g.u ? part({ k: g.k, u: g.u, t: g.h }) : g.h]));
+        if (str(g.lede).trim()) out.push(el("p", { class: "toc-lede" }, rich(g.lede)));
+        out.push(el("ol", { class: "toc" }, arr(g.items).map(function (it) {
+          return el("li", null, [
+            el("div", { class: "toc-t" }, [part({ k: it.k, u: it.u, t: it.t }), it.en ? el("span", { class: "en", text: it.en }) : null,
+              it.meta ? el("span", { class: "toc-meta", text: it.meta }) : null]),
+            str(it.s).trim() ? el("p", { class: "toc-s", text: it.s }) : null
+          ]);
+        })));
+      });
+      return out;
+    }
+    function cell(tag, c) { return el(tag, null, c && typeof c === "object" ? [part(c)] : rich(c)); }
+
+    var box = null;
+    function cur() { if (!box) { box = el("section"); art.appendChild(box); } return box; }
+    function render(b) {
+      switch (b.b) {
+        case "p": return withNotes(paras(b.t), b);
+        case "lines": return withNotes(lines(b.t), b);
+        case "h3": return [heading("h3", b)];
+        case "note": return [el("p", { class: "note", text: b.t })];
+        case "ul": case "ol": return [el(b.b, null, arr(b.items).map(listItem))];
+        case "eqs": return [eqList(b.eqs)];
+        case "qa": return [el("p", { class: "quiz-h", text: "自测" }), el("ol", { class: "quiz" }, arr(b.items).map(function (q) {
+          return el("li", null, [el("p", null, rich(q.q)), el("details", null, [el("summary", { text: "答案" }), el("p", null, rich(q.a))])]);
+        }))];
+        case "res": return [refsList(arr(b.items).map(function (r) {
+          return { left: TY[r.type] || r.type || "", url: r.url, t: r.title, gloss: r.note_zh };
+        }))];
+        case "refs": return [refsList(arr(b.items), b.cls)];
+        case "toc": return tocGroups(b.groups, cur().querySelector("h2") ? "h3" : "h2");
+        case "table": return [el("div", { class: "table-wrap" + (b.wide ? " fullwidth" : "") }, [el("table", { class: "booktabs" + (b.cls ? " " + b.cls : "") }, [
+          el("thead", null, [el("tr", null, arr(b.head).map(function (h) { return el("th", { text: h }); }))]),
+          el("tbody", null, arr(b.rows).map(function (r) { return el("tr", null, arr(r).map(function (c) { return cell("td", c); })); }))
+        ])])];
+        case "timeline": return [el("ul", { class: "refs timeline" }, arr(b.items).map(function (x) {
+          return el("li", null, [el("span", { class: "yr", text: str(x[0]) }), el("div", null, rich(x[1]))]);
+        }))];
+        case "kv": return [el("table", { class: "kv" }, [el("tbody", null, arr(b.items).map(function (x) {
+          return el("tr", null, [el("th", { text: x[0] }), el("td", null, rich(x[1]))]);
+        }))])];
+        case "mtoc": return [marginToc(b.items)];
+        case "slot": return typeof SLOTS[b.name] === "function" ? [SLOTS[b.name](b)] : [];
+        default: return [];
+      }
+    }
+    // Long articles: a table of contents at the top of the margin (a folding list on phones).
+    function marginToc(items) {
+      var d = el("details", { class: "mtoc" }, [el("summary", { text: "本文目录" }), el("ol", null, arr(items).map(function (x) { return el("li", null, [part(x)]); }))]);
+      var wide = window.matchMedia("(min-width: 761px)");
+      d.open = wide.matches;
+      return d;
+    }
+    arr(PG.body).forEach(function (b) {
+      if (b.b === "sec") {
+        box = el("section", { id: b.id || null });
+        if (b.h) box.appendChild(heading("h2", { t: b.h, sn: b.sn }));
+        art.appendChild(box);
+        return;
+      }
+      render(b).forEach(function (n) { if (n) cur().appendChild(n); });
+    });
+
+    var S = PG.series || {};
+    if (S.prev || S.next || S.up) {
+      var nav = el("nav", { class: "series", "aria-label": "同系列" });
+      nav.appendChild(el("div", { class: "prev" }, S.prev ? [el("small", { text: "上一篇" }), part(S.prev)] : []));
+      nav.appendChild(el("div", { class: "up" }, S.up ? [part(S.up)] : []));
+      nav.appendChild(el("div", { class: "next" }, S.next ? [el("small", { text: "下一篇" }), part(S.next)] : []));
+      art.appendChild(nav);
+    }
+  })();
+
+  finishPage();
+})();
+</script>
+</body>
+</html>

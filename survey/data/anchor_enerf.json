@@ -1,0 +1,312 @@
+{
+ "citation": {
+  "title": "Efficient Neural Radiance Fields for Interactive Free-viewpoint Video",
+  "authors": "Haotong Lin*, Sida Peng*（共同一作）, Zhen Xu, Yunzhi Yan, Qing Shuai, Hujun Bao, Xiaowei Zhou",
+  "affiliations": "浙江大学 CAD&CG 国家重点实验室 3D 视觉组（ZJU3DV）",
+  "venue": "SIGGRAPH Asia 2022 Conference Papers（会议论文轨，DOI 10.1145/3550469.3555376）；arXiv 2112.01517，2021-12 的 v1 题为 “Efficient Neural Radiance Fields with Learned Depth-Guided Sampling”，后改为现名",
+  "year": 2022,
+  "url": "https://arxiv.org/abs/2112.01517",
+  "project_page": "https://zju3dv.github.io/enerf/",
+  "code_status": "官方代码 https://github.com/zju3dv/ENeRF 公开，含训练、评测、DTU/LLFF/NeRF Synthetic/ZJU-MoCap/ENeRF-Outdoor 数据读取和 ZJU-MoCap 交互 GUI（gui_human.py）。放出 DTU 预训练权重（README：4 卡训练 138000 次迭代，Google Drive 链接在 2023-12 和 2024-03 各更新过一次）。数据需各自从原出处下载；ENeRF-Outdoor（18 台同步相机、每段约 1000 帧）要填协议并发邮件申请；README 里 DynamicCap 一节被注释掉，没有提供。许可证：2022-12 起为“仅限教育、研究和非营利用途，衍生作品须开源且禁止商用”；2026-09-15 改为 Project Registration License v1.0：学术、教学和个人使用免费且无需登记，公司或机构的任何项目使用（含内部、非商业）须事先通过 Google 表单登记，登记后自动免费授权。截至 2026-09，最后一次改动代码或配置的提交是 2023-11-01（加入非级联配置 dtu_pretrain_nocascade.yaml）；2023-12、2024-03 两次提交只改 README 中的权重链接，2026-09-15 的提交只改 LICENSE。"
+ },
+ "tldr_zh": "ENeRF 是浙大 ZJU3DV 提出的可泛化神经辐射场（不做逐场景优化，一个网络用于所有场景），目标是让多相机拍摄的动态人物视频可以交互式地自由换视角观看。它在目标视角的视锥里用平面扫描建一个两级级联代价体：粗层在 1/8 分辨率上扫 64 个逆深度平面，得到每个像素的深度分布（期望 D 和标准差 σ）；细层只在 [D−σ, D+σ] 内扫 8 个平面，在 1/2 分辨率上细化。有了这份带不确定性的深度，每条射线只在 D±σ 区间内取 2 个点，用代价体特征加多视角图像特征预测密度和源视角颜色的混合权重，再做体渲染。深度模块没有深度监督，和渲染部分一起只用 RGB 损失端到端训练。论文报告在 RTX 3090 上用 3 个输入视角、每射线 2 个样本渲染 512×512 图像约 25 FPS，比此前的可泛化 NeRF 快至少 60 倍，DTU 上 PSNR 27.61；代价是速度仍随输出像素数线性增长，动态视频只是逐帧独立处理，人物实验依赖前景 mask 和包围盒，没有任何时间一致性机制。",
+ "problem_setting_zh": "输入是同一时刻的 S 张已标定 RGB 图像（从阵列里按相机中心距离挑离目标视角最近的几台）、它们的内外参、目标相机位姿，以及一个场景深度范围 [near, far]。输出是目标视角的 RGB 图像，顺带得到一张深度图。方法的核心要求有两个：一是可泛化，在 DTU 上训练后直接用于没见过的场景，也可以再做几十分钟的逐场景微调；二是快，要能交互式浏览。动态场景没有专门的时序模型，被当作一串同步多视角“静态快照”，每帧独立推理。评测设定（论文，经检索核对）：DTU 每个测试场景取 16 个视角作为已知视角、4 个作为新视角，用 3 个输入视角渲染；在 DTU 上训练的模型直接测 NeRF Synthetic 和 Real Forward-facing（各 8 个场景）；动态数据是 ZJU-MoCap 的 Sequence-313 前 600 帧和 DynamicCap 的 olek（前 1000 帧）、vlad（前 600 帧），论文称这两个数据集“背景简单、mask 质量高”。评测协议沿用 MVSNeRF，并在 arXiv v1 补充材料中写明：DTU 的 PSNR 只算有真值深度的前景像素，SSIM、LPIPS 在背景置黑的整图上算；Real Forward-facing 只评图像中心 80% 的区域；分辨率 DTU 512×640、Real Forward-facing 640×960、NeRF Synthetic 800×800。代码里的隐含前提：DTU 深度范围固定为 425–905 mm（lib/datasets/dtu/enerf.py:30）；人物数据的 near/far 由每帧 SMPL 顶点包围盒外扩 0.1 m 给出，背景像素置 0（lib/datasets/zjumocap/enerf.py:57–67、152）。常与 ENeRF 一起出现的 NHR 数据集并不在论文实验里，它出现在同组后续工作（MLP Maps、Im4D、4K4D）的实验中，其中 4K4D 在 DNA-Rendering 上把 ENeRF 列为定量基线（ENeRF 28.108 dB、约 6.0 FPS，经检索），Im4D 也在 ZJU-MoCap、DNA-Rendering 等数据上与 ENeRF 对比（经检索）；ENeRF-Outdoor 是 2023 年随代码发布的数据集，后来被 Ha et al.、4K4D 等用作测试集。",
+ "pipeline_zh": [
+  {
+   "stage": "0. 输入与视角选择",
+   "detail": "源图像归一化到 [−1, 1]（dtu/enerf.py:125），形状 B×S×3×H×W；DTU 为 512×640、测试 S=3（训练时按 0.1/0.8/0.1 的概率取 2/3/4 个）；ZJU-MoCap 为 1024×1024 缩到 512×512、S=2。源视角按相机中心欧氏距离取最近的若干台（dtu/enerf.py:67–74）；ZJU-MoCap 先按位置取最近的 2S 台，只保留其中朝向（旋转矩阵之差）也排在最近 2S 台之内的，再取前 S 台（zjumocap/enerf.py:84–98）。深度范围：DTU 固定 [425, 905] mm，LLFF 取 poses_bounds 中所有图像近界的最小值和远界的最大值，整个场景共用一个范围（逐图范围的写法在代码里被注释掉），NeRF Synthetic 固定 [2.5, 5.5]，人物用 SMPL 包围盒，户外用 visual hull 包围盒加背景点云。"
+  },
+  {
+   "stage": "1. 共享特征金字塔（FPN 式 2D CNN）",
+   "detail": "lib/networks/enerf/feature_net.py:4–36：自底向上三段卷积（3→8 通道原分辨率，8→16 通道 1/2，16→32 通道 1/4，5×5 步长 2 下采样，BN+ReLU），再自顶向下用 1×1 横向连接、双线性上采样相加、3×3 平滑，输出 32 通道@1/4、16 通道@1/2、8 通道@1× 三级特征（代码里分别叫 level_0/1/2，level_0 反而是最粗的一级）。约 3.7 万参数。三级特征分别供粗代价体、细代价体和细层渲染的像素对齐特征使用。"
+  },
+  {
+   "stage": "2. 目标视锥下的粗代价体",
+   "detail": "在目标视角 1/8 分辨率（DTU 为 64×80）的网格上，在 [near, far] 之间按逆深度均匀取 64 个平面（README 的评测命令改成 48 个）。用 P_s·P_t^{-1} 把每个 (u, v, d) 投到各源视角，用 grid_sample 在 1/4 分辨率的 32 通道特征上双线性采样（越界填 0），得到 S 个 32×64×64×80 的扭曲特征体，逐通道取跨视角方差作为代价体（utils.py:57–95、322–349）。注意代价体建在目标视角，而不是某个参考源视角。"
+  },
+  {
+   "stage": "3. 深度分布与级联细代价体",
+   "detail": "粗代价体经 3D U-Net（MinCostRegNet，两次下采样，约 7.8 万参数，cost_reg_net.py:51–86）得到 8 通道特征体和每平面一个 logit；沿深度 softmax 后，在视差空间求期望 D 和标准差 σ（utils.py:614–667）。细层把 D、σ 双线性放大 4 倍到 1/2 分辨率（256×320），以 [D−σ, D+σ]（视差空间，并截到粗层范围内）换算成深度区间，在区间内按深度均匀取 8 个平面，用 1/2 分辨率的 16 通道特征再建一个方差代价体，经三次下采样的 3D U-Net（CostRegNet，约 29.6 万参数）得到细层 8 通道特征体、深度 D₁ 和标准差 σ₁（utils.py:98–151；cost_reg_net.py）。"
+  },
+  {
+   "stage": "4. 深度引导采样",
+   "detail": "把 D₁、σ₁ 上采样到渲染分辨率（DTU 细层为 512×640），每条目标射线的采样区间为 [D₁−σ₁, D₁+σ₁]（截到细代价体范围内），在区间内均匀取 N 个点：细层 N=2，由于用 linspace(0,1,2)，两个点正好落在区间两端；N=1 时取中点（utils.py:390–441）。射线方向为 R^T K^{-1}[u, v, 1]，z 分量为 1，所以射线参数就是相机深度（enerf_utils.py:55–58）。训练时粗层也在 1/4 分辨率上渲染，每射线 8 个点、在视差空间均匀分布；测试时 README 用 render_if False,True 跳过粗层渲染。"
+  },
+  {
+   "stage": "5. 点特征与多视角聚合",
+   "detail": "每个采样点取两类特征。体素对齐特征：在细层 8 通道特征体上按 (u/(W−1), v/(H−1), (z−near)/(far−near)) 三线性插值得 8 维（utils.py:456–458）。像素对齐特征：把点投到每个源视角，在全分辨率 8 通道特征图和 RGB 上双线性采样（越界时取边缘像素），再拼 4 维相对视角特征（目标射线与源射线单位向量之差的方向 3 维加点积 1 维），每视角 15 维（utils.py:689–722）。聚合器（nerf.py:45–89，IBRNet 式）把视角特征加上 view_fc(Δd)，拼上跨视角均值和方差，经 MLP 得到每视角权重，softmax 后加权求和，再投到 16 维。"
+  },
+  {
+   "stage": "6. 密度与颜色",
+   "detail": "8 维体素特征与 16 维聚合特征拼成 24 维，经一层 64 维 MLP 得到点特征 h，σ = Softplus(Linear(h))。颜色不直接回归：把 [h, 体素特征, 聚合特征] 与每个视角的 [特征, RGB, Δd] 拼成 103 维，经 64 维隐藏层输出每视角一个标量（带 ReLU），跨视角 softmax 得到混合权重，颜色等于各源视角采样到的 RGB 的加权和（nerf.py:6–43）。细层渲染头约 1 万参数，全网约 44 万参数（按代码逐层计算，不含 VGG 损失网络）。"
+  },
+  {
+   "stage": "7. 体渲染与训练目标",
+   "detail": "代码中 α = 1 − exp(−σ)，没有乘相邻样本间距 δ；T 为累积透射率，颜色 C = Σ T·α·c（utils.py:571–603）；只有 2 个样本时等价于 C = α₁c₁ + (1−α₁)α₂c₂。深度图输出时对权重再做一次 softmax。损失（lib/train/losses/enerf.py）：每一级 MSE，粗细两级权重 0.1 和 1.0；整图训练时再加 0.01 倍 VGG16 感知损失（前 4 个 block 特征的 L1）；检索摘要显示论文也写了这一项（L = L_mse + λ′L_perc，λ′ = 0.01，论文说法是在采样的图块上计算）。没有任何深度监督，深度模块通过采样位置和体素特征的可微路径，由渲染损失端到端训练。"
+  },
+  {
+   "stage": "8. 用于动态人物与交互浏览",
+   "detail": "网络的 forward 只接受单帧 batch，没有任何跨帧状态（network.py:76–113）。ZJU-MoCap 管线：图像去畸变、缩到 512×512、前景 mask 膨胀 5×5 后把背景置 0，near/far 取自该帧 SMPL 包围盒，评测和交互时只渲染包围盒投影内的射线（network_human.py:90–107）。交互 GUI 启动时把所选帧的 21 路图像全部预读进内存，每帧按新视点取距离最近的 2 台相机（enerf_interactive.py:103–105、205–208）。ENeRF-Outdoor 另有一套前景/背景两层模型（network_composite.py，2023-02 发布）：前景在 visual hull 包围盒内用 32/8 平面，背景用空场景背景图和背景点云给出的深度范围、16/4 平面，两层样本拼接后统一做体渲染，且需按序列从头训练。"
+  }
+ ],
+ "key_design_choices_zh": [
+  {
+   "choice": "代价体建在目标（新）视角的视锥里，而不是某个参考源视角",
+   "rationale": "要加速的是目标射线上的采样，所以直接为每个目标像素估计深度分布最省事：得到的 D、σ 与目标射线一一对应，不需要再把源视角深度 warp 过来。方差代价对输入视角数不敏感，同一个网络可以吃 2–4 个视角（训练时按 0.1/0.8/0.1 随机取 2/3/4 个）。",
+   "alternatives_rejected": "对照方案：MVSNeRF 式在参考源视角建代价体再查询（需要额外的坐标变换，且只覆盖参考视角可见的部分）。后来的 FWD、Ha et al.（2025）走另一条路：先估计每个源视角的深度再前向 warp；它们与 ENeRF 同期或更晚，这里只是对照，不是 ENeRF 论文讨论过并放弃的方案。ENeRF 这种做法的代价是：每换一个目标视角都要重建代价体，多观看者和双目的开销线性增加。"
+  },
+  {
+   "choice": "两级级联：粗层 1/8 分辨率 64 个逆深度平面，细层 1/2 分辨率只在 [D−σ, D+σ] 内扫 8 个平面",
+   "rationale": "粗层负责在整个深度范围内“找到表面”，细层只在很窄的区间里“贴近表面”，总体素数约为 32.8 万 + 65.5 万，而单层 1/2 分辨率、128 平面约为 1049 万（按代码配置计算，约 11 倍）。论文消融（经检索）显示：级联（64+8 平面）与非级联（128 平面）质量相当，但速度大幅提升；arXiv v1 补充材料的文字说明相同：有了深度引导采样后，高分辨率代价体的构建成为速度瓶颈，级联在不损失质量的前提下进一步提速。具体数值未能核对。",
+   "alternatives_rejected": "单一高分辨率代价体（论文消融中的 128 平面非级联版本；代码里另有一个 2023-11 加入的 48 平面非级联配置 dtu_pretrain_nocascade.yaml）；固定宽度的细层区间（CasMVSNet 式按固定比例缩小深度范围）。"
+  },
+  {
+   "choice": "用深度分布的标准差决定采样区间，每条射线只取 2 个点",
+   "rationale": "σ 把“这里有多确定”直接变成“要在多宽的范围里找”：纹理清晰处区间窄，边缘和弱纹理处区间宽。点数从 NeRF 式的每射线 128 个降到 2 个，512×640 下从约 4194 万个点降到约 65.5 万个（按代码配置计算）。论文消融（经检索）显示把样本数从 128 降到 2 时，有深度引导的版本质量几乎不变，没有深度引导的版本质量显著下降；arXiv v1 补充材料图 2 的说明相同，并称“不带深度引导”的版本类似 MVSNeRF。",
+   "alternatives_rejected": "NeRF 的粗到细重要性采样（仍需几十到上百个点）；只取一个表面点（退化为纯深度 warp，失去体渲染对深度误差的容错）；固定宽度的薄壳采样。"
+  },
+  {
+   "choice": "颜色是源视角像素 RGB 的凸组合（预测混合权重），密度由体素特征加聚合图像特征预测",
+   "rationale": "继承 IBRNet 的做法：纹理直接来自真实像素，网络只决定“从哪张图取、各取多少”，泛化更稳、细节更锐；体素对齐特征携带代价体里的多视角一致性，负责几何（密度）。聚合用跨视角均值和方差，与输入视角数和顺序无关；arXiv v1 补充材料明确写明聚合沿用 IBRNet 的加权池化（拼接均值、方差，经共享 MLP 求权重，再 soft-argmax 加权），而不是 MVSNeRF 式的直接拼接。",
+   "alternatives_rejected": "MVSNeRF 式由 MLP 直接回归 RGB（代码 nerf.py:91–126 仍保留一个 MVSNeRF 类，用 sigmoid 输出颜色，但默认网络不使用）；IBRNet 的 ray transformer（沿射线做注意力，依赖较多样本；每射线只有 2 个点时作用有限。这是合理的解读，论文是否这样论证未能核对）。"
+  },
+  {
+   "choice": "深度模块不用深度真值，和辐射场一起只用 RGB 损失端到端训练",
+   "rationale": "采样位置 z 由 D、σ 计算，体素特征按 z 插值，都可微，渲染误差能一路传回代价体网络；这样只要多视角 RGB 就能训练，也能在只有视频、没有深度的动态数据上微调。README 的 DTU 深度评测（沿用 MVSNeRF，只在 scan1/8/21/103/110 这 5 个场景上算）显示，这样学到的深度与真值的平均误差约 4.3 mm，2 mm 内的像素约占 80%。检索摘要中的论文深度表：ENeRF 体渲染深度 Abs err 约 4.60 mm、10 mm 内约 91.7%，MVSNeRF 为 7.00 mm、2 mm 内 71.7%、10 mm 内 86.6%（未能逐字核对）。",
+   "alternatives_rejected": "用 MVS 深度真值监督深度网络（DTU 有，真实动态数据通常没有）；用现成的 MVS 网络先算深度（两阶段，不能联合优化）。"
+  },
+  {
+   "choice": "动态视频逐帧独立处理，靠可泛化模型直接用或在该视频上微调",
+   "rationale": "一个网络对所有帧共享，不需要为每帧优化一个场景表示，新视频也能立刻渲染；逐帧处理让时间和空间一样“即插即用”。人物数据再配合前景 mask 和 SMPL 包围盒限定深度范围、裁掉背景射线，进一步提速。",
+   "alternatives_rejected": "Neural Body 等逐场景优化的动态人体表示（需要长时间训练，且依赖 SMPL 驱动）；时空 4D 表示。代码中没有任何跨帧状态或时间一致性损失（network.py:76–113、losses/enerf.py），检索到的论文方法描述中也未见。"
+  }
+ ],
+ "training_zh": "检索摘要（未能逐字核对原文）显示论文写的是：Adam，初始学习率 5e-4，每 5 万次迭代减半，约 20 万次迭代收敛，单张 RTX 3090 约 15 小时；在新场景上微调视图像数量需要 10 分钟到 2 小时；损失为 MSE 加 λ′ = 0.01 的 VGG16 感知损失。下面的细节以官方代码和 README 为准。两者基本吻合：代码的学习率日程 lr·0.5^(epoch/50)、每 epoch 1000 次迭代，正好是每 5 万次迭代减半；但 README 称发布的权重是 4 卡训练 138000 次迭代，与论文的单卡设定不同。数据：DTU 88 个训练扫描（data/mvsnerf/dtu_train_all.txt），每个扫描 49 个视角全部参与训练，图像 512×640（MVSNeRF 预处理版本），深度范围固定 425–905 mm；16 个测试扫描（scan1/8/21/30/31/34/38/40/41/45/55/63/82/103/110/114）用 MVSNeRF 的 pairs.th 划分：每个扫描 16 个已知视角（dtu_train）、4 个新视角（dtu_val = 32/24/23/44）。每个样本随机选输入视角数 2/3/4（概率 0.1/0.8/0.1，实际由 train.sampler_meta 经 EnerfBatchSampler 抽取，dtu_pretrain.yaml:70–72、lib/datasets/samplers.py:21），源视角从离目标最近的几台里随机抽；有约 10% 的概率把目标视角本身放进候选集，但只有在抽 4 个视角时它才可能真被选中（dtu/enerf.py:80–83）。DTU 配置两级都是整图渲染训练（train_img: True），粗层在 128×160、细层在 512×640 上算损失。损失为两级 MSE（权重 0.1、1.0），外加 0.01×权重的 VGG16 感知损失。优化器 Adam（lib/config/config.py:114 默认），学习率 5e-4，无权重衰减，按 epoch 连续指数衰减 lr·0.5^(epoch/50)，每 epoch 1000 次迭代；每卡 batch 1，README 称发布的模型用 4 块 GPU 训练 138000 次迭代（未说明 GPU 型号）。微调：从预训练权重继续训练，DTU 单场景配置注释为“预训练 epoch + 11”；README 称 3000 / 11000 次迭代在 i9-12900K + RTX 3090 上分别约 11 / 40 分钟。ZJU-MoCap 微调配置（zjumocap_train.yaml）：CoreView_313 前 600 帧，只用偶数号相机做输入和监督，每步粗层 4096 条、细层 16384 条随机射线（至多 75% 采在前景 mask 上），细层另加 4 个 64×64 图块算感知损失，粗/细层 32/8 个平面，训练 100 epoch，学习率每 10 epoch 减半。ENeRF-Outdoor 的两层模型从头训练 50 epoch。",
+ "system_perf": [
+  {
+   "item": "论文报告的速度",
+   "value": "512×512、3 个输入视角、每射线 2 个样本，RTX 3090 上 25.21 FPS（检索到的摘要表述）；v2 摘要称比此前可泛化辐射场方法快至少 60 倍（v1 摘要写的是至少 50 倍）"
+  },
+  {
+   "item": "README 的 DTU 测速",
+   "value": "512×640、3 个视角、评测命令把平面数改为 48/8 并跳过粗层渲染，i9-12900K + RTX 3090 上 21.78 FPS（约 46 ms/帧）"
+  },
+  {
+   "item": "README 的 ZJU-MoCap 测速",
+   "value": "512×512、2 个视角、32/8 平面、跳过粗层渲染、只渲染 SMPL 包围盒投影内的射线，49.24 FPS（约 20 ms/帧），用的是 DTU 预训练模型；README 没有注明这一条的硬件"
+  },
+  {
+   "item": "测速口径（run.py:57–76）",
+   "value": "只计 network(batch) 的前向时间，前后各调用一次 torch.cuda.synchronize，去掉第 1 帧；batch 已在 GPU 上，射线已由 DataLoader 预先构建。读盘、解码、去畸变、缩放、mask 和 SMPL 包围盒的准备都不计入。无 fp16、TensorRT 或自定义 CUDA 核"
+  },
+  {
+   "item": "第三方测得的速度",
+   "value": "Quark 在 A100 上测得 ENeRF 1024×768 为 205 ms/帧、2048×1536 为 811 ms/帧（像素数×4，时间×3.96，几乎线性）；GPS-Gaussian 论文（RTX 3090，两张 1024×1024 源图）中 ENeRF 源视角 11 ms、每个新视角 125 ms，约 5 FPS，同时渲染 10 个新视角共 1261 ms；GPS-Gaussian 为 27 ms + 0.8 ms，输出 2048×2048，约 25 FPS（ENeRF 在该表中的输出分辨率未能核对）；4K4D 在 DNA-Rendering 上给出 ENeRF 约 6.0 FPS（其设定下）"
+  },
+  {
+   "item": "每帧计算量（按 DTU 默认配置计算）",
+   "value": "粗代价体 64×64×80 ≈ 32.8 万体素×32 通道，细代价体 8×256×320 ≈ 65.5 万体素×16 通道；细层 512×640 = 327,680 条射线 × 2 = 655,360 个采样点，每点对 3 个视角各做一次双线性采样；若按 NeRF 式 128 样本/射线则为约 4194 万个点"
+  },
+  {
+   "item": "参数量（按代码逐层计算）",
+   "value": "约 43.6 万：特征网络 37,360，粗层 3D U-Net 78,232，细层 3D U-Net 296,280，两级渲染 MLP 14,050 + 10,090（不含 BN 统计量和 VGG 损失网络）"
+  },
+  {
+   "item": "未报告项",
+   "value": "显存占用、端到端延迟（采集、分割、传输）、双目或多观看者开销、非 RTX 3090 硬件上的速度，README 未给出，检索到的论文内容中也未见"
+  }
+ ],
+ "results_zh": [
+  {
+   "dataset": "DTU（泛化设定，3 个输入视角，512×640，16 个测试场景各 4 个新视角）",
+   "finding": "ENeRF PSNR 27.61 / SSIM 0.957 / LPIPS 0.089（他引论文表格转述；MuRF 等少数论文转述为 0.956 / 0.091）；README 用官方权重、48/8 平面评测得到 27.605 / 0.9571 / 0.0890，与上述数字一致到两位小数（论文所用平面数未能核对），另报告渲染深度平均绝对误差 4.26 mm、误差 <2 mm 的像素占 80.0%（代价体深度为 4.41 mm、77.1%；深度只在 5 个场景上算）。经检索转述的同表基线：MVSNeRF 26.63 / 0.931 / 0.168，IBRNet 26.04 / 0.917 / 约 0.19。读法：优势主要在 LPIPS（约减半），PSNR 只高约 1 dB；评测协议沿用 MVSNeRF，arXiv v1 补充材料写明 PSNR 只在有真值深度的前景像素上算、SSIM 和 LPIPS 在背景置黑的整图上算，代码实现一致（evaluators/enerf.py:48、67–87），与全图指标不可直接比。"
+  },
+  {
+   "dataset": "NeRF Synthetic 与 Real Forward-facing（在 DTU 上训练、直接泛化）",
+   "finding": "ENeRF 在 NeRF Synthetic 上 26.65 / 0.947 / 0.072，在 Real Forward-facing 上 22.78 / 0.808 / 0.209（经他引论文表格转述核对）。LLFF 评测代码按 MVSNeRF 的做法裁掉四周 10% 再算指标（llff_eval.yaml 的 eval_center: True；v1 补充材料写作“只评中心 80% 区域”），输入缩放到 640×960，NeRF Synthetic 为 800×800。跨数据集的绝对值不高，说明仅在 DTU（物体级、室内布光）上训练的泛化能力有限，所以论文和代码都提供逐场景微调。"
+  },
+  {
+   "dataset": "速度对比（论文）",
+   "finding": "论文的核心卖点是速度：每射线 2 个样本，比 IBRNet、MVSNeRF 等每射线上百个样本的可泛化方法快至少 60 倍。第三方参照：CVPR 2025 的 Depth-Guided Bundle Sampling 在其表格里给出 IBRNet 0.217 FPS、MVSNeRF 0.416 FPS（每射线 128 样本，DTU 3 视角，其硬件），该表还列出 pixelNeRF 0.019 FPS、ENeRF 19.5 FPS（这些数字是否沿用 ENeRF 论文原表，检索结果无法区分）；该文称把其采样策略用到 ENeRF 上，DTU 上 PSNR 最多提升 1.27 dB、FPS 最多提升 47%（检索摘要）。"
+  },
+  {
+   "dataset": "ZJU-MoCap 与 DynamicCap（动态人物）",
+   "finding": "论文在 ZJU-MoCap Sequence-313 前 600 帧、DynamicCap olek（1000 帧）和 vlad（600 帧）上与 Neural Body 等方法比较（经检索核对数据设定）。检索摘要给出的表中，Neural Body（逐序列训练约 10 小时）在 ZJU-MoCap 上 31.85 / 0.971 / 0.079、在 DynamicCap 上 25.35 / 0.908 / 0.153，1.297 FPS；ENeRF 自身在该表中的数值未能取得。README 给出的可复现数字：直接用 DTU 预训练模型、2 个输入视角，在 CoreView_313 上 PSNR 31.48 / SSIM 0.971 / LPIPS 0.042，49.2 FPS。注意这些指标只在 SMPL 包围盒的 2D 投影内计算，背景已被 mask 成黑色，数值会明显高于全图指标。arXiv v1 补充材料还有一组对照：在 ZJU-MoCap 的 4 个测试帧上，只在单帧上微调平均 PSNR 34.38，在整段序列（1200 帧）上微调 36.22，说明训练时能利用跨帧观测，但推理仍逐帧独立。"
+  },
+  {
+   "dataset": "他人论文中的 ENeRF（作为基线）",
+   "finding": "Quark（1024×768，基线在 RFF+IBRNet 数据上重训）：RFF 23.71 / 0.780 / 0.224，Shiny 25.75 / 0.836 / 0.143，N3DV 29.86 / 0.922 / 0.172，均低于 Quark（如 N3DV 31.57）。Ha et al.（用作者发布的权重，K=4）：DyNeRF 29.51 / 0.927 / 0.196，STED 76.14；D3DMV 27.79；在 ENeRF-Outdoor 上 ENeRF 的 PSNR 25.79、SSIM 0.722、L1 9.84 和 STED 32.31 反而都优于 Ha et al.。GPS-Gaussian：THuman2.0 上 ENeRF 24.10 / 0.869 / 0.126，GPS-Gaussian 25.57 / 0.898 / 0.112。4K4D：DNA-Rendering 上 ENeRF 28.108 / 0.972 / 0.056，4K4D 32.000 / 0.982 / 0.040。读法：两三年后的新方法普遍在质量上超过 ENeRF，但它在 Ha et al. 的户外测试集上依然是最强基线之一。合理的解读是“代价体深度 + 少量采样 + 源像素混合”在该户外数据上仍有竞争力；Ha et al. 把自己在该数据上的落败部分归于数据集的同步和颜色标定问题，单个数据集不足以说明方法普遍稳健。"
+  }
+ ],
+ "ablations_zh": [
+  "深度引导采样（论文，经检索核对的定性结论）：把每射线样本数从 128 降到 2，有深度引导的版本质量几乎不变，去掉深度引导（在全深度范围内均匀采样）的版本质量显著下降。arXiv v1 补充材料图 2 的文字说明相同，并称“不带深度引导”的版本类似 MVSNeRF。具体表格数值未能检索到。",
+  "级联代价体（论文，经检索核对）：非级联版本用 128 个深度平面，级联版本用 64 + 8 个平面，两者质量相当，级联版本速度大幅提升。v1 补充材料的解释：有了深度引导采样后，高分辨率代价体的构建成为速度瓶颈，级联在不损失质量的前提下进一步提速。具体数值未能核对。",
+  "代码层面的“隐性消融”：训练配置是 64/8 平面，README 的评测命令改用 48/8 平面并跳过粗层渲染，仍得到 27.61 dB，说明测试时粗层平面数有一定冗余；代码中的非级联配置（dtu_pretrain_nocascade.yaml，2023-11 加入）用的是 1/4 分辨率 48 个平面，而不是论文消融里的 128 个。",
+  "第三方改进（CVPR 2025，Depth-Guided Bundle Sampling）：在 ENeRF 上替换采样策略后，DTU 上 PSNR 最多提升 1.27 dB、FPS 最多提升 47%（检索摘要），说明 ENeRF 的逐射线 2 点采样仍有改进空间。",
+  "arXiv v1 补充材料表 2：在 ZJU-MoCap 的 4 个测试帧上，只在该帧上微调预训练网络平均 PSNR 34.38，在整段序列（1200 帧）上微调 36.22。作者据此认为方法能整合跨帧观测；这说的是训练数据的利用，推理本身仍是逐帧独立的。",
+  "没有检索到的消融：σ 的倍数（代码固定为 D±1σ）、方差代价与其他代价（如分组相关）的对比、颜色混合与直接回归的对比、去掉体素特征的影响（户外两层模型 nerf_.py 恰好去掉了体素特征）、输入视角数对质量的影响、有无 VGG 感知损失。"
+ ],
+ "limitations_stated_zh": [
+  "作者承认（经检索，转述）：方法针对实体表面，无法处理由多个表面共同决定外观的场景，例如透明物体。",
+  "作者承认（经检索，转述）：新视角由邻近的输入图像生成，目标视角下某些区域在所有输入视角中都不可见时，渲染质量会下降；作者认为可以通过考虑输入视角的可见性来解决。",
+  "动态实验建立在“同步、已标定、背景简单、mask 质量高”的多视角视频上：论文对 ZJU-MoCap 和 DynamicCap 的描述即如此（经检索核对），代码也确实用 mask 把背景置 0、用 SMPL 包围盒给深度范围。",
+  "仅在 DTU 上训练的泛化模型在其他数据上质量有限，作者为此在论文和 README 中都提供逐场景微调（DTU、LLFF、NeRF Synthetic、ZJU-MoCap 均有微调配置），README 给出的微调耗时为 11–40 分钟。",
+  "户外场景不是直接用泛化模型处理的：README 写明 ENeRF-Outdoor 需要“从头训练”一个前景/背景组合模型；交互 GUI 也只提供了 ZJU-MoCap 版本。"
+ ],
+ "limitations_unstated_zh": [
+  "“交互式”帧率有严格的测量口径。run.py:57–76 只计网络前向，数据已在 GPU 上，射线已由 DataLoader 预先构建；README 的 DTU 21.8 FPS 用的是 48/8 平面并跳过粗层渲染（训练时是 64/8），ZJU-MoCap 的 49 FPS 同样跳过粗层渲染，且只渲染 SMPL 包围盒投影内的射线；交互 GUI 启动时把配置中要播放的帧（configs/enerf/interactive/zjumocap.yaml 为前 100 帧中每 10 帧取 1 帧）的 21 路图像全部预读进内存（enerf_interactive.py:103–105）。去畸变、缩放、前景分割、SMPL 拟合、读盘都不在计时内，对真实直播系统来说这些往往比网络本身更贵。",
+  "人物结果依赖离线预处理的前景 mask 和 SMPL 拟合。ZJU-MoCap 读图时把 mask 外像素置 0（zjumocap/enerf.py:135–152），near/far 由每帧 SMPL 顶点包围盒外扩 0.1 m 得到（:57–67、157–165），交互时只渲染包围盒内射线。这些量都来自数据集预先提供的分割结果和 SMPL 拟合，离线得到，不计入耗时。换成真实临场场景，需要在线分割和人体包围盒估计，且分割误差会直接变成边缘伪影。",
+  "评测指标是在掩码区域内算的，数值偏高，且与其他论文的全图指标不可直接比。DTU 的协议沿用 MVSNeRF，作者在 arXiv v1 补充材料里写明了：PSNR 只在真值深度有效的像素上算（evaluators/enerf.py:48、71），SSIM/LPIPS 在背景置黑的整图上算。人物数据的做法在检索到的论文内容中未见说明：ZJU-MoCap 的 PSNR 只在包围盒投影内算，SSIM/LPIPS 在包围盒外接矩形上算，背景是黑色（evaluators/enerf_human.py:39–77）。Quark 和 Ha et al. 在带完整背景的 RFF、N3DV、DyNeRF 等数据上评测 ENeRF，数字明显低于 ENeRF 自家论文。",
+  "没有任何时间一致性机制，而且输入视角集合会随视点切换。network.forward 只处理单帧；交互时按距离取最近 2 台相机（enerf_interactive.py:205–208），视点移动时输入集合突变。Ha et al. 用 STED、TCC 等指标量化了这一点（DyNeRF 上 ENeRF 的 STED 76.14，高于 Ha et al. 的 68.76），但在其 ENeRF-Outdoor 测试中 ENeRF 的 STED 反而更好，说明闪烁程度与场景和深度质量强相关，论文本身没有给出任何时间指标。",
+  "代码层面的几处细节（论文里的对应公式或说法未能逐一核对，这里只陈述代码事实）。（1）体渲染中 α = 1 − exp(−σ)，没有乘样本间距 δ（utils.py:584–585），σ 的数值含义因此不同于 NeRF 的体密度，更像“每个样本的不透明度 logit”。（2）细层 2 个样本由 linspace(0,1,2) 生成，正好落在截断后区间的两端 D−σ 和 D+σ，而不是 D 本身（utils.py:428）。（3）训练损失含 0.01 倍 VGG16 感知损失（losses/enerf.py:30–38）；检索摘要显示论文也写了 λ′ = 0.01 的感知损失，这一点与论文一致。论文说在采样图块上算，代码在 DTU 上对整图（train_img True）算，在 ZJU-MoCap 上对 4 个 64×64 图块算。（4）仓库里的非级联配置（dtu_pretrain_nocascade.yaml，2023-11 加入）是 1/4 分辨率、48 个平面，而检索到的论文消融描述的非级联版本是 128 个平面，不能直接用它复现那组消融。（5）深度图输出时对权重再做一次 softmax（utils.py:594），这个深度只用于可视化和评测。（6）arXiv v1 补充材料表 1 给出的 MLP 比发布代码大：密度 MLP 为 (8+16)→128→…→(64+1)，颜色权重 MLP 为 (64+16+4)→128→64→1；代码为 64 维单隐藏层（nerf.py:13–23）。SIGGRAPH Asia 版本是否改过结构未能核对，约 44 万参数是按代码算的。",
+  "单峰“期望 ± 标准差”的区间在遮挡边界处是有偏的。前景和背景各有一个概率峰时，期望 D 落在两者之间，σ 变大，两个样本分别落在区间两端，颜色再按 α 混合，容易在边缘产生前景背景混色或拖尾；粗层的错误也无法被细层纠正，因为细层只在 D±σ 内搜索，且 D、σ 是用双线性插值放大的，会跨边缘混合。Quark 把这一点概括为“单层带厚度的深度在深度复杂场景中失败”。",
+  "速度随输出像素数线性增长，高分辨率不划算。所有逐射线计算（2 个点 × S 个视角的采样和 MLP）都在输出分辨率上做，细代价体也在 1/2 分辨率上。Quark 在 A100 上测得 ENeRF 从 1024×768 到 2048×1536 由 205 ms 增至 811 ms（×3.96），而 Quark 本身几乎不变（32.2 → 33.0 ms）。对需要 1080p 以上、双目、多观看者的临场系统，每个视点都要重建代价体并逐像素渲染，开销成倍增加。",
+  "颜色只能是源像素的凸组合，也没有显式可见性推理（作者在局限中提到可以考虑输入视角的可见性，但发布代码里没有实现）。像素对齐特征采样用 border 填充（utils.py:706），代价体 warp 用 0 填充且计数掩码被注释掉（utils.py:88–91、341–344），被遮挡的源视角依然参与方差和混合，只能靠网络学着降权；所有源视角都看不到的区域（去遮挡洞）无法补全。户外两层模型靠预先拍摄的空场景背景图来补背景，这在固定阵列中可行，但背景一变（光照、物体移动）就失效。"
+ ],
+ "lineage": {
+  "predecessors": [
+   {
+    "title": "NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis",
+    "year": 2020,
+    "url": "https://arxiv.org/abs/2003.08934",
+    "note_zh": "体渲染框架的来源。ENeRF 保留“沿射线采样、预测密度和颜色、α 合成”的形式，但把每射线上百个样本压到 2 个，并去掉逐场景优化。"
+   },
+   {
+    "title": "MVSNet: Depth Inference for Unstructured Multi-view Stereo",
+    "year": 2018,
+    "url": "https://arxiv.org/abs/1804.02505",
+    "note_zh": "学习式 MVS 的奠基工作：可微单应 warp、跨视角方差代价体、3D CNN 正则、沿深度 softmax 求期望深度。ENeRF 的代价体构建和深度回归（utils.py 的 homo_warp、build_feature_volume、depth_regression）就是这一套，只是把参考视角换成了目标新视角。"
+   },
+   {
+    "title": "Cascade Cost Volume for High-Resolution Multi-View Stereo and Stereo Matching",
+    "year": 2020,
+    "url": "https://arxiv.org/abs/1912.06378",
+    "note_zh": "CasMVSNet（CVPR 2020），提出由粗到细的级联代价体，用上一级深度缩小下一级的搜索范围。ENeRF 的两级代价体沿用这一结构，并用深度分布的标准差（而不是固定比例）决定下一级范围和最终采样区间。"
+   },
+   {
+    "title": "pixelNeRF: Neural Radiance Fields from One or Few Images",
+    "year": 2021,
+    "url": "https://arxiv.org/abs/2012.02190",
+    "note_zh": "像素对齐特征的可泛化 NeRF 起点：把 3D 点投到输入图上取 CNN 特征，再由 MLP 预测密度和颜色。ENeRF 的像素对齐特征来自这一路线。"
+   },
+   {
+    "title": "IBRNet: Learning Multi-View Image-Based Rendering",
+    "year": 2021,
+    "url": "https://arxiv.org/abs/2102.13090",
+    "note_zh": "本批精读论文之一，ENeRF 的直接前身和主要基线（DTU 上 26.04 dB 对 ENeRF 27.61 dB）。ENeRF 的聚合器照搬 IBRNet 的思路（arXiv v1 补充材料明确写明采用 IBRNet 的加权池化）：视角特征加上相对视角方向差、拼接跨视角均值和方差、预测每个源视角的混合权重、颜色取源像素的加权和；但去掉了需要很多样本的 ray transformer，把每射线样本数从上百个降到 2 个。"
+   },
+   {
+    "title": "MVSNeRF: Fast Generalizable Radiance Field Reconstruction from Multi-View Stereo",
+    "year": 2021,
+    "url": "https://arxiv.org/abs/2103.15595",
+    "note_zh": "最接近的前作和基线（DTU 26.63 dB）：在参考源视角建平面扫描代价体、用 3D CNN 得到神经编码体，再体渲染。ENeRF 把代价体移到目标视角、改为级联，并用深度分布指导采样；代码直接沿用 MVSNeRF 的 DTU 预处理数据、训练/测试划分（data/mvsnerf/）和评测协议；v1 补充材料称消融里“不带深度引导”的版本类似 MVSNeRF。"
+   },
+   {
+    "title": "GeoNeRF: Generalizing NeRF with Geometry Priors",
+    "year": 2022,
+    "url": "https://arxiv.org/abs/2111.13539",
+    "note_zh": "同期工作（arXiv 2021-11，CVPR 2022）：同样用级联代价体给可泛化 NeRF 提供几何先验，但为每个源视角各建一个代价体再用注意力聚合，目标是质量而非速度。与 ENeRF 形成“级联代价体用来提质量还是提速度”的对照。"
+   },
+   {
+    "title": "DONeRF: Towards Real-Time Rendering of Compact Neural Radiance Fields using Depth Oracle Networks",
+    "year": 2021,
+    "url": "https://arxiv.org/abs/2103.03231",
+    "note_zh": "思路相近的逐场景加速方法：用一个深度预测网络告诉 NeRF 该在哪里采少量样本。ENeRF 把“深度引导少量采样”搬到可泛化设定，深度来自代价体且只用 RGB 端到端学习（ENeRF 是否引用 DONeRF 未能核实）。"
+   },
+   {
+    "title": "Neural Body: Implicit Neural Representations with Structured Latent Codes for Novel View Synthesis of Dynamic Humans",
+    "year": 2021,
+    "url": "https://arxiv.org/abs/2012.15838",
+    "note_zh": "同组（ZJU3DV）前作，提供 ZJU-MoCap 数据集，是 ENeRF 动态人物实验的主要对比对象之一。Neural Body 需要逐序列优化并依赖 SMPL 驱动；ENeRF 用可泛化模型逐帧渲染，但代码里仍借用 SMPL 顶点包围盒来定深度范围。"
+   },
+   {
+    "title": "Feature Pyramid Networks for Object Detection",
+    "year": 2017,
+    "url": "https://arxiv.org/abs/1612.03144",
+    "note_zh": "ENeRF 的 FeatureNet 是 FPN 式结构（自底向上下采样、1×1 横向连接、上采样相加、3×3 平滑），一次前向同时给出 1/4、1/2、1× 三级特征，分别供粗代价体、细代价体和渲染使用。"
+   }
+  ],
+  "successors": [
+   {
+    "title": "Im4D: High-Fidelity and Real-Time Novel View Synthesis for Dynamic Scenes",
+    "year": 2023,
+    "url": "https://arxiv.org/abs/2310.08585",
+    "note_zh": "同组后续（Lin、Peng、Xu 等，SIGGRAPH Asia 2023）：网格化的几何表示加多视角图像外观的混合表示，按序列训练，RTX 3090 上 512×512 约 79.8 FPS（检索摘要）。它在 ZJU-MoCap、DNA-Rendering 等数据上与 ENeRF 对比，并指出 ENeRF 难以恢复正确深度，会出现闪烁和重影（检索摘要，具体数值未核对）。可以读作：同一团队也认为纯逐帧的可泛化推理在动态场景的质量和稳定性上有上限。同组的 MLP Maps（CVPR 2023，NHR 和 ZJU-MoCap 上 512×512 约 41.7 FPS）也属于这条逐场景路线。"
+   },
+   {
+    "title": "4K4D: Real-Time 4D View Synthesis at 4K Resolution",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2310.11448",
+    "note_zh": "同组后续（CVPR 2024）：用逐场景优化的 4D 点云表示和光栅化替代 ENeRF 的逐射线体渲染，在 ENeRF-Outdoor 上以 4K 分辨率达到约 80 FPS（RTX 4090，检索摘要）；DNA-Rendering 上 PSNR 32.00 对 ENeRF 28.11（ENeRF 在该表中约 6.0 FPS）。ENeRF-Outdoor 数据集由此成为动态场景的常用测试集。"
+   },
+   {
+    "title": "GPS-Gaussian: Generalizable Pixel-wise 3D Gaussian Splatting for Real-time Human Novel View Synthesis",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2312.02155",
+    "note_zh": "本批精读论文之一（CVPR 2024），面向人物的可泛化实时合成，把 ENeRF 作为基线：THuman2.0 上 25.57 dB 对 ENeRF 24.10 dB，速度约 25 FPS（输出 2048×2048）对 ENeRF 约 5 FPS（RTX 3090，两张 1024×1024 源图；ENeRF 每个新视角 125 ms）。它同样“先估深度”，但用立体匹配得到逐像素深度，再在深度处放置像素对齐高斯并光栅化，彻底去掉了沿射线采样。"
+   },
+   {
+    "title": "MVSGaussian: Fast Generalizable Gaussian Splatting Reconstruction from Multi-View Stereo",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2405.12218",
+    "note_zh": "ECCV 2024，以 MVS 代价体为核心的可泛化高斯方法，与 ENeRF 同样在 DTU、Real Forward-facing、NeRF Synthetic 上评测并以 ENeRF 为对比；DTU 上 28.21 / 0.963 / 0.076，高于 ENeRF 的 27.61 / 0.957 / 0.089。可以看作“ENeRF 式代价体 + 高斯表示”的直接延伸。"
+   },
+   {
+    "title": "pixelSplat: 3D Gaussian Splats from Image Pairs for Scalable Generalizable 3D Reconstruction",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2312.12337",
+    "note_zh": "本批精读论文之一（CVPR 2024）。与 ENeRF 一样为每个像素预测一个深度概率分布，但处理方式不同：ENeRF 用分布的期望和标准差定一个区间、在区间内做体渲染；pixelSplat 从分布中采样深度放置高斯，并把概率当作不透明度来保留梯度。两者都在回答“离散深度分布怎样变成可微渲染”。"
+   },
+   {
+    "title": "MVSplat: Efficient 3D Gaussian Splatting from Sparse Multi-view Images",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2403.14627",
+    "note_zh": "本批精读论文之一（ECCV 2024）。同样用平面扫描代价体（跨视角特征相关）回归深度，但深度直接决定像素对齐高斯的中心，渲染用光栅化而非射线采样。可以理解为把 ENeRF 的“深度引导少量采样”推到极限：每像素只在预测深度处放一个基元，并且一次重建可供任意视角渲染（MVSplat 的参考文献里没有 ENeRF，站内 MVSplat 精读据其 PDF 核对，本次也在 PDF 全文中检索确认）。"
+   },
+   {
+    "title": "FreeSplat: Generalizable 3D Gaussian Splatting Towards Free-View Synthesis of Indoor Scenes",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2405.17958",
+    "note_zh": "本批精读论文之一（NeurIPS 2024）。同样依赖相邻视角的代价体估计深度，但面向长序列室内场景，把多视角的像素对齐高斯融合成一个全局表示，从而可以在输入视角之外自由换视点；这正是 ENeRF“每个目标视角重建一次代价体”路线所缺少的。检索摘要显示 FreeSplat 系列论文在相关工作中专门讨论了 ENeRF：在目标视角建两级级联代价体，视点一变就要重算与新视角相关的模块（出自 FreeSplat 还是 FreeSplat++ 未能区分）。"
+   },
+   {
+    "title": "Quark: Real-time, High-resolution, and General Neural View Synthesis",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2411.16680",
+    "note_zh": "站内重点论文之一（Google，SIGGRAPH Asia 2024）。ENeRF 是它的主要速度对标对象：同在 A100 上，ENeRF 1024×768 需 205 ms、2048×1536 需 811 ms，Quark 为 32.2 ms 和 33.0 ms；质量上 Quark 在 RFF、Shiny、N3DV 上均高于 ENeRF（如 N3DV 31.57 对 29.86）。Quark 认为 ENeRF 的“单层带厚度深度”在深度复杂的场景中失败，改用多层 LDM 加学习式迭代细化。"
+   },
+   {
+    "title": "DepthSplat: Connecting Gaussian Splatting and Depth",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2410.13862",
+    "note_zh": "本批精读论文之一（CVPR 2025）。在代价体多视角深度之外引入预训练单目深度特征，以增强弱纹理、遮挡处的深度，再预测高斯。它针对的是纯代价体深度在弱纹理和遮挡区域不可靠的问题，ENeRF 的深度也属于这一类（DepthSplat 是否引用 ENeRF 未能核实）。"
+   },
+   {
+    "title": "Geometry-guided Online 3D Video Synthesis with Multi-View Temporal Consistency",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2505.18932",
+    "note_zh": "站内重点论文之一（Ha et al.，CVPR 2025）。ENeRF 是它最强的基线，ENeRF-Outdoor 是它的测试集之一（使用作者发布的 ENeRF 权重，K=4）。Ha et al. 在 DyNeRF 和 D3DMV 上的保真度与一致性都超过 ENeRF，但在 ENeRF-Outdoor 上 PSNR 24.01 对 25.79、STED 44.49 对 32.31，反而输给 ENeRF。它补上的正是 ENeRF 缺失的时间一致性（深度时间滤波加 TSDF 回灌）。"
+   },
+   {
+    "title": "Depth-Guided Bundle Sampling for Efficient Generalizable Neural Radiance Field Reconstruction",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2505.19793",
+    "note_zh": "CVPR 2025，直接在 ENeRF 等可泛化 NeRF 上改进采样（据其标题和摘要：把相邻射线成组采样，并按深度置信度自适应分配样本数）。检索摘要称用于 ENeRF 时 DTU 上 PSNR 最多提升 1.27 dB、FPS 最多提升 47%，说明 ENeRF 的逐射线独立 2 点采样仍有冗余。"
+   },
+   {
+    "title": "LVSM: A Large View Synthesis Model with Minimal 3D Inductive Bias",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2410.17242",
+    "note_zh": "本批精读论文之一（ICLR 2025），代表与 ENeRF 相反的一极：不建代价体、不估深度、不做体渲染，直接用 Transformer 从输入图像 token 生成目标视角。ENeRF 把几何先验（平面扫描、深度分布）写进结构以换取速度和小模型（约 44 万参数），LVSM 则用大模型和大数据换取对几何先验的摆脱。"
+   }
+  ]
+ },
+ "takeaways_for_telepresence_zh": [
+  "“深度分布 + 不确定性 → 少量采样”是一个可以单独拿出来用的加速器。固定相机阵列的 near/far 已知、相机标定稳定，很适合先用低分辨率代价体求出每个像素的期望深度和标准差，再只在 D±σ 内做精细计算；σ 本身还可以作为置信度，用于融合或补洞时降权。",
+  "但 ENeRF 的几何建在目标视角里，每个观看者、每只眼睛、每一帧都要重建代价体并逐像素渲染，计算量随输出像素数线性增长（Quark 测得 1024×768 为 205 ms，2048×1536 为 811 ms）。对需要 1080p 以上、双目和多人观看的临场系统，更划算的是“一次重建、多次渲染”的表示（MVSplat、GPS-Gaussian、FreeSplat 一类的像素对齐高斯），或 Quark 式低分辨率几何加全分辨率 IBR 取色。",
+  "它没有任何时间一致性机制，输入相机集合还会随视点切换。做临场视频时至少要补三件事：对深度或代价体做时间滤波（参考 Ha et al. 的差分掩码 EMA 和 TSDF 回灌）、给视角选择加滞回或软权重、在评测中加入 STED/TCC 或光流 warping error 等时间指标。",
+  "人物实验里的前景 mask 和 SMPL 包围盒是隐藏的依赖：它们决定了深度范围、哪些射线需要渲染，也让背景变成纯黑。实际系统要在线做人体分割和包围盒估计，并把这部分耗时算进端到端延迟；对固定阵列，背景可以像 ENeRF-Outdoor 的两层模型那样预先拍摄、单独渲染，但要处理光照和物体变化。",
+  "读速度数字时要看测量口径。ENeRF 的 FPS 只计网络前向，数据已在 GPU、射线已预先构建、帧已预读进内存，交互 GUI 只用 2 台相机和包围盒内射线。评估临场可用性时，应在目标 GPU 上测量从采集、解码、分割到显示的完整 motion-to-photon 延迟。",
+  "作为基线，ENeRF 至今仍然有用：代码完整、有预训练权重、参数量只有约 44 万，而且在 Ha et al. 的户外测试中依旧是最强对手。新方法若声称实时且可泛化，应在相同视角数、相同分辨率、相同 GPU 和全图指标下与它比较；注意 2026-09 起的许可证要求机构项目先登记。"
+ ]
+}

@@ -1,0 +1,313 @@
+{
+ "citation": {
+  "title": "FreeSplat: Generalizable 3D Gaussian Splatting Towards Free-View Synthesis of Indoor Scenes",
+  "authors": "Yunsong Wang, Tianxin Huang, Hanlin Chen, Gim Hee Lee",
+  "affiliations": "新加坡国立大学（NUS）计算机学院 CVRP Lab（项目主页署名）",
+  "venue": "NeurIPS 2024（Advances in Neural Information Processing Systems 37；arXiv 2405.17958，检索可见 v1–v3 三个版本；NeurIPS 论文集不提供 DOI）",
+  "year": 2024,
+  "url": "https://arxiv.org/abs/2405.17958",
+  "project_page": "https://wangys16.github.io/FreeSplat-project/",
+  "code_status": "官方代码 https://github.com/wangys16/FreeSplat（PyTorch Lightning + Hydra，README 说明“largely based on pixelSplat”，并参考了 SimpleRecon 和 MVSplat）。截至 2026-09-29，最后一次提交在 2025-05-21。仓库根目录没有 LICENSE 文件，许可证未声明；它所基于的 pixelSplat 是 MIT 许可。README 给出 ScanNet、Replica 的预处理数据和预训练权重（Google Drive），2 视角、3 视角、FVT 三套训练配置，以及 2/3/10/30 视角的评测索引（assets/evaluation_index_*.json）。2025-04 增加了 RE10K 的训练和评测配置，2025-05 修复了 batch>1 时的训练错误。同一作者的后续版本 FreeSplat++（arXiv 2503.22986，已发表于 IEEE TPAMI 2026，DOI 10.1109/TPAMI.2026.3665771）的仓库截至 2026-09-29 仍只有 README 和演示素材（远端 HEAD c387364，2025-04-18），README 写着代码“will be released recently”。另外，代码 import 的光栅化模块名是 diff_gaussian_rasterization_depth，而 requirements.txt 安装的 Luiten 版 diff-gaussian-rasterization-w-depth 模块名是 diff_gaussian_rasterization，照 README 安装后需要自行对齐。"
+ },
+ "tldr_zh": "FreeSplat 是面向室内长序列的前馈式 3D Gaussian Splatting 方法。作者认为 pixelSplat、MVSplat 这类方法受限于较重的骨干网络，只能在 2–3 张窄基线图像之间插值；输入一多，每个像素一个（或三个）高斯的做法会在重叠区域堆出大量冗余高斯，显存也跟着涨。FreeSplat 做了三件事。第一，用 EfficientNetV2-S 提特征，只在位姿最近的几个视角之间构建 128 层逆深度代价体，经多尺度聚合估计每个视角的深度。第二，用 Pixel-wise Triplet Fusion（PTF）把每个像素的“高斯三元组”（位置 μ、权重 ω、潜在特征 f）逐视角投影到下一个视角里对齐；深度差在阈值内的一对高斯，位置按权重加权平均，特征用 GRU 合并，其余的直接追加。第三，用 Free-View Training（FVT）在 2–8 张、帧间隔 25 帧的长序列上训练。结果方面（据检索到的论文表格）：ScanNet 2 视角 PSNR 28.08（MVSplat 27.27，pixelSplat 26.03），3 视角 27.45（MVSplat 26.68）；10 视角长序列下融合后约 88–90 万个高斯，比每像素一个、不融合的 1,966,080 个少约 55%。需要注意的是：方法依赖已知位姿，只处理静态场景；官方评测索引里的“外推”目标一半只比序列端点多 1 帧；整场景重建仍有漂浮物，这一点作者在 FreeSplat++ 中专门处理。",
+ "problem_setting_zh": "输入是一段静态室内场景的 RGB 序列，共 V 张图（评测中 V=2、3、10，示例中还有 30），每张图都带已知的内参和相机到世界的外参（ScanNet 用数据集自带的位姿），另外给定固定的深度范围 near=0.5 m、far=15 m（config/experiment/scannet/*.yaml）。图像先缩放到 640×480，再缩放裁剪为 384×512。输出是世界坐标系中的一组 3D 高斯，可以在任意目标视角渲染 RGB 和深度。方法不做逐场景优化，一个网络用于所有测试场景。训练用约 100 个 ScanNet 场景（README：沿用 NeRFusion、SurfelNeRF 的划分）；测试用 ScanNet 的 8 个场景（scene0000_01、0079_00、0158_00、0316_00、0521_00、0553_00、0616_00、0653_00），并在 Replica 的 8 个场景（office_0–4、room_0–2，各 2 条子序列，共 16 条；论文称选取 8 个场景）上做零样本测试。评测分三类设定：2/3 视角插值（目标帧夹在输入帧之间）；10 视角长序列，同时报告插值和外推（目标帧在输入序列两端之外）；以及渲染深度与传感器深度的对比（Abs Diff、Abs Rel、δ<1.25，代码还多算一个 δ<1.10）。隐含假设有四条：场景静止；位姿准确；深度是公制尺度（PTF 阈值写的是米）；相邻输入帧之间有足够重叠（训练时上下文帧间隔 25 帧，测试时 10–24 帧）。发布的代码只用光度损失（MSE + LPIPS），虽然数据加载了传感器深度，但没有深度监督。",
+ "pipeline_zh": [
+  {
+   "stage": "0. 输入与邻近视角选择（encoder_freesplat.py:40-60, 236-248）",
+   "detail": "输入为 B×V×3×384×512 的图像、归一化内参和相机到世界的外参。每个视角要选出“邻近视角”来构建代价体。距离定义为 d(i,j)=‖t_i−t_j‖₂ + ∠(R_i,R_j)，即平移的欧氏距离（米）加上相对旋转角（弧度），两种单位直接相加。视角总数 V 大于配置 num_views 时，每个视角取 top-k（k=num_views，含自身）个最近视角，去掉自身后剩 num_views−1 个源视角；否则用其余全部视角。2 视角、3 视角配置下 num_views 分别为 2、3；FVT 配置为 5；README 在 10 视角评测时改成 9。"
+  },
+  {
+   "stage": "1. 高效 2D 特征提取（encoder_freesplat.py:116-122, 229-232）",
+   "detail": "骨干是 timm 的 tf_efficientnetv2_s_in21ft1k（ImageNet-21k 预训练，features_only），输出步长 2/4/8/16/32 的 5 级特征。通道数为 24/48/64/160/256（本文用 timm 1.0.30 以 pretrained=False 实例化同名模型、打印 feature_info.channels() 确认；这部分约 1985 万参数）。步长 4 的 48 通道特征直接用作匹配特征（README Camera Ready Updates 第 1 条；matching_dim_size=48）。forward 里每次都调用 set_bn_eval，但这个函数实际做的是 m.train()（调用处的注释写着“Apply training mode only to batch normalization layers”，可见是有意为之，只是函数名有误导性），所以推理时 BN 也使用当前这批视角的统计量。"
+  },
+  {
+   "stage": "2. 自适应代价体（modules/cost_volume.py:384-619）",
+   "detail": "在 1/4 分辨率（96×128）上，对每个参考视角铺 128 个深度平面，平面在 [0.5, 15] m 内按逆深度均匀分布。把参考像素按每个平面深度反投影，再投到各源视角，用 grid_sample 双线性采样源特征。然后算两样东西：参考特征与各源特征的点积，在有效源视角上取平均（1 维）；各源视角 warp 特征的平均值（48 维）。两者拼成 49 维，经 MLP[49→32→32→1] 得到每个平面的一个代价值。输出为 (B·V)×128×96×128。这是 SimpleRecon 特征体的简化版，去掉了射线方向、深度等元数据通道。"
+  },
+  {
+   "stage": "3. 多尺度特征聚合与深度估计（modules/networks.py:19-185）",
+   "detail": "CVEncoder 把 128 通道代价体逐级下采样，每一级与 backbone 在步长 4/8/16/32 的特征拼接，输出 64/128/256/384 通道。之后接一个 UNet++ 式的嵌套解码器（diag/right/up 卷积，结构与 SimpleRecon 的解码器一致），在 4 个尺度上各输出 65 通道。每个尺度用 BasicBlock 加 1×1 卷积把 65 通道映射成 128 个深度候选上的 softmax。ScanNet 配置下候选按 log 深度在 0.5–15 m 均匀分布，深度为 exp(Σp_k·log d_k)；RE10K 配置 log_planes=False，改用逆深度。最细尺度在 1/2 分辨率（192×256），双线性上采样 2 倍得到全分辨率深度。全分辨率的 65 通道特征图由 conv_last(upsample(s0)) 得到。"
+  },
+  {
+   "stage": "4. 局部高斯三元组（encoder_freesplat.py:299-327；common/gaussian_adapter.py:19-90）",
+   "detail": "每个像素反投影出一个中心 μ_l（depth_trunc=15 的掩码算了但没有使用，所有视角都用第 0 个视角的内参）。权重有两个：ω=sigmoid(第 0 通道)，代码里叫 density；以及 128 个深度候选的最大概率（depth_weights）。特征 f 取第 1–64 通道，再加上一个作用于原图的 7×7 卷积 skip（3→64）。每个视角得到 384×512=196,608 个三元组，2/3/10 视角融合前分别为 393,216、589,824、1,966,080 个。"
+  },
+  {
+   "stage": "5. PTF 像素级对齐（encoder_freesplat.py:431-482）",
+   "detail": "以第 0 个视角的全部三元组初始化全局集合，然后按输入顺序处理第 i=1…V−1 个视角。每一步先把全局高斯中心用视角 i 的外参逆矩阵和内参投影，坐标四舍五入到整数像素，再用 scatter_reduce('amin') 得到每个像素上最近的全局高斯深度（相当于 z-buffer）。像素 p 满足 |D̂_i(p)−D_i(p)| < max(0.05·D_i(p), 0.1 m) 时，视角 i 在 p 处的局部高斯与该像素上最靠前的那个全局高斯配成一对。阈值在代码里是相对值 5% 与绝对值 10 cm 取大。"
+  },
+  {
+   "stage": "6. PTF 融合：加权和 + GRU（encoder_freesplat.py:484-519；modules/networks.py:188-214）",
+   "detail": "对每一对高斯：位置按 ω 加权平均，μ_g←(ω_g·μ_g+ω_l·μ_l)/(ω_g+ω_l)；ω 与 depth_weights 直接累加；特征用一个 MLP 版 GRU 融合，局部特征作输入，全局特征作隐状态，两边各拼上一个 24 维的权重正弦编码（2 个标量 × 6 个频率 × sin/cos）；输出为 (1−z)⊙h+z⊙tanh(·)。同一对的相机外参（4×4 矩阵）和深度也按 ω 加权平均，后面用来旋转协方差。没配上的局部高斯直接追加到全局集合。全局集合只增不删，而且融合结果依赖视角顺序。"
+  },
+  {
+   "stage": "7. 高斯潜变量解码与渲染（encoder_freesplat.py:371-386；gaussian_adapter.py:135-201；decoder/cuda_splatting.py）",
+   "detail": "融合后的 64 维特征经过 ReLU 和 Linear(64→36)。其中第 0 维经 sigmoid 作为不透明度，第 1 维没有使用，其余 34 维依次是 3 维尺度、4 维四元数和 27 维 SH 系数（SH 阶数 2，每通道 9 个系数）。尺度为 (0.5+14.5·sigmoid)×深度×0.1×(1/f_x+1/f_y)。协方差用平均后的外参旋转到世界坐标。给定融合坐标时，SH 直接使用，不像 pixelSplat 那样旋转到世界系。渲染器输出 RGB 和深度。README 与 requirements.txt 指向 Luiten 的 diff-gaussian-rasterization-w-depth，但代码实际 import 的是 diff_gaussian_rasterization_depth 并解包 4 个返回值（cuda_splatting.py:5、120）；Luiten 版的模块名是 diff_gaussian_rasterization，只返回 3 个值，渲染的是“中值深度”（透射率跨过 0.5 处那个高斯的深度，一直没跨过则填 15）。因此发布代码实际用的深度定义无法从仓库确定；背景为黑色；渲染前场景按 1/near 缩放，出来的深度再硬编码除以 2（decoder_splatting_cuda.py:62）。"
+  },
+  {
+   "stage": "8. 训练：FVT 与损失（view_sampler_bounded.py；config/experiment/scannet/fvt.yaml；loss/*）",
+   "detail": "2 视角、3 视角模型（论文中的 FreeSplat-spec）固定上下文帧数。FVT 模型（FreeSplat-fv）每个样本随机取 2–8 张上下文帧（np.random.randint(2,9)），相邻帧间隔 25 帧，训练开始的前 15,000 步里间隔从 15 逐步增加到 25。目标帧在每对相邻上下文帧之间随机抽取：2 视角时抽 4 个，3 视角时每段抽 2 个，4 个及以上视角时每段抽 1 个。所有目标帧都从同一个融合后的全局高斯集合渲染。损失为 MSE（权重 1.0）加 LPIPS-VGG（权重 0.05，从第 0 步起启用），没有深度损失。"
+  }
+ ],
+ "key_design_choices_zh": [
+  {
+   "choice": "轻量 CNN 骨干，代价体只在位姿最近的 N−1 个视角之间构建",
+   "rationale": "作者在摘要里把现有方法只能做窄范围插值归因于“heavy backbones”。pixelSplat 用 DINO ViT-B/8 加 ResNet-50，再接极线 Transformer；MVSplat 用 CNN 加跨视角 Transformer，并以 UniMatch 权重初始化。这些结构的计算和显存随视角数增长很快。FreeSplat 改用 EfficientNetV2-S，只在 1/4 分辨率上与最近几个视角做点积匹配。这样每个视角的匹配开销与总视角数 V 基本无关，整体大致随 V 线性增长。",
+   "alternatives_rejected": "用 Transformer 在全部视角之间做注意力（pixelSplat、MVSplat 的做法）；逐场景优化的 3DGS；带视角元数据的完整 SimpleRecon 特征体（代码里只保留了平均特征和点积两项）。"
+  },
+  {
+   "choice": "把融合放在潜空间：先对齐、合并“高斯三元组”(μ, ω, f)，最后再统一解码成高斯参数",
+   "rationale": "如果直接合并已经解码出来的高斯参数，尺度、旋转、SH 很难平均，也就谈不上“多视角观测互相修正”。在潜空间里合并时，GRU 可以把同一表面点的多次观测聚合成一个特征，解码器再据此输出一个高斯。项目主页的框架图把这一步称为“Gaussian Latent Decoder”。",
+   "alternatives_rejected": "把各视角高斯全部拼接后直接渲染（pixelSplat、MVSplat 在多视角下的默认做法）；渲染后再做去重或剪枝；体素化后合并（后来的 VolSplat、SplatVoxel 采用这类做法）。"
+  },
+  {
+   "choice": "用投影加 z-buffer 做“像素级对齐”，判断两个高斯是否对应同一表面点，判据是深度差小于阈值",
+   "rationale": "对每个新视角，只需把全局高斯投影一次、按像素取最近深度，就能找到候选对应，复杂度与高斯数量成线性，不需要 3D 最近邻搜索。这种做法和 KinectFusion、ElasticFusion、SurfelNeRF 中“投影关联 + 深度一致性检查”是同一类思路（此处为本文的解读）。代码中的阈值是 max(5%·深度, 0.1 m)。",
+   "alternatives_rejected": "3D 空间 kNN 或半径搜索（在数十万个点上开销大）；学习式匹配；完全不去冗余。"
+  },
+  {
+   "choice": "位置按置信权重 ω 加权平均，特征用 GRU 递归融合，权重逐次累加",
+   "rationale": "加权平均相当于把多次深度观测做加权融合，这是 TSDF、surfel 融合的标准做法。累加后的权重让“看过多次”的全局高斯在后续融合中更稳定。GRU 让网络自己决定新观测要写入多少，而不是简单取平均。NeRFusion 也用 GRU 把局部特征体融合进全局体素，思路相近（此处为本文的解读）。",
+   "alternatives_rejected": "简单平均或取最大值；只保留置信度更高的那个高斯；注意力式聚合。"
+  },
+  {
+   "choice": "Free-View Training：同一个模型在 2–8 张、跨度最长约 175 帧的上下文上训练，所有目标帧都从同一个融合结果渲染",
+   "rationale": "检索摘要中，作者的说法是 FVT“为高斯定位加入更多几何约束”，并且让性能“不再绑定于特定的输入视角数”。从代码看，约束来自这样一件事：目标帧 t 位于视角 i 和 i+1 之间，但它的渲染会用到所有视角融合出的高斯。如果远处视角的深度估计不一致，它产生的高斯就会污染这个目标视角的渲染，从而受到惩罚。",
+   "alternatives_rejected": "为每个视角数单独训练一个模型（即 FreeSplat-spec，在少视角时略好）；只用两张图训练，再在测试时拼接多视角结果。"
+  },
+  {
+   "choice": "只用光度损失训练；深度在 log 空间回归，范围固定为 0.5–15 m",
+   "rationale": "发布的代码只注册了 MSE 和 LPIPS 两个损失（loss/__init__.py）。深度完全由渲染损失间接学到，因此对“没有深度传感器”的场景也适用；项目主页摘要也强调“without depth priors”。室内场景深度跨度大，在 log 空间放置候选比均匀放置更合理。",
+   "alternatives_rejected": "用 ScanNet 的传感器深度做监督（数据加载了深度，但只用于评测和可视化）；引入单目深度先验（后来的 DepthSplat 走了这条路）。"
+  }
+ ],
+ "training_zh": "以下以代码和配置为准；能与论文核对的地方单独注明。数据：约 100 个 ScanNet 训练场景（README），图像先缩放到 640×480，再缩放裁剪为 384×512（crop_shim.py；有深度时缩放因子乘 1.015，因此会有少量中心裁剪）。训练有三套配置，都是 300,001 步、batch 1（config/experiment/scannet/{2views,3views,fvt}.yaml）：2 视角（num_views=2）、3 视角（num_views=3）、FVT（每个样本 2–8 张上下文，num_views=5）。上下文帧间隔 25 帧，前 15,000 步从 15–25 逐步增加到 25（bounded_scannet.yaml）。augment: true，但 augmentation_shim.py 里的水平翻转代码被整段注释掉，函数直接返回原样本，实际上没有数据增强。优化器为 Adam，学习率 1e-4，OneCycleLR（pct_start=0.001，约 300 步预热后余弦退火到 0；model_wrapper.py:configure_optimizers），梯度裁剪 0.01（main.yaml；RE10K 配置为 0.05）。损失 = 1.0·MSE + 0.05·LPIPS(VGG)，LPIPS 从第 0 步开始启用（pixelSplat 的默认做法是 150k 步之后才启用）。没有深度损失：losses.py 中有 SimpleRecon 的几种深度损失，但都没有注册。backbone 使用 ImageNet-21k 预训练、ImageNet-1k 微调的权重（新版 timm 把 tf_efficientnetv2_s_in21ft1k 映射为 tf_efficientnetv2_s.in21k_ft_in1k）。每 10,000 步保存一次 checkpoint，每 5,000 步做一次验证。论文称用单张 NVIDIA RTX A6000 训练，Adam、初始学习率 1e-4、300k 次迭代（检索摘要，与代码一致）。训练显存见论文 Table 6：FreeSplat-3views 16.9 GB，FreeSplat-fv 42.2 GB；pixelSplat-3views 和 MVSplat-3views 训练要 30–50 GB（检索摘要）。训练时长未能核对，README 也没有写。另有 RE10K 配置（256×256，near=1、far=100，log_planes=False），属于 2025-04 的更新。",
+ "system_perf": [
+  {
+   "item": "输入分辨率与深度范围（代码配置）",
+   "value": "ScanNet、Replica 为 384×512，near 0.5 m、far 15 m；RE10K 为 256×256，near 1、far 100。代价体在 1/4 分辨率（96×128）上构建，128 个深度平面；深度回归同样用 128 个候选。"
+  },
+  {
+   "item": "融合前的高斯数量（按代码推算，384×512）",
+   "value": "每个视角 196,608 个（每像素 1 个）。2/3/10 视角分别为 393,216、589,824、1,966,080 个。pixelSplat 每像素 3 个，2/3 视角为 1,179,648、1,769,472 个；MVSplat 每像素 1 个，与 FreeSplat 融合前的数量相同。"
+  },
+  {
+   "item": "PTF 去冗余效果（论文表格，检索摘要）",
+   "value": "Table 1（ScanNet，融合后 #GS）：2 视角 FreeSplat-spec 278k、fv 279k，MVSplat 393k、pixelSplat 1180k；3 视角 spec 382k、fv 390k，MVSplat 590k、pixelSplat 1769k。Table 2（10 视角）：FreeSplat-3views 882K、fv 899K，MVSplat 1966K。相对“每像素一个、不融合”的数量，2/3/10 视角分别少约 29%、35%、55%，与正文“约 55.0%”的说法（长序列）一致。Replica 3 视角（Table 4）：spec 423k、fv 421k、MVSplat 590k、pixelSplat 1769k。百分比是本文的换算。"
+  },
+  {
+   "item": "推理速度（Table 1，单张 RTX A6000，检索摘要）",
+   "value": "Time(s) 定义为“编码全部输入图像并渲染一张图”的总时间。2 视角：FreeSplat-spec 0.103 s、fv 0.104 s，MVSplat 0.117 s，pixelSplat 0.289 s，NeuRay 3.103 s；3 视角：0.121 / 0.122 / 0.192 / 0.272 / 4.278 s。10 视角下 MVSplat 为 1.178 s。正文称比 NeuRay 快约 300 倍，但按表中耗时只有约 30 倍，二者对不上，建议对照原文。代码计时器（misc/benchmarker.py，沿用 pixelSplat）只用 time.time()，没有 torch.cuda.synchronize。"
+  },
+  {
+   "item": "显存",
+   "value": "论文附录的局限性说明：输入极长序列（>50 张）时 GPU 需求超过 40 GB。Table 6（30 视角整场景）：pixelSplat 因显存随输入增长，无法用 30 视角推理；为在单张 A6000 上训练 3 视角版 pixelSplat，作者把它的 ViT patch 从 8×8 改成 16×16；10 视角下 pixelSplat 改用确定性模式（每像素 1 个高斯）。以上来自检索摘要。代码的 test_step 每 50 个目标视角分一批渲染，显存峰值写入 peak_memory.json。"
+  },
+  {
+   "item": "训练规模（代码配置）",
+   "value": "代码：300,001 步，batch 1，Adam 1e-4，OneCycle 余弦退火，梯度裁剪 0.01。论文（检索摘要）：单张 RTX A6000；训练显存 16.9 GB（3 视角）/ 42.2 GB（FVT）。训练时长未能核对。"
+  },
+  {
+   "item": "整场景重建（论文 Table 6 与 README 示例）",
+   "value": "Table 6（30 视角，检索摘要）：编码时间 FreeSplat-3views 1.191 s、FreeSplat-fv 1.205 s；渲染 57 FPS 与 72 FPS；去掉 PTF 的 fv 只有 39 FPS，即 PTF 去冗余把渲染从 39 提到 72 FPS。正文另称约 40 张覆盖整个场景的图像可在单张 A6000 上约 1 s 完成前馈。README 示例：scene0316_00，30 张上下文帧（每 20 帧取 1 张），渲染 0–480 共 481 帧，num_views=30（等于视角数，每个视角与其余 29 个全部匹配）。FreeSplat++ 主页的“前馈初始化约 49 s + Weighted Floater Removal 约 3 s”属于后续工作，不是本文。"
+  },
+  {
+   "item": "参数量",
+   "value": "README 和检索到的论文内容都没有给出。本文按代码结构、以 pretrained=False 随机初始化实例化各模块统计（timm 1.0.30）：EfficientNetV2-S 特征部分约 1985 万，CVEncoder 约 1484 万，DepthDecoder 约 1553 万，高分辨率 skip 卷积 27.5 万（注册了 5 个，只用第 0 个），GRU 约 4.5 万，代价体 MLP 约 2.7 千，解码 Linear 2,340；合计约 5054 万（不含作为 buffer 的 LPIPS-VGG）。这是本文的统计，未能与论文核对。"
+  }
+ ],
+ "results_zh": [
+  {
+   "dataset": "ScanNet，2/3 视角插值（Table 1；8 个测试场景，2 视角 72 个样本、144 个目标帧，3 视角 72 个样本、162 个目标帧）",
+   "finding": "Table 1（检索摘要；PSNR/SSIM/LPIPS/Time(s)/#GS）。2 视角：NeuRay 25.65/0.840/0.264/3.103；pixelSplat 26.03/0.784/0.265/0.289/1180k；MVSplat 27.27/0.822/0.221/0.117/393k；FreeSplat-spec 28.08/0.837/0.211/0.103/278k；FreeSplat-fv 27.67/0.830/0.215/0.104/279k。3 视角：NeuRay 25.47/0.843/0.264/4.278；pixelSplat 25.76/0.782/0.270/0.272/1769k；MVSplat 26.68/0.814/0.235/0.192/590k；FreeSplat-spec 27.45/0.829/0.222/0.121/382k；FreeSplat-fv 27.34/0.826/0.226/0.122/390k。怎么读：相对最强基线 MVSplat，spec 的 PSNR 高约 0.8 dB（+0.81、+0.77），LPIPS 低约 0.01，高斯少约 30%；SSIM 仍略低于 NeuRay。正文称比 NeuRay 快约 300 倍，按表中耗时只有约 30 倍。fv 在 2 视角比 spec 低 0.41 dB，3 视角只低 0.11 dB。这是短基线插值设定：上下文帧只隔 15–24 帧，目标帧与最近输入帧的帧距中位数为 4，所以它测的并不是“自由视角”能力。"
+  },
+  {
+   "dataset": "ScanNet，10 视角长序列（Table 2，插值 + 外推）",
+   "finding": "据检索摘要：pixelSplat、MVSplat 和 FreeSplat-spec 都用各自的 3 视角模型，pixelSplat 因显存限制改用确定性模式（每像素 1 个高斯）。插值 PSNR：pixelSplat 21.26（SSIM 0.714，LPIPS 0.396），MVSplat 22.78，FreeSplat-3views 25.15，FreeSplat-fv 25.90（0.808/0.252）。外推 PSNR：pixelSplat 20.70（0.687/0.429），MVSplat 21.60（0.729/0.365），FreeSplat-3views 23.78，FreeSplat-fv 24.64（0.786/0.277）。#GS：MVSplat 1966K，FreeSplat-3views 882K，fv 899K；MVSplat 耗时 1.178 s。pixelSplat 一行在检索结果里出自 FreeSplat++ 的同名表，是否与原表完全一致未能确认。怎么读：只在 3 视角上训练的 FreeSplat 已比 MVSplat 高约 2.4 dB（插值）和 2.2 dB（外推），FVT 再加约 0.75 / 0.86 dB。关键在评测索引：外推目标一共 244 个，其中 122 个（50%）只比序列端点多 1 帧，另有 68 个与最近的上下文帧相隔 100 帧以上（可能是扫描绕回同一区域）。因此“外推”这个数字是两类难度相差很大的目标的平均。"
+  },
+  {
+   "dataset": "Replica，零样本（Table 4；在 ScanNet 上训练，3 视角与 10 视角）",
+   "finding": "据检索摘要。3 视角 PSNR/SSIM/LPIPS/#GS：FreeSplat-spec 26.98/0.848/0.171/423k；FreeSplat-fv 26.64/0.843/0.184/421k；pixelSplat 26.24/0.829/0.229/1769k；MVSplat 26.16/0.840/0.173/590k。10 视角 PSNR/SSIM：FreeSplat-spec 21.11/0.762（LPIPS 0.312），FreeSplat-fv 21.95/0.777（0.290），pixelSplat 19.23/0.719，MVSplat 18.66/0.717（#GS 1966K）。3 视角下 FreeSplat 的 PSNR 领先 0.7 dB 以上，LPIPS 与 MVSplat 几乎持平（0.171 对 0.173），高斯少约 28%；10 视角下 fv 反超 spec 0.84 dB，领先 MVSplat 约 3.3 dB，但各方法都降到 19–22 dB，检索摘要把这归因于域差异和深度估计不准。另外，Replica 10 视角的外推目标 83% 距端点 1 帧、898 个是重复帧号（本地统计）。该表出自 FreeSplat 原文 Table 4，而不是 FreeSplat++。"
+  },
+  {
+   "dataset": "深度质量（渲染深度 vs 传感器深度）",
+   "finding": "Table 3 报告 ScanNet 2/3/10 视角下新视角渲染深度的 Abs Diff、Abs Rel、δ<1.25（10 视角时基线和 FreeSplat-spec 用 3 视角模型）。据检索摘要，正文称 FreeSplat-fv 的 δ<1.25 达到 94.9%，FVT 对新视角深度精度“贡献显著”；表中其余数值未能核对。代码 depth_render_metrics 只统计传感器深度 >0.5 m 的像素，还多算一个 δ<1.10。定性上，项目主页的长序列对比图（long_qual）中，MVSplat 的深度图有大量圆斑状漂浮物，pixelSplat 的深度图噪声很大，FreeSplat 的深度图边界清楚、平面连续。这里要注意，发布的代码没有用任何深度监督，所以这是纯光度训练得到的几何；渲染深度的具体定义又取决于光栅化器（见 limitations_unstated）。"
+  },
+  {
+   "dataset": "定性与整场景（项目主页、FreeSplat++ 主页）",
+   "finding": "teaser 和 long_qual 显示，在长序列下 pixelSplat 和 MVSplat 出现大面积错位、分层和漂浮物，FreeSplat 的 fv 和 spec 两个版本都更干净。不过同一作者在 FreeSplat++ 主页的整场景对比（qual_whole）中，FreeSplat-fv 的深度图上仍能看到明显的圆形漂浮物和条纹。FreeSplat++ 的摘要也直说，现有方法（包括这一路线）在整场景重建上“质量和效率都不合格”。"
+  }
+ ],
+ "ablations_zh": [
+  "PTF（检索摘要）：长序列下约减少 55.0% 的高斯，作者称这一步在长序列重建中“不可或缺”；Table 5 的结论是 PTF 能“持续提升”渲染质量和深度估计。Table 6（30 视角整场景）中，去掉 PTF 的 FreeSplat-fv 渲染 39 FPS，加上 PTF 为 72 FPS。去掉 PTF 后 PSNR 和深度的具体变化未能核对。",
+  "FVT（检索摘要）：FVT 提升了长序列表现，并对新视角深度精度“贡献显著”。代价是少视角时略弱：ScanNet 2 视角 fv 27.67 对 spec 28.08，3 视角 27.34 对 27.45，Replica 3 视角 26.64 对 26.98；视角多了之后 fv 反超（ScanNet 10 视角插值 25.90 对只在 3 视角训练的 25.15，Replica 10 视角 21.95 对 21.11）。",
+  "训练视角数与测试视角数（检索摘要）：只在 3 视角上训练的 FreeSplat-3views 直接用于 10 视角测试，插值 25.15、外推 23.78，已经明显优于 MVSplat（22.78、21.60）和 pixelSplat。说明大部分收益来自“轻量匹配 + PTF”这套结构本身，FVT 是在此基础上的进一步提升。",
+  "邻近视角数（README）：10 视角评测时把 num_views 设为 9（每个视角与 8 个近邻匹配），README 称这是为了“更准确的深度估计”；FVT 训练时用的是 5。论文里有没有对应的定量消融，未能核对。",
+  "Camera-ready 变更（README）：改为直接用 backbone 特征做多视角匹配（去掉单独的匹配特征网络），据称训练更快、效果更好，GPU 开销略增。另外光栅器换成 diff-gaussian-rasterization-w-depth，以得到更准的深度渲染。这两项没有给出数字。",
+  "Table 5 是 ScanNet 上对 CV（代价体）、PTF、FVT 三个组件的消融，在 3 视角和 10 视角上报告；作者的结论是代价体对准确定位高斯“必不可少”（essential）。有一条检索摘要给出了逐行 PSNR，但它与 Table 1/2 的主结果对不上，也无法二次核实，本文不采用。未见到或未能核对的消融：PTF 阈值（代码中为 max(5%·d, 0.1 m)）、GRU 与简单平均的对比、代价体深度平面数、log 与逆深度两种候选放置方式、融合顺序、BN 统计方式的影响。"
+ ],
+ "limitations_stated_zh": [
+  "（项目主页摘要）大场景前馈重建只是“提供了可能性”（offering the possibility of feed-forward large scene reconstruction without depth priors），摘要并没有声称已经解决整场景重建。",
+  "（同一作者的 FreeSplat++ 摘要与主页）现有前馈 3DGS 方法“主要关注小区域的稀疏视角重建，在整场景重建上质量和效率都不合格”。为此 FreeSplat++ 另外设计了融合模块、Weighted Floater Removal 和深度正则的逐场景微调，说明作者自己认为 FreeSplat 的融合在整场景尺度上还会留下漂浮物和冗余；FreeSplat++ 主页的对比图中，FreeSplat-fv 的深度图上确实有漂浮物。",
+  "（检索摘要）FVT 版本在少视角时不如专门训练的版本，要到视角数增加时才接近 FreeSplat-spec，所以论文同时给出了 spec 和 fv 两个模型。",
+  "（README）深度估计质量依赖参与匹配的近邻视角数：10 视角评测需要把 num_views 调到 9 才能得到“更准确的深度”。",
+  "（论文附录的局限性，检索摘要）方法支持任意数量的输入视角，但输入极长的图像序列（>50 张）时 GPU 需求会超过 40 GB。",
+  "（同上）深度估计是无监督的，3D 重建精度与使用 3D 监督或 RGB-D 输入的最优方法仍有差距。依赖已知位姿、只处理静态场景则是问题设定本身隐含的前提，不是作者明说的局限。"
+ ],
+ "limitations_unstated_zh": [
+  "“自由视角外推”的评测比标题听起来弱。官方评测索引中，ScanNet 10 视角的 244 个外推目标里，122 个（50%）只比序列端点多 1 帧；Replica 10 视角的 1440 个外推目标里，1202 个（83%）距端点 1 帧，898 个是重复的帧号（例如 office_0_1_0 的外推目标是 [5,5,5,5,5,5,97,97,97]，上下文为 6…96）。剩下的是帧号相距 100 帧以上的目标，难度完全不同。外推目标的挑选代码没有发布（仓库里的 evaluation_index_generator.py 是 pixelSplat 的两视角版本）。另外，训练时的目标帧全部在相邻上下文帧之间，FVT 本身并不训练外推。",
+  "PTF 的对应规则比较粗，而且只增不删。代码中的阈值是 max(0.05·d, 0.1 m)，深度 2 m 以内一律是 10 cm。投影坐标直接四舍五入到整数像素，每个像素只和 z-buffer 最前面的那个全局高斯配对。全局集合以第 0 个视角为起点，按输入顺序增量融合，结果依赖输入顺序。一旦某个错误深度产生的高斯进入全局集合，后面没有任何机制把它删掉。这正好解释了 FreeSplat++ 为什么要另加 Weighted Floater Removal。",
+  "推理时 BN 处于训练模式。forward 每次都调用 self.backbone.apply(set_bn_eval)，而 set_bn_eval 实际执行的是 m.train()（encoder_freesplat.py:80-82, 216；调用处注释写着“Apply training mode only to batch normalization layers”，可见是有意为之）。因此测试时 EfficientNet 的 BN 用的是当前场景这 V 张图的批统计量，并在测试过程中不断改写 running stats。输出会随输入视角数量和内容变化，2 视角和 10 视角下的特征归一化并不相同。检索到的论文内容中没有提到这一点（未能通读全文确认）。",
+  "几何只靠光度损失学到，深度估计的实现也有几处不一致。发布代码没有深度监督，却用传感器深度来评测深度精度。代价体的平面按逆深度均匀放置（cost_volume.py:98-134），解码时的 128 个回归候选却按 log 深度放置（networks.py:80-85），两组候选互不对应，靠网络自己学映射（这是 ScanNet/Replica 配置；RE10K 配置 log_planes=False 时两者都按逆深度均匀，恰好一致）。渲染深度硬编码除以 2（decoder_splatting_cuda.py:62），只在 near=0.5 时正确，RE10K 配置下 near=1，深度数值会偏小一半（该数据集不评深度，所以不影响论文结果）。更麻烦的是渲染器本身：代码 import 的 diff_gaussian_rasterization_depth 解包 4 个返回值，而 requirements.txt 安装的 Luiten 版 diff-gaussian-rasterization-w-depth 模块名是 diff_gaussian_rasterization、只返回 3 个值，渲染的是中值深度（未覆盖处填 15，除以 2 后约 7.5 m）。论文深度指标到底用的是中值深度还是 α 加权均值深度，无法从发布代码确定。near/far 固定为 0.5–15 m，是公制室内先验。",
+  "外观与坐标系上有几处近似。融合时把 4×4 外参矩阵按权重直接平均（encoder_freesplat.py:503-504），得到的旋转部分不再正交，而协方差正是用它旋转到世界系的。SH 只有 2 阶，而且在融合路径下没有像 pixelSplat 那样旋转到世界系（gaussian_adapter.py:191-192），视角相关外观的表达很弱。所有视角都用第 0 个视角的内参反投影，默认同一台相机拍摄。",
+  "效率数字要谨慎比较。计时器沿用 pixelSplat，只用 time.time()，没有 torch.cuda.synchronize（PTF 里的 torch.where、布尔索引会隐式同步，解码器部分则可能被低估）；PTF 是 Python 循环，逐视角做投影、scatter 和 isin，耗时随 V 和全局高斯数增长；代价体对 128 个平面逐一循环 grid_sample。论文正文称比 NeuRay 快约 300 倍，但检索到的 Table 1 耗时（NeuRay 3.103 s，FreeSplat-spec 0.103 s）只对应约 30 倍。对 MVSplat 的速度优势在 2 视角很小（0.103 对 0.117 s），3 视角更明显（0.121 对 0.192 s）。",
+  "测试集很小。ScanNet 只有 8 个场景（72 或 79 个样本），Replica 是 8 个场景各 2 条子序列，共 16 条。所有数字都是单次运行，没有方差。训练集约 100 个 ScanNet 场景，与 NeRFusion、SurfelNeRF 相同，数据规模远小于 RE10K 或 DL3DV。",
+  "对 3D 临场不直接适用：只处理静态场景，没有时间维度；需要准确位姿和公制尺度；10 cm 的融合阈值会把人手和躯干这类相距不到 10 cm 的表面合并；论文 Table 6 给出了 30 视角整场景下 57–72 FPS 的渲染速度，但编码一次约 1.2 s（单张 A6000），重建本身不是逐帧实时的。它的价值在于“多相机像素高斯如何去重、融合”这一模块，而不是整套系统。"
+ ],
+ "lineage": {
+  "predecessors": [
+   {
+    "title": "pixelSplat: 3D Gaussian Splats from Image Pairs for Scalable Generalizable 3D Reconstruction",
+    "year": 2023,
+    "url": "https://arxiv.org/abs/2312.12337",
+    "note_zh": "代码底座和主要对比对象（README：“largely based on pixelSplat”）。FreeSplat 沿用了它的数据管线、视角采样器、高斯适配器（尺度公式、SH 掩码）、CUDA 光栅化和 MSE+0.05·LPIPS 损失。改动的是编码器：用 EfficientNetV2-S 加代价体，替换 DINO 加极线 Transformer；每像素 1 个高斯，而不是 3 个；并加入跨视角融合。pixelSplat 每像素 3 个高斯，在 10 视角下因显存只能改用确定性模式。论文为了在单张 A6000 上训练 3 视角版 pixelSplat，把它的 ViT patch 从 8×8 改成 16×16（检索摘要）。"
+   },
+   {
+    "title": "MVSplat: Efficient 3D Gaussian Splatting from Sparse Multi-View Images",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2403.14627",
+    "note_zh": "最直接的对比对象，也是“代价体 + 前馈 3DGS”路线的前作（README 的参考实现之一）。MVSplat 用跨视角 Transformer 和平面扫描代价体估计深度，每像素 1 个高斯。FreeSplat 保留了代价体思路，但用轻量 CNN 替换 Transformer，只与近邻视角匹配，并在输出端去冗余。"
+   },
+   {
+    "title": "SimpleRecon: 3D Reconstruction Without 3D Convolutions",
+    "year": 2022,
+    "url": "https://arxiv.org/abs/2208.14743",
+    "note_zh": "代价体和深度解码器的直接来源（README 致谢；代码中的 AVGFeatureVolumeManager、BasicBlock、UNet++ 式解码器和 sr_utils 都来自这里）。FreeSplat 去掉了 SimpleRecon 特征体里的元数据通道，只保留平均特征和点积。"
+   },
+   {
+    "title": "NeRFusion: Fusing Radiance Fields for Large-Scale Scene Reconstruction",
+    "year": 2022,
+    "url": "https://arxiv.org/abs/2203.11283",
+    "note_zh": "ScanNet 训练和测试划分的来源（README：follow NeRFusion）。NeRFusion 用 GRU 把逐帧局部特征体融合进全局体素，FreeSplat 的“GRU 融合潜在特征”与之思路相近，只是融合单元从体素换成了像素高斯。"
+   },
+   {
+    "title": "SurfelNeRF: Neural Surfel Radiance Fields for Online Photorealistic Reconstruction of Indoor Scenes",
+    "year": 2023,
+    "url": "https://arxiv.org/abs/2304.08971",
+    "note_zh": "同为室内、在线、逐帧融合的前作，也是训练划分的来源。SurfelNeRF 把全局 surfel 光栅化到当前视角，每个像素取重叠的前 K 个全局 surfel，由近到远比较深度，决定局部 surfel 是否并入；特征融合也用 GRU，并与加权和做过对比。PTF 的“投影、比深度、合并或追加、GRU 融合特征”几乎是同一套流程，区别在于 PTF 只和 z-buffer 最前面的一个全局高斯比较，基元是可直接 3DGS 光栅化的高斯，且合并在潜空间进行。"
+   },
+   {
+    "title": "Neural Rays for Occlusion-aware Image-based Rendering (NeuRay)",
+    "year": 2021,
+    "url": "https://arxiv.org/abs/2107.13421",
+    "note_zh": "Table 1 中的可泛化 NeRF 基线（2 视角 25.65/0.840/0.264，3.103 s；3 视角 25.47/0.843/0.264，4.278 s，检索摘要）。FreeSplat 的 SSIM 略低于 NeuRay，PSNR 和 LPIPS 更好；正文称推理快约 300 倍，但按表中耗时只有约 30 倍。"
+   },
+   {
+    "title": "IBRNet: Learning Multi-View Image-Based Rendering",
+    "year": 2021,
+    "url": "https://arxiv.org/abs/2102.13090",
+    "note_zh": "站内精读的可泛化 IBR 起点。它按目标射线逐点聚合多视角特征，没有持久的三维表示。FreeSplat 属于“先建一个全局表示、再渲染任意视角”的另一端，两者可以对照阅读。"
+   },
+   {
+    "title": "Efficient Neural Radiance Fields for Interactive Free-viewpoint Video (ENeRF)",
+    "year": 2021,
+    "url": "https://arxiv.org/abs/2112.01517",
+    "note_zh": "站内精读的另一篇前身：用代价体估计深度、引导采样的可泛化 NeRF。FreeSplat 同样用代价体估深度，但把输出从“按射线渲染的辐射场”换成可复用的 3D 高斯。"
+   },
+   {
+    "title": "GPS-Gaussian: Generalizable Pixel-wise 3D Gaussian Splatting for Real-time Human Novel View Synthesis",
+    "year": 2023,
+    "url": "https://arxiv.org/abs/2312.02155",
+    "note_zh": "站内精读中与本文平行的“像素级高斯”工作，面向人物和固定双目相机对。GPS-Gaussian 把两个视角的像素高斯直接拼接后渲染，多视角重叠处同样会有冗余；PTF 正是在这个层面做去重。"
+   },
+   {
+    "title": "3D Gaussian Splatting for Real-Time Radiance Field Rendering",
+    "year": 2023,
+    "url": "https://arxiv.org/abs/2308.04079",
+    "note_zh": "表示和光栅化器的来源。FreeSplat 的输出就是标准 3DGS，可以导出 ply（model/ply_export.py），也可以作为逐场景优化的初始化（FreeSplat++ 的 rft 版本就是这样用的）。"
+   },
+   {
+    "title": "EfficientNetV2: Smaller Models and Faster Training",
+    "year": 2021,
+    "url": "https://arxiv.org/abs/2104.00298",
+    "note_zh": "骨干网络（timm 的 tf_efficientnetv2_s_in21ft1k）。选它是为了支撑作者所说的“low-cost”：用 CNN 金字塔替代 ViT 或 Transformer 骨干。"
+   }
+  ],
+  "successors": [
+   {
+    "title": "FreeSplat++: Generalizable 3D Gaussian Splatting for Efficient Indoor Scene Reconstruction",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2503.22986",
+    "note_zh": "同一作者的直接后续，已发表于 IEEE TPAMI 2026（DOI 10.1109/TPAMI.2026.3665771）。目标从“长序列”扩展到“整场景”：保留像素级三元组融合，新增 Weighted Floater Removal（利用累积权重，把全局高斯投影到输入视角，按邻域累积策略调整不透明度以压制噪声深度产生的漂浮物），以及深度正则的逐场景微调（rft）。主页 teaser 标注：FreeSplat++ 整场景 PSNR 21.44，耗时 52.2 s，δ<0.1 为 0.948；微调后 23.54、12.4 min；3DGS 为 23.31、77.5 min。截至 2026-09-29 代码仍未发布。"
+   },
+   {
+    "title": "DepthSplat: Connecting Gaussian Splatting and Depth",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2410.13862",
+    "note_zh": "站内精读的同一路线后续（CVPR 2025）：在 MVSplat 式代价体上叠加单目深度基础模型的特征，把深度做得更准。它与 FreeSplat 解决的是不同瓶颈：DepthSplat 改进单视角深度，FreeSplat 处理多视角之间的冗余与一致性。两者可以组合。"
+   },
+   {
+    "title": "VolSplat: Rethinking Feed-Forward 3D Gaussian Splatting with Voxel-Aligned Prediction",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2509.19297",
+    "note_zh": "把像素对齐的高斯预测改为：先把多视角特征聚合进 3D 体素网格并精化，再按体素预测高斯，从表示层面绕开“像素高斯多视角冗余与错位”（arXiv 2025-09，GitHub 标注 ECCV 2026）。检索摘要显示其 ScanNet 对比表列入了 FreeSplat 与 FreeSplat++，并称相比 FreeSplat 明显减少了漂浮物。"
+   },
+   {
+    "title": "Learning Efficient Fuse-and-Refine for Feed-Forward 3D Gaussian Splatting",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2503.14698",
+    "note_zh": "NeurIPS 2025（原名 SplatVoxel，作者含 Quark 团队成员）。把像素对齐的高斯聚合进由粗到细的体素层级，再用稀疏体素 Transformer 融合和精化，支持带历史的在线动态重建。它和 PTF 都在解决“多视角像素高斯去重与融合”，不同之处在于用体素结构替代了投影配对。"
+   },
+   {
+    "title": "SaLon3R: Structure-aware Long-term Generalizable 3D Reconstruction from Unposed Images",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2510.15072",
+    "note_zh": "直接以 FreeSplat 为对照（其图 1 即 FreeSplat 与 SaLon3R 的比较）：输入无位姿、无标定的长视频，用紧凑的 anchor 基元和可微的显著性量化去冗余，再用 3D Point Transformer 修正跨帧不一致；称可在线处理 50 帧以上、超过 10 FPS，去冗余 50%–90%。它把 FreeSplat 的“长序列去冗余”问题推进到无位姿设定，并换掉了像素级 z-buffer 配对。"
+   },
+   {
+    "title": "AnySplat: Feed-forward 3D Gaussian Splatting from Unconstrained Views",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2505.23716",
+    "note_zh": "从无位姿的图像集合一次前向预测 3DGS 和相机参数，面向较多输入视角，去掉了 FreeSplat 依赖已知位姿的前提（站内 Quark 精读的后续工作之一）。"
+   },
+   {
+    "title": "LVT: Large-Scale Scene Reconstruction via Local View Transformers",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2509.25001",
+    "note_zh": "只在局部近邻视角内做注意力，一次前向重建任意大的场景并输出 3DGS。它与 FreeSplat 共享“只与最近视角交互”的思路，但把 CNN 代价体换成了 Transformer。"
+   },
+   {
+    "title": "LVSM: A Large View Synthesis Model with Minimal 3D Inductive Bias",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2410.17242",
+    "note_zh": "站内精读中与本文相对的另一极（ICLR 2025）：不建任何显式三维表示，直接由 Transformer 生成目标视角。FreeSplat 押注的是显式、可复用、可去冗余的全局高斯；LVSM 押注的是大模型和数据。"
+   },
+   {
+    "title": "StreamSplat: Streaming Feed-Forward 3D Gaussian Splatting",
+    "year": 2026,
+    "url": "https://arxiv.org/abs/2608.01659",
+    "note_zh": "流式前馈 3DGS（2026-08）：标定好的视角按顺序到达，用体素对齐的因果缓存（VACC）保存持久的场景状态，内存随探索到的几何增长而不是随流长度增长；再把缓存几何投影成当前代价体的深度先验（HPDA）、把缓存潜特征注入高斯回归（CGFI）。在 DL3DV、RealEstate10K、ScanNet 上评测，可扩展到 256–1024 个视角。可以看作 PTF 式“持久全局表示 + 增量融合”的体素化、因果化版本。是否直接与 FreeSplat 比较未能核实。"
+   },
+   {
+    "title": "G3Splat: Geometrically Consistent Generalizable Gaussian Splatting",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2512.17547",
+    "note_zh": "无位姿（pose-free）设定下的可泛化高斯：指出仅靠视图合成监督学不出几何上有意义的高斯，引入几何先验（例如让高斯朝向对齐局部表面法线）；在 RE10K 上训练，在 ScanNet 上零样本评测深度、网格和相对位姿。与 FreeSplat 的共同点是都关心“只用光度损失时高斯定位是否准确”；是否与 FreeSplat 直接比较未能核实。"
+   },
+   {
+    "title": "tttLRM: Test-Time Training for Long Context and Autoregressive 3D Reconstruction",
+    "year": 2026,
+    "url": "https://arxiv.org/abs/2602.20160",
+    "note_zh": "CVPR 2026，用 TTT 层实现线性复杂度的长上下文、流式 3D 重建，可解码为高斯。面对的同样是“输入视角多了怎么办”，给出的是隐式记忆方案，而不是 FreeSplat 的显式去重（站内 Quark 精读的后续工作之一）。"
+   }
+  ]
+ },
+ "takeaways_for_telepresence_zh": [
+  "固定多相机阵列同样会遇到“像素高斯冗余”。8 台 384×512 的相机，每像素一个高斯就有约 157 万个，阵列越密，重叠越多。在发送端用 PTF 式的投影配对和潜空间融合去重，能直接降低渲染开销；如果要把高斯推流到接收端，还能降低带宽。粗略估算：每个高斯 38 个 float（位置 3、尺度 3、四元数 4、2 阶 SH 27、不透明度 1），40 万个高斯按 float32 约 61 MB 每帧，这是本文的估算。所以去重之后仍然需要压缩（a-compression）。",
+  "与 Quark 的“每个目标视角重建一次、用完即丢”相比，FreeSplat 产出的是一个全局、可复用的 3D 表示：一次重建，双眼和多个观看者都可以直接光栅化。这更符合多观看者或光场显示的临场需求，代价是要解决冗余和一致性，这正是 PTF 的作用。",
+  "固定阵列可以简化 FreeSplat 的几个环节：位姿精确且不变，近邻视角表可以预先算好；融合顺序也可以固定成一个合理的相机顺序，比如由中间到两边。但要注意 10 cm 的绝对融合阈值（2 m 以内生效）：人物的手、面部和躯干常常相距不到 10 cm，会被错误合并。应改成按视差或按深度误差模型设定的阈值，而不是固定公制值。",
+  "PTF 本质上是“每帧内跨相机”的增量融合，与 Ha et al. 的 image-based TSDF 加上一帧深度回灌是同类操作，只是 Ha et al. 融合的是深度，FreeSplat 融合的是带特征的高斯。把 PTF 沿时间方向延伸（静态背景的全局高斯跨帧累积、动态区域逐帧更新），是做临场视频的自然方向。但要补上删除机制，因为全局集合只增不删会累积漂浮物，FreeSplat++ 的 Weighted Floater Removal 就是一个起点。",
+  "评测时要警惕“自由视角”的定义。FreeSplat 的外推目标一半只比序列端点多 1 帧。临场系统里，观看者头部通常在阵列包络内移动，也会偶尔越出。应当按到最近相机的角度或距离把目标视角分桶，分别报告，而不是只给一个外推平均值。",
+  "工程上可以直接借用两点：一是 EfficientNet 加近邻代价体这套轻量深度前端，其开销与总视角数无关；二是“光度损失即可学出不错几何”的训练方式。但部署前要修掉几个坑：推理时 BN 处于训练模式、渲染深度硬编码除以 2、SH 未旋转到世界系。此外，论文只给出 30 视角整场景约 1.2 s 的编码时间和 57–72 FPS 的渲染速度（单张 A6000），没有“采集到显示”的端到端延迟，需要自己在目标 GPU 上测。"
+ ]
+}

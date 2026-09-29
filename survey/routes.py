@@ -77,6 +77,18 @@ def first_sentence(text, limit: int) -> str:
     return t if len(t) <= limit else t[:limit - 1].rstrip("，、；：,;: ") + "…"
 
 
+def lead(text, limit: int, least: int = 40) -> str:
+    """Like first_sentence, but keeps adding sentences until the summary says something (a story may open with "先看问题。")."""
+    t = re.sub(r"\s+", " ", str(text or "")).strip()
+    out = ""
+    for m in re.finditer(r"[^。！？]*[。！？]", t):
+        out += m.group(0)
+        if len(out) >= least:
+            break
+    out = out or t
+    return out if len(out) <= limit else out[:limit - 1].rstrip("，、；：,;: ") + "…"
+
+
 def all_strings(x):
     if isinstance(x, str):
         yield x
@@ -222,7 +234,7 @@ def xref_table(ctx) -> dict:
     for anchor, g in (learn.get("guided") or {}).items():
         short = shorts.get(anchor, anchor)
         x[f"guide-{anchor}"] = {"u": f"works/walkthrough/{anchor}.html", "t": f"{short} 导读", "e": "", "m": "Walkthrough",
-                                "s": first_sentence(g.get("story_zh"), 80)}
+                                "s": lead(g.get("story_zh"), 90)}
         for s in g.get("walkthrough", []):
             x[f"walk-{anchor}-{s['id']}"] = {"u": f"works/walkthrough/{anchor}.html#walk-{anchor}-{s['id']}", "t": s.get("title_zh", ""),
                                             "e": "", "m": f"Walkthrough · {short} · {s['id'].upper()}",
@@ -236,7 +248,7 @@ def xref_table(ctx) -> dict:
         if not a:
             continue
         x[f"anchor-{key}"] = {"u": f"works/papers/{key}.html", "t": f"{short} 精读", "e": (a.get("citation") or {}).get("title", ""),
-                              "m": "Papers · 论文精读", "s": first_sentence(a.get("tldr_zh"), 120)}
+                              "m": "Papers · 论文精读", "s": lead(a.get("tldr_zh"), 120)}
     if (ctx["registry"].get("compare") or {}).get("rows"):
         x["anchor-all"] = {"u": "works/papers/deep-reads.html", "t": f"{len(shorts)} 篇精读论文：对照与演进", "e": "", "m": "Papers",
                            "s": first_sentence(ctx["registry"]["compare"].get("lede"), 100)}

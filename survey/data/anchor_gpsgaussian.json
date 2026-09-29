@@ -1,0 +1,295 @@
+{
+ "citation": {
+  "title": "GPS-Gaussian: Generalizable Pixel-wise 3D Gaussian Splatting for Real-time Human Novel View Synthesis",
+  "authors": "Shunyuan Zheng, Boyao Zhou, Ruizhi Shao, Boning Liu, Shengping Zhang, Liqiang Nie, Yebin Liu",
+  "affiliations": "哈尔滨工业大学（Zheng、Zhang、Nie；一作在清华大学实习期间完成）；清华大学（Zhou、Shao、Boning Liu、Yebin Liu）；鹏城实验室（Zhang）。通讯作者 Shengping Zhang。",
+  "venue": "IEEE/CVF CVPR 2024（Highlight），pp. 19680–19690，IEEE Xplore 文档号 10657862；arXiv 2312.02155（2023 年 12 月首发，v3 为 2024-04-16）。DOI 10.1109/CVPR52733.2024.01861（检索结果中他文参考文献条目给出，未能打开 IEEE Xplore 页面直接核对）。",
+  "year": 2024,
+  "url": "https://arxiv.org/abs/2312.02155",
+  "project_page": "https://shunyuanzheng.github.io/GPS-Gaussian",
+  "code_status": "已开源：https://github.com/aipixel/GPS-Gaussian，MIT 许可证。2023-12-25 首次放出代码，最近一次提交为 2025-07-02（截至 2026-09 共 43 个提交，仍有未关闭的 issue）。仓库包含两阶段训练脚本（train_stage1.py / train_stage2.py）、两个推理脚本（test_real_data.py / test_view_interp.py），以及基于 Taichi 的 THuman2.0 渲染脚本（prepare_data/render_data.py）。通过百度网盘和 OneDrive 发布了三样东西：16 相机设定下渲染好的 THuman2.0 训练数据、真实测试数据 real_data、预训练权重 GPS-GS_stage2_final.pth。没有发布的有：论文主实验所用 8 相机设定的权重（issue #35、#97）、Twindom 数据（商业扫描）、计时代码、TensorRT 部署代码（论文称本文与 FloRen 的计时都用了 TensorRT），以及真实采集系统的抠像与同步流程。渲染依赖原版 3DGS 的 diff-gaussian-rasterization；RAFT-Stereo 的 CUDA 相关采样器可选编译。期刊扩展版 GPS-Gaussian+ 另有仓库 YaourtB/GPS_plus。"
+ },
+ "tldr_zh": "GPS-Gaussian 面向环形稀疏相机阵列拍摄的人物（论文用 8 台相机，相邻约 45°），从离目标视点最近的两个 1024×1024 源视角出发，一次前向就得到可以直接渲染的 3D Gaussian，不做逐人物优化。它先对两个视角做立体校正，用一个 RAFT-Stereo 风格、只迭代 3 次的轻量双目网络，一次前向估计出两张视差图；再在源视角平面上逐像素回归旋转、尺度、不透明度三张“参数图”（位置由深度反投影得到，颜色直接取源像素），把两个视角的高斯合并后，用 3DGS 光栅器渲染出 2048×2048 的新视角。深度模块与参数模块在 Twindom、THuman2.0 人体扫描渲染出的合成数据（带深度真值）上联合训练。论文报告在 RTX 3090 上（用 TensorRT 加速）源视角处理 27 ms、每个新视角渲染 0.8 ms，表中帧率为 25 FPS；THuman2.0 上 PSNR 25.57，高于 ENeRF 的 24.10 和逐人物优化的 3D-GS（24.18）。代价是依赖准确的前景抠像、相邻相机小夹角和合成深度真值；公开代码默认是 16 相机，不含计时代码和 TensorRT 部署，用户用原生 PyTorch 代码实测的速度远低于论文数字。",
+ "problem_setting_zh": "输入是围成一圈、已标定且同步的稀疏 RGB 相机拍到的人物图像。论文的合成与真实实验都用 8 台相机，相邻夹角约 45°；实时演示因 RTX 3090 显存限制只接入前方 6 台面向人物、均匀分布的相机（补充材料）。每帧还要有前景 mask，论文明确把准确抠像列为必要的预处理。对一个目标视点，把每台输入相机表示为相机中心相对场景中心 O 的向量 V_n=C_n−O，与新视点的向量 V_tar=C_tar−O 做点积，取最接近的两个作为双目“工作组”（左 l、右 r）；目标视点默认落在这两台相机之间。输出是只含人物、背景为黑色的新视角 RGB，分辨率 2048×2048（源图 1024×1024 的 2 倍）。方法有四个隐含假设：场景以人为中心；人体表面近似 Lambertian，所以颜色直接取源像素；两台相邻相机的视差主要在水平方向，可以校正成标准双目；训练阶段有深度真值（由扫描渲染得到）。评测数据有三组：THuman2.0（526 个扫描中随机取 100 个做验证）、Twindom（1700 个中取 200 个）、真实采集（4 个人物，另架 8 台相机提供真值视角）。指标只有单帧 PSNR、SSIM、LPIPS，外加速度。对比对象是三种可泛化方法（隐式的 ENeRF、基于图像的 FloRen、混合式的 IBRNet；论文称它们都在同一数据集上从头训练，同样以两个源视角为输入，其中 FloRen 与本文一样用深度真值监督）和在全部 8 个输入视角上逐人物优化的 3D-GS。方法逐帧独立处理，没有任何时间建模。",
+ "pipeline_zh": [
+  {
+   "stage": "0. 视角选择与立体校正（论文方法部分“视角选择与深度估计”；lib/human_loader.py get_rectified_stereo_data）",
+   "detail": "论文把每台相机表示为相机中心相对场景中心的向量 V_n=C_n−O，按它与新视点向量 V_tar=C_tar−O 的点积选出最近的两个源视角；公开代码没有实现自动选择，推理脚本要用 --src_view 手动指定，训练时固定用第 0、1 号视角。两视角先由外参求相对位姿 (R,T)，再调用 cv2.stereoRectify(intr0, 0, intr1, 0, (1024,1024), R, T, flags=0)（假设无畸变），得到校正旋转 R0、R1 和投影矩阵 P0、P1。新外参为 R_rect·extr，新内参为 P[:3,:3]，Tf_x = P1[0,3] = −f·B，并用 initUndistortRectifyMap 加 remap 做双线性重采样。flags=0 时两图主点不同，所以代码里的“flow”等于 (c_x1 − c_x0) − 视差。训练前会离线把校正结果和视差真值存到 rectified_local（README 说需要数小时）；推理时每帧用 OpenCV 在 CPU 上重算一遍。"
+  },
+  {
+   "stage": "1. 共享图像编码器（同上；core/extractor.py UnetExtractor）",
+   "detail": "两张校正图沿 batch 维拼成 2B×3×1024×1024（像素归一化到 [−1,1] 并乘前景 mask），送入同一个编码器：5×5、stride 2 卷积，接三组残差块，输出 1/2、1/4、1/8 分辨率的特征，通道数分别为 32、48、96（stage yaml 的 encoder_dims=[32,48,96]），全部使用 GroupNorm。论文称结构与 RAFT-Stereo 的特征编码器相似。这三级特征既供深度模块使用（只取 1/8 级），也作为跳连输入供高斯参数解码器使用，两个模块共享同一次编码。"
+  },
+  {
+   "stage": "2. 双向 1D 相关体（同上；core/raft_stereo_human.py、core/corr.py）",
+   "detail": "1/8 特征再经一个残差块和 3×3 卷积投到 192 通道，按 batch 拆成左 fmap1、右 fmap2（各 B×192×128×128）；另有两个分支（各为一个残差块加 3×3 卷积），分别输出 96 通道的 GRU 初始隐状态（经 tanh）和 context（经 ReLU）。代码把 (fmap1,fmap2) 与 (fmap2,fmap1) 沿 batch 拼接，于是一次前向同时算出“左→右”和“右→左”两个方向的相关体：同一行上两两做点积再除以 √192，得到 2B·128·128 个像素、每个像素对应 128 个水平候选，也就是 1/8 分辨率下的整行。沿视差维做 4 级平均池化（128/64/32/16），每次按当前估计在半径 4 的窗口里查找，共 4×9=36 个相关通道。"
+  },
+  {
+   "stage": "3. 迭代视差更新 T=3 与凸上采样（同上；core/update.py）",
+   "detail": "RAFT 式更新：motion encoder 把 36 通道相关特征和当前 flow 编码成 128 通道，单层 ConvGRU（隐状态 96 通道，只在 1/8 分辨率上运行，n_gru_layers=1）更新隐状态，FlowHead（96→256→2）输出增量，只保留水平分量（delta_flow[:,1]=0）。论文取 T=3 次迭代，理由是“性能与代价的权衡”；RAFT-Stereo 原版训练用 16–22 次、测试用 32 次，它最快的 realtime 配置也要 7 次。每次迭代都用 576 通道（8²×9）的凸组合 mask 把 1/8 视差上采样 8 倍，训练时对 3 次输出都计算损失，推理只上采样最后一次。输出为每个视角一张 1024×1024 的视差图。"
+  },
+  {
+   "stage": "4. 视差 → 深度 → 位置图（论文方法部分“像素级高斯参数预测”；lib/utils.py flow2depth、depth2pc）",
+   "detail": "disparity = (c_x,ref − c_x) − flow；深度按 Z = −Tf_x / disparity = fB/d 计算。注意代码里名为 depth 的张量其实是逆深度 1/Z（−disparity/Tf_x），合成数据的 zbuf 也存 1/z×2^15。随后乘前景 mask，mask 外为 0。depth2pc 用校正后的内外参把每个像素按 Z=1/depth 反投影到世界坐标，得到 B×H·W×3 的位置图；只有 depth≠0 的前景像素才会生成高斯。"
+  },
+  {
+   "stage": "5. 高斯参数图回归（同上；lib/gs_parm_network.py GSRegresser）",
+   "detail": "另有一个与图像编码器同构的深度编码器 ℰ_depth，把 1 通道逆深度编码成 1/2、1/4、1/8 三级特征（32/48/96 通道）。U-Net 式解码器从 1/8 起步：每级把图像特征、深度特征与上一级输出拼接，经两个残差块处理（输出 96→64→48 通道），再双线性上采样 2 倍；最后在 1024×1024 上与原图 RGB、逆深度拼接成 52 通道，经 3×3 卷积得到 32 通道。三个头都是“3×3 卷积 + ReLU + 1×1 卷积”，分别输出：旋转 4 通道（L2 归一化为四元数）、尺度 3 通道（Softplus(β=100) 后截断到 ≤0.01）、不透明度 1 通道（Sigmoid）。颜色不回归，直接用源像素 RGB（论文的理由是人体近似 Lambertian，因此不预测 SH）。网络输入里没有相机位姿，预测出的四元数却被直接当作世界系旋转送进光栅器，没有乘相机外参的旋转（lib/GaussianRender.py:19、:32；issue #89 提出同一问题，至今未关闭）。"
+  },
+  {
+   "stage": "6. 合并与渲染（论文方法部分“联合训练与可微渲染”；lib/GaussianRender.py、gaussian_renderer/__init__.py、lib/utils.py get_novel_calib）",
+   "detail": "每个样本把左右两视角的有效高斯（位置、颜色、旋转、尺度、不透明度）拼成一个集合，最多 2×1024²≈2.1M 个，实际只取前景像素。然后调用原版 diff-gaussian-rasterization 做一次整体渲染，颜色走 colors_precomp，背景为黑色 [0,0,0]，只输出 RGB，不输出深度或 alpha。训练和验证时，新视角相机直接取合成数据里渲染该真值图的那台相机（内参 ×2，输出 2048×2048，lib/human_loader.py get_novel_view_tensor）；只有推理脚本才在两源视角之间插值相机：旋转用 Slerp，外参平移 t 线性插值，内参线性插值后乘 2（lib/utils.py get_novel_calib）。高斯本身与目标视点无关，所以同一组高斯可以渲染任意多个视点（论文报告每个新视角渲染 0.8 ms）；不过 test_view_interp.py 对每个视点都把整个网络重跑了一遍。"
+  },
+  {
+   "stage": "7. 损失与两阶段训练（联合训练小节与实验设置；train_stage1.py、train_stage2.py、lib/loss.py）",
+   "detail": "L = L_disp + L_render。L_disp 是对 T 次迭代输出的序列 L1 损失，权重 μ^{T−t}，μ=0.9；代码沿用 RAFT-Stereo 的写法，把 μ 调整为 0.9^{15/(T−1)}≈0.454，T=3 时三次输出的权重为 0.206、0.454、1。L_render = 0.8·L1 + 0.2·(1−SSIM)，SSIM 窗口 11、σ=1.5。第一阶段只训深度模块，40K 次迭代（代码中 batch 6）；第二阶段加载其权重后联合训练 100K 次迭代，batch 2，深度损失保持开启。优化器 AdamW（lr 2e-4、weight decay 1e-5、eps 1e-8），OneCycleLR 线性退火，梯度裁剪 1.0；第二阶段图像编码器和 RAFT 部分用混合精度（参数回归器不在 autocast 内）。论文报告在单卡 RTX 3090 上全程约 15 小时。"
+  }
+ ],
+ "key_design_choices_zh": [
+  {
+   "choice": "用学习式双目立体得到显式深度，由深度决定每个高斯的位置",
+   "rationale": "人物被一圈已标定相机拍摄，相邻视角重叠大，校正后是标准的一维搜索，RAFT 式网络的精度高、速度快；合成扫描数据又能提供稠密深度真值，可以直接监督。位置由几何决定，网络不必从颜色里去猜高斯落在哪里，泛化到新人物时更稳。",
+   "alternatives_rejected": "论文对比的几类做法：ENeRF、IBRNet 这类隐式或混合的可泛化辐射场（沿射线采样，速度慢，ENeRF 每个新视角 125 ms）；FloRen 这类基于图像的渲染方法（论文的分类）；在 8 个视角上逐人物优化 3D-GS（需要数分钟，而且 8 个视角太稀疏）。同期的 pixelSplat 选择了另一条路：沿射线预测概率深度分布再采样，不用深度真值。"
+  },
+  {
+   "choice": "把高斯参数定义在源视角 2D 图像平面上（Gaussian parameter maps），逐像素回归",
+   "rationale": "每个前景像素对应一个高斯，参数图与图像逐像素对齐，可以直接用 2D U-Net 回归，还能复用编码器特征；高斯数量由分辨率和前景面积决定，不需要点云采样、聚类或致密化。论文的说法是把参数定义在源视角平面上，而不是非结构化点云上。",
+   "alternatives_rejected": "在非结构化点云上逐点回归（需要点网络和邻域搜索）；逐人物用 3DGS 的致密化与剪枝来优化。"
+  },
+  {
+   "choice": "颜色直接取源像素，不预测球谐（SH）系数",
+   "rationale": "论文认为人体表面大体是 Lambertian，视角相关效应弱；直接用 1024×1024 源像素作为颜色，保留了原图的高频纹理，也省掉了一个输出头。",
+   "alternatives_rejected": "预测 SH 系数或视角相关颜色（原版 3DGS 的做法）。代价是高光、反光衣料和眼睛高光都会被“烘焙”进颜色，两个源视角的颜色差异还会在合并区域留下接缝。"
+  },
+  {
+   "choice": "深度模块与高斯参数模块联合训练：先预训练深度 40K 步，再联合训练 100K 步",
+   "rationale": "渲染损失可以反向传播到深度，修正那些“深度误差小、但渲染出错”的区域；深度损失在第二阶段仍然保留，防止几何被渲染损失带偏。Table 3 消融：论文的 w/o Joint Training 把可微的高斯渲染换成固定半径的点云渲染，模型退化为“深度网络 + 不可微的深度 warping 渲染”；此时 PSNR 从 25.05 降到 23.97，EPE 从 1.494 升到 1.587（差约 6%），说明渲染损失的梯度确实改善了深度。",
+   "alternatives_rejected": "深度网络只用视差损失训练、渲染不可微（即消融中的 w/o Joint Training：用固定半径的点云渲染代替高斯渲染）；完全不用深度监督、只靠渲染损失（后来 GPS-Gaussian+ 支持这种设定）。"
+  },
+  {
+   "choice": "追求实时的轻量化配置：共享编码器、1/8 分辨率单层 GRU、只迭代 3 次",
+   "rationale": "深度模块的开销随迭代次数线性增长。论文说 T=3 是“性能与代价的权衡”；编码器同时服务深度估计和参数回归，省下一次特征提取。",
+   "alternatives_rejected": "RAFT-Stereo 原版配置：1/4 分辨率、3 层 GRU、训练 16–22 次、测试 32 次迭代。论文没有给出迭代次数的定量消融。"
+  },
+  {
+   "choice": "两视角的高斯合并后一次整体渲染，交给 3DGS 光栅器按深度排序处理遮挡",
+   "rationale": "实现最简单，不需要额外的融合网络；光栅器会自动按深度排序做 alpha 合成，两视角各自可见的区域可以互补；渲染只需 0.8 ms，同一组高斯可以供任意视点、双眼或多名观众重复使用。",
+   "alternatives_rejected": "逐视角分别渲染后再学习融合。这正是 Ha et al.（CVPR 2025）的选择：他们认为单次整体渲染会因两视角深度不一致而出现 Z-fighting 和飞点。在他们的 Table 3 中，仿 GPS-Gaussian 的 No Blending 只有 24.64 dB，STED 483.3。"
+  },
+  {
+   "choice": "只用离目标最近的两个相邻视角（双目工作组），不做多视角融合",
+   "rationale": "每帧计算量固定，只处理一对 1024² 图像，可以直接套用成熟的双目网络；新视点落在两相机之间时，这两个视角已经覆盖了绝大部分可见表面。",
+   "alternatives_rejected": "多视角代价体或跨视角注意力（后来的 EVA-Gaussian、Tele360 转向这一路线），以及把所有相机的高斯全部合并。代价是：相邻夹角必须小；两视角都看不到的区域（手臂内侧、多人遮挡）无法恢复；新视点换到另一对相机时，画面会突变。"
+  }
+ ],
+ "training_zh": "训练数据全部是合成的，由 Twindom 的 1700 个和 THuman2.0 的 526 个人体扫描渲染而来，其中分别随机留出 200 个和 100 个作为验证。论文设定为 8 台相机均匀分布在圆周上，相邻约 45°；每个扫描渲染源视角图像，并在相邻源视角之间随机选 3 个视点渲染新视角真值。公开的渲染脚本（prepare_data/render_data.py）给出的是另一套参数：16 台相机（相邻 22.5°），半径 2.0 m，fx=fy=0.8×1024=819.2 px，主点纵坐标下移 25 px；人体高度归一化为 1.80±0.05 m，注视点 (0,0.85,0)，俯仰 −8°，随机水平平移 ±0.05–0.1 m；6 盏方向光，俯仰在 ±30° 内随机；THuman2.0 用 SMPL-X 的全局朝向做朝向归一化。每对源视角之间渲染 3 个新视角（一个在正中，两个分别在前半和后半区间随机），新视角额外渲染 2048×2048 的高清图，作为 2K 监督。源图为 1024×1024，同时保存 mask、逆深度（z-buffer 存 1/z×2^15）和内外参。训练分两阶段。第一阶段只训深度模块 40K 次迭代（代码中 batch 6，不开混合精度）；第二阶段加载第一阶段权重，联合训练 100K 次迭代，batch 2，图像编码器和 RAFT 部分开混合精度，每步从 3 个新视角中随机抽 1 个作监督（相机用渲染该真值图时的相机，而不是插值相机）。优化器 AdamW，lr 2e-4，weight decay 1e-5，eps 1e-8；学习率用 OneCycleLR 线性退火（pct_start 0.01），梯度裁剪 1.0，BatchNorm 冻结（网络实际用的是 GroupNorm）。损失 L = L_disp + 0.8·L1 + 0.2·(1−SSIM)：L_disp 为 3 次迭代输出的加权 L1 视差损失，论文写 μ=0.9，代码调整为 0.9^7.5≈0.454；视差真值只在腐蚀后的前景 mask 内计算。论文报告单卡 RTX 3090 训练全程约 15 小时。代码里有两处与论文不同：一是默认数据为 16 相机；二是第一阶段的 OneCycleLR 总步数写死为 100100（沿用 RAFT-Stereo 的 100000+100），而实际只训练 40000 步。按线性退火推算，第一阶段结束时学习率仍约为峰值的 60%。",
+ "system_perf": [
+  {
+   "item": "论文主打速度（Table 1，RTX 3090，两张 1024×1024 源图合成一个新视角）",
+   "value": "源视角处理（深度估计加参数回归）27 ms，每个新视角渲染 0.8 ms，表中帧率 25 FPS，输出 2048×2048。论文注明本文与 FloRen 的计时用了 TensorRT 加速。27+0.8 ms 按倒数约合 36 FPS，与表中 25 FPS 不能互推；FloRen（14+11 ms，表中 15 FPS）、ENeRF（11+125 ms，表中 5 FPS）同样对不上，FPS 列的口径未能核实。计时不含前景抠像、立体校正、采集与传输。"
+  },
+  {
+   "item": "对比方法速度（同表，同一 GPU）",
+   "value": "FloRen 源视角 14 ms、新视角 11 ms，表中 15 FPS；ENeRF 11 ms + 125 ms，表中 5 FPS；IBRNet 每个新视角约 4000 ms（源视角耗时未能核实）；3D-GS 需要逐人物优化数分钟（具体数值未能核实）。论文还按“源视角一次 + 新视角 n 次”换算了同时合成 10 个新视角的耗时：本文 35 ms，FloRen 124 ms，ENeRF 1261 ms。"
+  },
+  {
+   "item": "模型规模（按官方代码和 stage2.yaml 实例化后统计）",
+   "value": "总参数 5,144,408（约 5.1M）：图像编码器 0.41M，RAFT 式深度模块 3.48M，高斯参数回归器 1.25M（其中深度编码器 0.41M）。其中 995,904 个（约 1.0M）属于 n_gru_layers=1 时仍被实例化、但前向从不调用的 gru16 与 gru32（core/update.py:105-106），实际参与计算的约 4.15M。"
+  },
+  {
+   "item": "内部分辨率",
+   "value": "相关体和 GRU 在 1/8 分辨率（128×128）上运行，每个像素有 128 个水平候选；参数回归头在全分辨率 1024×1024 上运行；输出 2048×2048（内参 ×2）。"
+  },
+  {
+   "item": "高斯数量",
+   "value": "每个视角每个前景像素一个，两视角合计至多 2×1024²≈2.1M；背景像素不生成高斯。"
+  },
+  {
+   "item": "第三方或用户实测（与论文数字差距大）",
+   "value": "Ha et al.（CVPR 2025）在其 DyNeRF 设定下重训后测得约 143.4 ms/帧（GPU 未说明）。GitHub issue #18：用户在 RTX 3090 上用公开的 PyTorch 代码分段计时，raft_stereo 26.8 ms、flow2gsparms 80.9 ms（其中 gs_parm_regresser 77.4 ms）、render 4.8 ms，三段合计约 112 ms（未列图像编码器）；issue #34 另有用户测得约 4 fps；issue #52 中有用户把网络转成 TensorRT FP16，在 2048×1024 输入下网络 GPU 耗时仍约 60 ms（输入像素是论文设定的 2 倍，不能直接比较）。站内综述记录 Tele360（2026）在其 6 视图 2K 设置下测得 GPS-Gaussian 约 300 ms/帧。"
+  },
+  {
+   "item": "训练成本",
+   "value": "单卡 RTX 3090 约 15 小时（40K 次深度预训练，加 100K 次联合训练，batch 2）。"
+  },
+  {
+   "item": "实时演示系统（补充材料）",
+   "value": "受 RTX 3090 显存限制，只接入前方 6 台面向人物、均匀分布的相机（补充材料）。本次检索没有找到演示的端到端延迟、抠像方法和抠像耗时（未能核实补充材料中是否有说明）。"
+  },
+  {
+   "item": "未报告项",
+   "value": "显存占用；抠像、校正与数据搬运耗时；端到端 motion-to-photon 延迟；双目或多观众渲染的开销（理论上每多一个视点只多 0.8 ms 光栅化）；带宽。"
+  }
+ ],
+ "results_zh": [
+  {
+   "dataset": "THuman2.0（100 个验证扫描，8 相机设定，新视点位于相邻源视角之间）",
+   "finding": "PSNR/SSIM/LPIPS：GPS-Gaussian 25.57/0.898/0.112；ENeRF 24.10/0.869/0.126；3D-GS（在 8 个视角上逐人物优化）24.18/0.821/0.144；IBRNet 23.38/0.836/0.212；FloRen 23.26/0.812/0.184。领先最强可泛化基线 ENeRF 1.47 dB，按 MSE 算约为 ENeRF 的 0.71 倍。3D-GS 的 PSNR 略高于 ENeRF，SSIM（0.821）却只比 FloRen（0.812）高，远低于 ENeRF 和本文，说明 8 个视角对逐场景优化来说太稀疏。论文称所有可泛化基线都在同一数据上从头训练、以两个源视角为输入。"
+  },
+  {
+   "dataset": "Twindom（200 个验证扫描）",
+   "finding": "GPS-Gaussian 24.79/0.880/0.125；ENeRF 23.64/0.847/0.134；FloRen 22.96/0.838/0.165；IBRNet 22.92/0.803/0.238；3D-GS 22.77/0.785/0.153。领先幅度（+1.15 dB）比 THuman2.0 略小。Twindom 为商业扫描，无法公开复现。"
+  },
+  {
+   "dataset": "真实采集数据（4 个人物，8 台源相机，另有 8 台相机提供真值视角）",
+   "finding": "GPS-Gaussian 24.64/0.917/0.088；ENeRF 23.26/0.893/0.118；3D-GS 22.97/0.839/0.125；FloRen 22.80/0.872/0.136；IBRNet 22.63/0.852/0.177（基线的 SSIM/LPIPS 来自检索摘要，建议对照原表）。真实数据上 LPIPS 优势最大（0.088 对 0.118）。只有 4 个人物、单一采集系统，而且都依赖抠像，统计意义有限。"
+  },
+  {
+   "dataset": "速度（Table 1，RTX 3090）",
+   "finding": "表中帧率：本文 25 FPS，FloRen 15 FPS，ENeRF 5 FPS（本文与 FloRen 用 TensorRT 加速）。GPS-Gaussian 的时间主要花在源视角（27 ms），新视角渲染只要 0.8 ms，这是“显式 3D 表示、一次重建多次渲染”的结构优势；论文据此换算同时合成 10 个新视角：本文 35 ms，FloRen 124 ms，ENeRF 1261 ms。ENeRF 恰好相反：源视角 11 ms，每个新视角 125 ms。注意 FPS 列与毫秒列不能互推（27.8 ms 约合 36 FPS），三种方法都如此。"
+  },
+  {
+   "dataset": "第三方重训对比：Ha et al.（CVPR 2025），DyNeRF 厨房场景",
+   "finding": "离开人物和抠像的设定后，GPS-Gaussian 明显退化：PSNR 25.46 / SSIM 0.866 / LPIPS 0.309，而 Ha et al. 为 31.17、ENeRF 为 29.51；时间一致性 STED 693.0（ENeRF 76.14，Ha et al. 68.76），视角一致性 SDV 2.254。说明它的设计与“人物前景 + 小基线”的训练分布绑定很紧，也说明逐帧独立的高斯会严重闪烁。"
+  },
+  {
+   "dataset": "后续工作中的对比",
+   "finding": "Tele-Aloha（SIGGRAPH 2024，同一团队）在其合成数据上报告 GPS-Gaussian 25.204/0.909/0.112，Tele-Aloha（含细化）26.543/0.928/0.095。站内综述记录 Tele360（2026）在 DNA-Rendering 上报告 GPS-Gaussian PSNR 22.40，Tele360 为 32.15。EVA-Gaussian 和 RoGSplat（CVPR 2025）都把它当作主要基线，针对的正是相机夹角大、视角稀疏的情形。"
+  }
+ ],
+ "ablations_zh": [
+  "Table 3（论文称在合成数据上，具体是哪个数据集未能核实）：完整模型 PSNR 25.05 / SSIM 0.886 / LPIPS 0.121，EPE 1.494，1 px 准确率 65.94%。",
+  "w/o Joint Training：论文的做法是把可微的高斯渲染换成固定半径的点云渲染，模型退化为“深度估计网络 + 不可微的深度 warping 渲染”，深度只受视差损失训练，也就没有高斯参数回归。结果 23.97 / 0.862 / 0.115，EPE 1.587，1 px 63.71%。PSNR 降 1.08 dB，EPE 差约 6%，说明渲染损失的梯度能改善几何。这一行的 LPIPS（0.115）反而低于完整模型（0.121），两次检索返回的都是这个值，论文正文没有解释；一个合理的解读是固定半径的点渲染没有高斯的平滑模糊，而 LPIPS 对模糊更敏感。另外，这组对照同时改变了“是否联合训练”和“渲染器是不是高斯”，差距不能全部归于联合训练。",
+  "w/o Depth Encoder（参数回归只用图像特征，不再单独编码深度）：23.84 / 0.858 / 0.204，EPE 1.496。深度精度几乎不变，渲染却明显变差，LPIPS 从 0.121 涨到 0.204。说明参数图（尤其是尺度和不透明度）需要显式的几何上下文。",
+  "消融的完整模型 PSNR（25.05）与 Table 1 中 THuman2.0 的 25.57、Twindom 的 24.79 都对不上，消融用的是哪套数据、什么分辨率，论文没说清楚。消融只做了单次训练，没有误差条。",
+  "没做的消融：迭代次数 T（只说 3 是折中）；源视角夹角或基线（主表只在约 45° 的 8 相机设定下评测，代码默认 22.5°；论文或补充材料是否另有更稀疏设定的实验未能核实，issue #41 的用户提到论文有稀疏视角实验）；颜色直接取像素与预测 SH 的对比；尺度上限 0.01 的影响；单次整体渲染与逐视角渲染的对比；参数回归与解析像素高斯（Ha et al. 的做法）的对比；抠像误差的敏感性。"
+ ],
+ "limitations_stated_zh": [
+  "需要准确的前景抠像作为预处理。方法只处理人物，mask 外不生成任何高斯。",
+  "训练需要深度真值做监督，只能在合成扫描上方便地获得，增加了训练数据的获取难度（后续的 GPS-Gaussian+ 专门去掉了这个要求）。",
+  "实时演示受 RTX 3090 显存限制，只能接入前方 6 台相机，无法覆盖完整一圈（补充材料）。"
+ ],
+ "limitations_unstated_zh": [
+  "公开代码与论文实验设定不一致，定量结果难以复现。论文 Table 1 用 8 台相机（相邻约 45°）；公开的渲染脚本和训练数据却是 16 台相机（相邻 22.5°，README 写明训练数据为“16-camera setting”）；issue #35、#94 的用户认为发布的权重也是 16 相机训练的（作者答复未能读取）。按代码的相机布置（到注视点 2 m、俯仰 −8°）推算，相邻基线从约 1.52 m 缩短到约 0.77 m，立体匹配的难度完全不同。issue #94（2025-11，仍未关闭）中，用户用发布的权重在 8 相机的 THuman 验证集上只得到 PSNR 18.10，按 8 相机重训又得到 30.95，两者都对不上论文的 25.57；issue #97（2026-02）仍在请求发布 8 视角权重。论文用的 Twindom 是商业数据，同样无法获取。",
+  "“25 FPS”无法用公开代码复现，也没有把系统开销算进去。论文说明本文（和 FloRen）的计时用了 TensorRT，但仓库里既没有 TensorRT 部署代码，也没有任何计时脚本。用原生 PyTorch 代码时，参数回归头在 1024×1024 全分辨率上跑 3×3 卷积（out_conv 与三个 head 各 32 通道），代价不小：issue #18 的用户在 RTX 3090 上测得深度模块 26.8 ms、参数回归 77.4 ms、渲染 4.8 ms，三段合计约 112 ms；issue #52 的用户自行转成 TensorRT FP16 后，在 2048×1024 输入下网络仍要约 60 ms（像素数是论文设定的 2 倍）。Ha et al. 重训后测得 143.4 ms；站内综述记录 Tele360 在 6 视图 2K 设置下测得约 300 ms。表中 FPS 与毫秒数也不能互推（27+0.8 ms 约合 36 FPS，表中写 25 FPS）。此外，前景抠像、每帧在 CPU 上用 OpenCV 做的立体校正与 remap（测试脚本每帧重算；固定阵列本可以预先算好映射表）、多路相机的采集与传输，都不在计时之内。",
+  "旋转参数图由 GSRegresser 逐像素预测，它的输入只有图像、逆深度和图像特征，没有相机位姿；代码却把输出直接当作世界坐标系下的旋转送进光栅器，没有乘相机外参的旋转（lib/GaussianRender.py:19、:32；issue #89 提出同一问题，2025-06 起仍未关闭，作者答复未能读取）。环形阵列中不同相机对的朝向相差很大，网络只能凭图像内容“猜”世界朝向。尺度还被截断在 0.01 m 以内：按代码的相机参数，一个像素在 2 m 处约宽 2.4 mm，尺度上限相当于约 4 个像素的标准差，单个高斯能拉伸的范围有限。Ha et al. 观察到，在稠密像素网格上网络预测的尺度、不透明度、旋转会收敛到近似常数；本文的参数图是否如此，论文没有展示。论文没有做“回归参数”与“解析的像素级高斯”之间的消融，所以“逐像素回归高斯参数”这一卖点的实际贡献没有量化。",
+  "代码里的若干实现细节与论文公式不一致，复现时容易踩坑。（1）代码中名为 depth 的量其实是逆深度 1/Z：合成数据的 z-buffer 存的是 1/z×2^15，flow2depth 返回 −disparity/Tf_x，深度编码器的输入也是逆深度。（2）视差损失的衰减系数：论文写 μ=0.9，代码沿用 RAFT-Stereo 的写法调整为 0.9^{15/(T−1)}≈0.454，所以 T=3 时三次输出的权重是 0.206、0.454、1，而不是论文公式给出的 0.81、0.9、1。（3）第一阶段的 OneCycleLR 总步数写死为 100100，实际只训练 40000 步，学习率只退火了约四成。（4）n_gru_layers=1 时，core/update.py:105-106 仍实例化了 gru16 和 gru32，共 995,904 个参数，约占 5.14M 的 19%，但前向从不调用；按参数量比较模型大小时应扣除。",
+  "两视角高斯直接拼接、一次整体渲染，没有任何去重或融合。两视角各自估计的深度存在误差，同一块皮肤或衣服会变成两层交错的“薄壳”，渲染时可能出现 Z-fighting、飞点和颜色接缝（两视角的曝光和白平衡不同，而颜色又直接取像素）。Ha et al. 的 Fig. 4a 和 Table 3（No Blending：24.64 dB，STED 483.3）给出了这种做法在一般场景下的代价。另外，mask 之外没有高斯；两视角都看不到的区域（手臂内侧、多人互相遮挡、腋下）会直接露出黑色背景，没有补洞机制。",
+  "只用两个相邻视角，并假设新视点落在它们之间。代码只支持在两源视角之间做 Slerp 插值，论文的定量评测也只针对这种内插视点。VR 头显需要的 6DoF 外推视点（阵列平面之外、俯视或仰视、贴近人物）完全没有评测。新视点从一对相机移到下一对时，所用的高斯集合整体替换，画面会突变；实时演示只接入前方 6 台相机，背后的视角无法合成。代码只处理水平视差（取 P1[0,3] 作 Tf_x，并把垂直方向的增量置 0）；两台相机若主要在竖直方向错开，OpenCV 会给出竖直方向的校正，现有代码无法处理（issue #21 有用户问及，答复未能读取）。后续的 EVA-Gaussian 明确指出，这类方法只适用于相机夹角小于约 60° 的稠密设定。",
+  "逐帧独立处理，没有任何时间建模，评测也只有单帧指标。视频中每帧的深度、尺度和不透明度都会独立抖动。Ha et al. 在 DyNeRF 上测得 GPS-Gaussian 的 STED 为 693.0，是 ENeRF（76.14）的约 9 倍；SDV 为 2.254。论文的真实数据只有 4 个人物，也没有时间一致性指标、用户研究或长序列评测。对远程临场来说，闪烁往往比单帧 PSNR 低 1 dB 更刺眼。",
+  "训练和评测存在明显的“合成到真实”与“评测协议”风险。训练数据由 Taichi 光栅化生成：Lambertian 着色、6 盏方向光、没有运动模糊、传感器噪声、压缩伪影，也没有相机间的颜色差异。真实数据的深度真值和抠像误差如何影响结果，论文没有分析。代码的验证流程在整幅 2048×2048 图上计算 PSNR（train_stage2.py:116，lib/loss.py:86-88），背景是大片纯黑，渲染和真值都很容易对上，会把 PSNR 抬高。论文 Table 1 是否只在前景区域计算指标，未能核实；如果是整图，不同方法之间的差距会被压缩，绝对数值也会偏高。"
+ ],
+ "lineage": {
+  "predecessors": [
+   {
+    "title": "3D Gaussian Splatting for Real-Time Radiance Field Rendering",
+    "year": 2023,
+    "url": "https://arxiv.org/abs/2308.04079",
+    "note_zh": "本文的表示和渲染器来源：直接调用原版 diff-gaussian-rasterization。同时它也是对比基线：在 8 个输入视角上逐人物优化，THuman2.0 上只有 24.18 dB，说明稀疏视角下逐场景优化会失效。本文把“优化出一组高斯”改成“网络一次前向预测出一组高斯”。"
+   },
+   {
+    "title": "RAFT-Stereo: Multilevel Recurrent Field Transforms for Stereo Matching",
+    "year": 2021,
+    "url": "https://arxiv.org/abs/2109.07547",
+    "note_zh": "深度模块的直接来源：1D 全对相关、4 级相关金字塔、ConvGRU 迭代、凸上采样、序列 L1 损失，连 AdamW 加 OneCycleLR 的训练脚本结构都沿用了下来。本文把它削减到 1/8 分辨率、单层 GRU、3 次迭代，并改成一次前向同时估计左右两张视差图。"
+   },
+   {
+    "title": "RAFT: Recurrent All-Pairs Field Transforms for Optical Flow",
+    "year": 2020,
+    "url": "https://arxiv.org/abs/2003.12039",
+    "note_zh": "“全对相关体加循环迭代更新”这一范式的源头，RAFT-Stereo 是它的双目版本。理解本文的第 4、5 步需要先理解 RAFT。"
+   },
+   {
+    "title": "Efficient Neural Radiance Fields for Interactive Free-viewpoint Video (ENeRF)",
+    "year": 2021,
+    "url": "https://arxiv.org/abs/2112.01517",
+    "note_zh": "本文最强的可泛化基线（SIGGRAPH Asia 2022），同样面向人物自由视点视频。它用代价体引导采样，再做体渲染：THuman2.0 上 24.10 dB，每个新视角 125 ms（5 FPS）。本文用显式高斯把“每个新视角的代价”从 125 ms 降到 0.8 ms。"
+   },
+   {
+    "title": "IBRNet: Learning Multi-View Image-Based Rendering",
+    "year": 2021,
+    "url": "https://arxiv.org/abs/2102.13090",
+    "note_zh": "可泛化混合式 IBR 基线：沿目标射线采样点聚合多视角特征，用射线 Transformer 预测密度，颜色由多视角加权混合得到。THuman2.0 上 23.38 dB，每个新视角约 4 s。它代表“沿射线在目标视角推理”的慢路线。"
+   },
+   {
+    "title": "Function4D: Real-time Human Volumetric Capture from Very Sparse Consumer RGBD Sensors (THuman2.0)",
+    "year": 2021,
+    "url": "https://www.researchgate.net/publication/355864046_Function4D_Real-time_Human_Volumetric_Capture_from_Very_Sparse_Consumer_RGBD_Sensors",
+    "note_zh": "CVPR 2021，发布了 THuman2.0 高质量人体扫描数据集（本文用其中 526 个扫描；公开的渲染脚本还用 SMPL-X 拟合参数把人体朝向归一化）。本文的训练与评测都建立在这类扫描渲染出的合成数据上；同为清华刘烨斌组的工作。"
+   }
+  ],
+  "successors": [
+   {
+    "title": "GPS-Gaussian+: Generalizable Pixel-wise 3D Gaussian Splatting for Real-Time Human-Scene Rendering from Sparse Views",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2411.11363",
+    "note_zh": "本文的期刊扩展版（T-PAMI 2025，同一团队）。从只处理人物扩展到“人物加场景”，可以只用渲染监督训练（去掉了本文对深度真值的依赖），并加入极线注意力和几何一致性正则。发布了 10 相机的 THumanMV 真实数据；训练依旧按相邻相机分组，逐帧处理。"
+   },
+   {
+    "title": "Tele-Aloha: A Low-budget and High-authenticity Telepresence System Using Sparse RGB Cameras",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2405.14866",
+    "note_zh": "同一团队的上半身远程临场系统（SIGGRAPH 2024）：4 台 RGB 相机、1 块消费级 GPU、裸眼 3D 屏，2048×2048、30 fps、延迟低于 150 ms。它把本文的“立体视差加像素高斯”换成级联视差估计加高斯神经光栅化（先解码到低分辨率，再加权混合到 2K），在合成数据上报告 GPS-Gaussian 25.204 dB，Tele-Aloha 26.543 dB。"
+   },
+   {
+    "title": "pixelSplat: 3D Gaussian Splats from Image Pairs for Scalable Generalizable 3D Reconstruction",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2312.12337",
+    "note_zh": "同期工作（CVPR 2024，arXiv 比本文晚约两周公开），两者独立提出“从两张图一次前向预测像素对齐高斯”。区别在于：pixelSplat 面向通用场景（RealEstate10K、ACID，256×256），用极线 Transformer 预测沿射线的概率深度分布再采样，不需要深度真值；本文面向人物，用校正后的立体匹配加深度真值监督，输入 1024²、输出 2K。"
+   },
+   {
+    "title": "MVSplat: Efficient 3D Gaussian Splatting from Sparse Multi-View Images",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2403.14627",
+    "note_zh": "ECCV 2024 Oral，竞争路线。在通用场景上用平面扫描代价体估计深度，再反投影成像素对齐高斯，结构上和本文“相关体 → 深度 → 反投影”几乎同构。不同之处有两点：它不用深度真值，只靠渲染损失；深度由多视角代价体而不是校正后的双目 1D 相关得到。MVSplat 在相关工作里明确引用并对比了本文：本文依赖两张校正后的双目图像估计视差、训练需要深度真值，而 MVSplat 面向一般的未校正多视角图像、只用 RGB 训练。"
+   },
+   {
+    "title": "FreeSplat: Generalizable 3D Gaussian Splatting Towards Free-View Synthesis of Indoor Scenes",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2405.17958",
+    "note_zh": "NeurIPS 2024，面向长序列室内场景。它提出跨视角的高斯融合，去掉多视角重复的像素高斯。本文恰好没有这一环：两视角的高斯直接拼接，同一表面会出现两层。"
+   },
+   {
+    "title": "DepthSplat: Connecting Gaussian Splatting and Depth",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2410.13862",
+    "note_zh": "CVPR 2025，把多视角代价体深度与单目深度基础模型结合，再反投影成高斯，并论证“深度估计与高斯渲染可以互相促进”。这与本文“深度与渲染联合训练能同时提升 PSNR 和 EPE”的消融结论方向一致，只是把场景从人物推广到了通用场景。"
+   },
+   {
+    "title": "LVSM: A Large View Synthesis Model with Minimal 3D Inductive Bias",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2410.17242",
+    "note_zh": "与本文相反的另一极：不建任何显式几何，由 Transformer 直接从输入 token 生成目标视角。本文把几何做得极显式（校正、视差、反投影、光栅化），因此新视角渲染只要 0.8 ms；LVSM 每个新视角都要跑一遍大网络，但不需要深度真值，也不依赖小基线。"
+   },
+   {
+    "title": "Quark: Real-time, High-resolution, and General Neural View Synthesis",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2411.16680",
+    "note_zh": "站内另一篇重点论文（Google，SIGGRAPH Asia 2024），同为实时可泛化，但面向通用场景：用分层深度图加 IBR 混合，并且逐个目标视角重算。Quark 没有引用、也没有比较本文。两者代表两种系统形态：本文“重建一次、渲染很便宜”，Quark“每个视点重新推理”。"
+   },
+   {
+    "title": "Geometry-guided Online 3D Video Synthesis with Multi-View Temporal Consistency (Ha et al.)",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2505.18932",
+    "note_zh": "站内另一篇重点论文（CVPR 2025）。它把本文重训后当作基线：DyNeRF 上 PSNR 25.46、STED 693.0、耗时 143.4 ms，并明确反对本文的两个做法：网络预测高斯参数（认为在稠密像素网格上会趋于常数），以及把所有视角一次整体渲染（会产生 Z-fighting 和飞点）。它改用解析的像素级不透明高斯，逐视角渲染后再由几何引导的 U-Net 融合。"
+   },
+   {
+    "title": "EVA-Gaussian: 3D Gaussian-based Real-time Human Novel View Synthesis under Diverse Multi-view Camera Settings",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2410.01425",
+    "note_zh": "竞争工作（ICCV 2025 Workshop 论文集）。它指出本文这类方法只适用于相机夹角小于约 60° 的稠密设定，于是用高效跨视图注意力替代成对的立体匹配来估计高斯位置，再用循环特征细化器修正几何误差带来的伪影，并与 GPS-Gaussian 和 ENeRF 比较。"
+   },
+   {
+    "title": "RoGSplat: Learning Robust Generalizable Human Gaussian Splatting from Sparse Multi-View Images",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2503.14198",
+    "note_zh": "CVPR 2025，针对重叠很少的稀疏视角：把 SMPL 顶点提升为稠密的 3D 先验点，先回归粗高斯，再用渲染出的深度引导像素级细高斯。用人体模板先验来弥补本文在大夹角下立体匹配失败的问题，并与 GPS-Gaussian 比较。"
+   },
+   {
+    "title": "Tele360: Real-Time Feed-Forward Human Reconstruction from Sparse Unposed Cameras",
+    "year": 2026,
+    "url": "https://arxiv.org/abs/2609.15032",
+    "note_zh": "同一团队 2026 年的 360° 远程临场系统：用 4–6 台未标定相机，由多视图 Transformer 同时估计相机位姿和高斯，并把预测的高斯图用视频编码推流到远端设备。它去掉了本文的标定、相邻小夹角和成对匹配三个前提。站内综述记录其在 DNA-Rendering 上 PSNR 32.15、GPS-Gaussian 为 22.40；作者同样承认逐帧处理带来闪烁。"
+   }
+  ]
+ },
+ "takeaways_for_telepresence_zh": [
+  "对固定的环形人物采集阵列，本文给出了一个结构很干净的实时方案：成对立体得到深度，逐像素预测高斯，再用光栅化渲染。它最有价值的性质是“重建一次、渲染很便宜”：同一组高斯渲染一个新视角只要 0.8 ms，所以头显的双眼、多名观众、甚至光场屏的多视点，只需多次光栅化。这一点和 Quark、Ha et al. 那种“每个目标视点都要重跑网络”的形态有本质区别，对多观看者场景尤其重要。",
+  "它的深度前端要求相邻相机夹角小（论文 45°，公开代码 22.5°），这直接决定了相机数量和成本：一圈 8–16 台，演示时还受单卡显存限制只接了 6 台。设计阵列时要在“相机更少更便宜”和“成对匹配能工作”之间取舍；后续的 EVA-Gaussian、Tele360 用多视图注意力去掉了成对约束，Tele-Aloha 则用级联视差估计处理 4 台相机的宽基线。",
+  "不要把论文的“25 FPS”直接当作系统预算。它是 TensorRT 加速后的网络耗时；公开的 PyTorch 代码实测（issue #18）三段合计约 112 ms，Ha et al. 测得 143.4 ms；而且抠像、立体校正、多路采集与传输都不在计时之内。部署时要按端到端的 motion-to-photon 延迟重新测量，并把固定阵列的校正映射表预先算好、放到 GPU 上，同时把全分辨率的参数回归头做轻（降分辨率，或自行用 TensorRT 与半精度部署）。",
+  "两视角直接拼接后一次渲染，会在接缝和轮廓处出现 Z-fighting 与颜色接缝，而且逐帧独立、没有时间约束（Ha et al. 测得 STED 693.0）。在远程临场里，闪烁比单帧 PSNR 更影响体验。可以借鉴 Ha et al. 的做法：逐视角渲染、由几何引导融合，再对输入深度做时间滤波；也可以参考 FreeSplat 的跨视角高斯融合来去掉重复高斯。",
+  "像素对齐的高斯参数图本身就是一组 2D 图像（每个像素有颜色、逆深度、4 维旋转、3 维尺度和不透明度），天然适合用视频编码器传输。Tele360 用 H.265 加 WebRTC 推流高斯图，站内综述记录其码率约 100 Mbit/s；GS-SCNet 以 MV-HEVC 加 GPS-Gaussian 作为参照，报告约 75% 的 BD-rate 节省。这为“发送端重建、接收端渲染”的临场架构提供了现成的数据格式。",
+  "本文强依赖人物前景：mask 外不生成高斯，训练数据是没有背景的合成扫描。真实的通话场景需要可靠、实时、时间稳定的抠像（它的误差会直接变成几何空洞或飞点），还要处理背景（GPS-Gaussian+ 扩展到“人物加场景”）。合成数据与真实相机之间的差距（噪声、曝光、颜色标定、运动模糊）也需要额外的真实数据微调或数据增强。",
+  "在站内精读的论文里，本文是唯一专门针对人物、输出显式 3D 高斯并开源代码的方法，很适合作为动手实验的起点：可以在它的代码上实验时间滤波、逐视角融合（对照 Ha et al.），或者把参数回归换成解析的像素高斯，量化“回归参数到底带来多少收益”。这也是评估 Ha et al. 那条批评是否成立的最直接方式。"
+ ]
+}
