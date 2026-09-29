@@ -1,0 +1,87 @@
+{
+ "_about": "精读论文的登记表：顺序、简称和分组。每篇论文的精读在 data/anchor_<key>.json，导读在 data/learn/final/verify_<key>.json（草稿在 drafts/guide_<key>.json）。",
+ "papers": [
+  {
+   "key": "quark",
+   "short": "Quark",
+   "group": "systems",
+   "venue": "SIGGRAPH Asia 2024"
+  },
+  {
+   "key": "ha",
+   "short": "Ha et al.",
+   "group": "systems",
+   "venue": "CVPR 2025"
+  },
+  {
+   "key": "ibrnet",
+   "short": "IBRNet",
+   "group": "generalizable",
+   "venue": "CVPR 2021"
+  },
+  {
+   "key": "enerf",
+   "short": "ENeRF",
+   "group": "generalizable",
+   "venue": "SIGGRAPH Asia 2022"
+  },
+  {
+   "key": "pixelsplat",
+   "short": "pixelSplat",
+   "group": "ff3dgs",
+   "venue": "CVPR 2024"
+  },
+  {
+   "key": "gpsgaussian",
+   "short": "GPS-Gaussian",
+   "group": "ff3dgs",
+   "venue": "CVPR 2024"
+  },
+  {
+   "key": "mvsplat",
+   "short": "MVSplat",
+   "group": "ff3dgs",
+   "venue": "ECCV 2024"
+  },
+  {
+   "key": "freesplat",
+   "short": "FreeSplat",
+   "group": "ff3dgs",
+   "venue": "NeurIPS 2024"
+  },
+  {
+   "key": "depthsplat",
+   "short": "DepthSplat",
+   "group": "ff3dgs",
+   "venue": "CVPR 2025"
+  },
+  {
+   "key": "lvsm",
+   "short": "LVSM",
+   "group": "geofree",
+   "venue": "ICLR 2025"
+  }
+ ],
+ "groups": [
+  {
+   "id": "systems",
+   "h": "实时临场系统",
+   "lede": "两篇完整的实时多视角新视角合成系统：逐帧前馈的高质量渲染，和带几何累积的在线视频合成。"
+  },
+  {
+   "id": "generalizable",
+   "h": "可泛化神经渲染",
+   "lede": "不做逐场景优化、一个网络用于所有场景的学习式 IBR 与可泛化 NeRF，是上面两篇系统的直接前身和主要对比对象。"
+  },
+  {
+   "id": "ff3dgs",
+   "h": "前馈 3D Gaussian Splatting",
+   "lede": "一次前向就从少量图像预测出像素对齐的 3D 高斯：从概率深度、代价体到深度基础模型，以及面向人物实时合成和长序列室内场景的变体。"
+  },
+  {
+   "id": "geofree",
+   "h": "无几何 Transformer 渲染",
+   "lede": "不建任何显式三维表示，直接由 Transformer 从输入视角的 token 生成目标视角，是与显式几何路线相对的另一极。"
+  }
+ ]
+}

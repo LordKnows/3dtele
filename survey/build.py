@@ -38,6 +38,12 @@ def to_year(v):
 
 def build_survey():
     survey = load_json(DATA / "survey.json")
+    # Deep reads beyond the two in survey.json live one per file (data/anchor_<key>.json).
+    anchors = survey.setdefault("anchors", {})
+    for p in load_json(DATA / "site" / "papers.json")["papers"]:
+        f = DATA / f"anchor_{p['key']}.json"
+        if p["key"] not in anchors and f.exists():
+            anchors[p["key"]] = load_json(f)
     areas = survey["areas"]
     papers: dict[str, dict] = {}
     for a in areas:
@@ -198,11 +204,15 @@ def build_learn(stats: dict):
     stats.update(classics_removed=removed, classics_corrected=corrected)
 
     # Guided walkthroughs.
-    guided, guide_fixes = {}, 0
+    # Quark and Ha et al. were checked against the paper text; the later deep reads against code and search results.
+    guided, guide_fixes, new_fixes = {}, 0, 0
     for g in c.get("guided") or []:
         if not g:
             continue
-        guide_fixes += len(g.get("fixes") or [])
+        if g["anchor"] in routes.LEGACY_PAPERS:
+            guide_fixes += len(g.get("fixes") or [])
+        else:
+            new_fixes += len(g.get("fixes") or [])
         g = {k: v for k, v in g.items() if k != "fixes"}
         g["before_you_read"] = [b for b in g.get("before_you_read", []) if lk.c([b.get("concept_id")], f"guide {g['anchor']} before")]
         for s in g.get("walkthrough", []):
@@ -212,7 +222,7 @@ def build_learn(stats: dict):
         for x in g.get("exercises", []):
             x["concept_ids"] = lk.c(x.get("concept_ids"), f"guide {g['anchor']} exercise")
         guided[g["anchor"]] = g
-    stats["guide_fixes"] = guide_fixes
+    stats.update(guide_fixes=guide_fixes, new_fixes=new_fixes)
 
     roadmap = c.get("roadmap") or {}
     for s in roadmap.get("stages", []):
@@ -232,7 +242,9 @@ def build_learn(stats: dict):
     if lk.bad:
         print(f"dropped {len(lk.bad)} invalid cross-links, e.g. {lk.bad[:5]}", file=sys.stderr)
     stats.update(concepts=sum(len(m["concepts"]) for m in modules), advanced=len(advanced), classics=len(classics),
-                 glossary=len(glossary), steps=sum(len(g.get("walkthrough", [])) for g in guided.values()))
+                 glossary=len(glossary), steps=sum(len(g.get("walkthrough", [])) for k, g in guided.items() if k in routes.LEGACY_PAPERS),
+                 steps_new=sum(len(g.get("walkthrough", [])) for k, g in guided.items() if k not in routes.LEGACY_PAPERS),
+                 deepreads_new=sum(1 for k in guided if k not in routes.LEGACY_PAPERS))
     return {"modules": modules, "advanced": advanced, "classics": classics, "guided": guided,
             "roadmap": roadmap, "glossary": glossary, "themes": sk["classic_themes"]}
 
@@ -246,8 +258,8 @@ SAFE_URL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*(\?[A-Za-z0-9=&._-]+)?(#[A-Z
 def reverse_index(learn):
     """Concept -> guided steps / classics / advanced topics that reference it (shown on concept cards)."""
     walk_by, classic_by, adv_by = {}, {}, {}
-    for anchor in ("quark", "ha"):
-        for s in (learn.get("guided", {}).get(anchor) or {}).get("walkthrough", []):
+    for anchor, g in (learn.get("guided") or {}).items():
+        for s in g.get("walkthrough", []):
             for c in s.get("concept_ids", []):
                 walk_by.setdefault(c, []).append({"anchor": anchor, "id": s.get("id"), "title": s.get("title_zh", "")})
     for i, p in enumerate(learn.get("classics", [])):
@@ -380,17 +392,19 @@ def main() -> int:
     fields = {"stages": counts["stages"], "modules": len(mods), "concepts": counts["concepts"], "advanced": counts["advanced"],
               "classics": counts["classics"], "glossary": counts["glossary"], "papers": counts["papers"], "areas": counts["areas"],
               "ideas": counts["ideas"], "layers": len(synth.get("field_map", [])), "steps_quark": counts["steps"].get("quark", 0),
-              "steps_ha": counts["steps"].get("ha", 0),
+              "steps_ha": counts["steps"].get("ha", 0), "deepreads": len(counts["steps"]),
+              "steps_all": sum(counts["steps"].values()),
               "techniques": sum(len(g["items"]) for g in overview["methodology"]["groups"])}
     page_desc = {k: v.format(**fields) for k, v in overview["page_desc"].items()}
     page_desc = wording.apply_all(page_desc)
     section_title = {"top": routes.BRAND, "methodology": "领域重要技术总览", "howto": "如何使用本站", "roadmap": "学习路线",
                      "foundations": "基础知识", "advanced": "进阶专题", "classics": "经典论文", "glossary": "术语表",
-                     "anchors": "重点论文与论文库", "guided": "精读导读", "map": "领域全景", "areas": "子方向",
+                     "anchors": "论文精读与论文库", "guided": "精读导读", "map": "领域全景", "areas": "子方向",
                      "ideas": "研究方向", "trends": "趋势与挑战"}
     minutes = {c["id"]: routes.read_minutes(c) for m in mods for c in m["concepts"]}
+    registry = load_json(DATA / "site" / "papers.json")
     ctx = {"learn": learn, "survey": survey, "areas": areas, "papers": papers, "ideas": ideas, "meta": meta, "overview": overview,
-           "counts": counts, "page_desc": page_desc, "section_title": section_title, "minutes": minutes}
+           "counts": counts, "page_desc": page_desc, "section_title": section_title, "minutes": minutes, "registry": registry}
     xref = routes.xref_table(ctx)
     legacy = routes.legacy_map(xref)
     home_legacy = {k: v for k, v in legacy["index.html"].items() if k and k != "top"}

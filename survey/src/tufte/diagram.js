@@ -92,6 +92,10 @@
     return svg;
   }
   SLOTS.diagram = function (b) {
+    // Laid-out specs come with the page (routes.layout_diagram); the first two deep reads keep their hand-drawn ones.
+    if (b.spec && /^[a-z0-9]+$/.test(str(b.which))) {
+      return el("figure", { class: "fullwidth diagram-fig" }, [el("div", { class: "diagram-wrap" }, [drawDiagram(b.spec, b.which, str(b.label))])]);
+    }
     var which = b.which === "ha" ? "ha" : "quark";
     var spec = which === "quark" ? diagramQuark() : diagramHa();
     return el("figure", { class: "fullwidth diagram-fig" }, [el("div", { class: "diagram-wrap" }, [drawDiagram(spec, which, (which === "quark" ? "Quark" : "Ha et al.") + " 流程图")])]);
