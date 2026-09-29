@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>主题模板选型 · 3D 临场研究图谱</title>
+<style>
+:root {
+  --bg: #F4F5F4; --surface: #FFF; --surface-2: #ECEFEE; --ink: #141A19; --ink-2: #3A4644; --muted: #66736F;
+  --rule: #D5DCDA; --accent: #0B6B63; --accent-soft: #D5ECE8; --good: #1D7438; --warn: #9A5A00; --bad: #AE2A1F;
+  --sans: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", system-ui, sans-serif;
+  --serif: "Songti SC", "Noto Serif SC", Georgia, serif;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root { color-scheme: dark; --bg: #0C1110; --surface: #141B1A; --surface-2: #1C2523; --ink: #E3EBE9; --ink-2: #BCC9C6;
+    --muted: #8A9B98; --rule: #28332F; --accent: #4CCFBE; --accent-soft: #10312D; --good: #62D38F; --warn: #F0B45A; --bad: #FF8F80; }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14.5px/1.7 var(--sans); }
+a { color: var(--accent); }
+h1, h2, h3 { font-family: var(--serif); margin: 0; line-height: 1.3; }
+.wrap { max-width: 1320px; margin: 0 auto; padding: 32px 24px 80px; }
+.eyebrow { font: 11px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+header h1 { font-size: 30px; margin: 10px 0 12px; }
+header p { color: var(--ink-2); max-width: 900px; margin: 0 0 10px; }
+.needs { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 0; }
+.needs span { background: var(--surface); border: 1px solid var(--rule); border-radius: 999px; padding: 2px 10px; font-size: 12.5px; color: var(--ink-2); }
+.routes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 26px 0; }
+.route { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 18px; }
+.route h3 { font-size: 17px; margin-bottom: 6px; }
+.route ul { margin: 6px 0 0; padding-left: 18px; color: var(--ink-2); }
+.route .tag { font: 11px var(--mono); color: var(--accent); }
+.ours { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 8px 0 28px; }
+.ours figure { margin: 0; }
+.ours img, .shot img { width: 100%; display: block; border-radius: 6px; border: 1px solid var(--rule); cursor: zoom-in; background: var(--surface-2); }
+.ours figcaption { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.filters { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(6px);
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--rule); margin-bottom: 18px; }
+.filters button { font: inherit; font-size: 13px; background: var(--surface); color: var(--ink-2); border: 1px solid var(--rule); border-radius: 999px; padding: 3px 12px; cursor: pointer; }
+.filters button.on { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.legend { margin-left: auto; font-size: 12px; color: var(--muted); }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 16px; display: grid; gap: 10px; align-content: start; }
+.card.rec { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.card .top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.card .num { font: 600 13px var(--mono); color: var(--surface); background: var(--ink); border-radius: 5px; padding: 1px 7px; }
+.card h2 { font-size: 20px; }
+.card .fw { font-size: 12px; color: var(--muted); }
+.card .cat { margin-left: auto; font-size: 12px; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 1px 9px; }
+.card .recflag { font-size: 12px; color: var(--warn); font-weight: 600; }
+.tabs { display: flex; gap: 4px; }
+.tabs button { font: inherit; font-size: 12px; border: 1px solid var(--rule); background: var(--surface-2); color: var(--ink-2); border-radius: 6px 6px 0 0; padding: 2px 10px; cursor: pointer; }
+.tabs button.on { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+.shot { aspect-ratio: 1400 / 900; }
+.fit { display: grid; grid-template-columns: repeat(6, 1fr); border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+.fit div { text-align: center; padding: 5px 2px; font-size: 11.5px; color: var(--muted); border-right: 1px solid var(--rule); }
+.fit div:last-child { border-right: 0; }
+.fit b { display: block; font-size: 15px; }
+.y { color: var(--good); } .p { color: var(--warn); } .n { color: var(--bad); }
+.pc { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.pc h4 { margin: 0 0 2px; font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.pc ul { margin: 0; padding-left: 16px; font-size: 13px; color: var(--ink-2); }
+.fitnote { font-size: 13px; background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
+.fitnote b { color: var(--accent); }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.meta .cost { display: inline-flex; gap: 2px; vertical-align: middle; }
+.meta .cost i { width: 10px; height: 6px; border-radius: 2px; background: var(--rule); display: inline-block; }
+.meta .cost i.f { background: var(--warn); }
+.meta a { margin-left: auto; }
+.meta a + a { margin-left: 0; }
+.box { position: fixed; inset: 0; background: rgb(0 0 0 / .82); display: none; align-items: center; justify-content: center; z-index: 50; cursor: zoom-out; padding: 20px; }
+.box.on { display: flex; }
+.box img { max-width: 100%; max-height: 100%; border-radius: 6px; }
+.rec-panel { background: var(--surface); border: 1px solid var(--accent); border-radius: 12px; padding: 16px 20px; margin: 0 0 26px; }
+.rec-panel h3 { font-size: 17px; margin-bottom: 6px; }
+.rec-panel ol { margin: 4px 0 0; padding-left: 20px; color: var(--ink-2); }
+@media (max-width: 900px) { .grid, .routes, .ours, .pc { grid-template-columns: 1fr; } .legend { display: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Theme survey · 2026-09-29 · for 3D 临场研究图谱</div>
+    <h1>技术博客 / 知识库主题选型</h1>
+    <p>下面整理了 13 个候选主题，分成学术长文、技术博客、文档/知识库三类。每个候选都附有真实 demo 截图，可以切换首页、文章页浅色和文章页深色三张图，点图可以放大。每张卡片还按我们站点的实际需求逐项标了适配度。</p>
+    <p>我们站点的需求如下：</p>
+    <div class="needs">
+      <span>中文排版</span><span>数学公式 (MathJax)</span><span>11 页多页侧栏导航 + 页内目录</span><span>深浅色</span>
+      <span>全文搜索（目前没有）</span><span>论文卡片 / 359 篇论文库表格</span><span>跨页概念链接</span><span>引用 / 旁注（加分项）</span>
+    </div>
+  </header>
+
+  <div class="routes">
+    <div class="route">
+      <div class="tag">路线 A · 换皮</div>
+      <h3>保留现有构建，只借用主题的视觉语言</h3>
+      <ul>
+        <li>保留 <code>build.py</code>、JSON 数据、JS 渲染器，以及论文库筛选、跨页链接、<code>check_*</code> 检查这些现有功能</li>
+        <li>只改 <code>styles.css</code> 和 <code>shell.html</code>，不引入新依赖，大约一次会话就能完成</li>
+        <li>下面卡片里的 <b>“换皮参考价值”</b> 对应的就是这条路线</li>
+      </ul>
+    </div>
+    <div class="route">
+      <div class="tag">路线 B · 迁移</div>
+      <h3>把内容迁到框架（Hugo / Astro / Quarto / Zensical）</h3>
+      <ul>
+        <li>能拿到现成的全文搜索、RSS、SEO，写作流程也改成 Markdown，以后加页面更顺手</li>
+        <li>代价是 11 个 JS 页面渲染器要改写成模板或组件，论文库、方向评审这些数据页要写自定义组件，检查脚本也要重写</li>
+        <li>卡片里的 <b>迁移成本</b> 条（■ 越多越费劲）对应的是这条路线</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="eyebrow">现状（对比基准）</div>
+  <div class="ours" id="ours"></div>
+
+  <div class="rec-panel">
+    <h3>我的初步建议</h3>
+    <ol>
+      <li><b>想最快见效：</b>走路线 A，用 <b>#5 Lil'Log / PaperMod</b> 的阅读版式处理正文（窄栏、大字号、克制配色），再加上 <b>#1 Distill</b> 或 <b>#3 Tufte</b> 的旁注和引用悬停卡片。数据页照样用现有渲染器。</li>
+      <li><b>想长期维护、以后持续写：</b>走路线 B，迁到 <b>#4 Quarto</b>。它是为科研写作设计的：BibTeX 引用、页边旁注、交叉引用、搜索、深浅色、多页侧栏都是自带的，同一份源文件还能导出 PDF。</li>
+      <li><b>想要知识库或文档站的观感：</b>看 <b>#12 Hextra</b>（Hugo，不需要 Node，自带 KaTeX）、<b>#10 Starlight</b> 或 <b>#9 Zensical</b>。</li>
+    </ol>
+  </div>
+
+  <div class="filters" id="filters"><span class="legend"><span class="y">●</span> 原生支持　<span class="p">◐</span> 需配置 / 有限　<span class="n">○</span> 不支持</span></div>
+  <div class="grid" id="grid"></div>
+</div>
+<div class="box" id="box"><img alt=""></div>
+
+<script>
+(function () {
+  "use strict";
+  var FIT_KEYS = ["公式", "中文", "多页侧栏", "深色", "搜索", "旁注/引用"];
+  var THEMES = [
+    { id: "distill", name: "Distill", fw: "distill.pub 模板（HTML + Web Components）", cat: "学术长文",
+      stars: "1.0k", upd: "2022-12（已停更）", lic: "Apache-2.0", demo: "https://distill.pub/2021/gnn-intro/", repo: "https://github.com/distillpub/template",
+      fit: "ypnnny", reskin: "高", migrate: 4,
+      pros: ["ML 解释型长文的标杆，支持宽屏图版和交互图", "旁注、悬停引用卡片、脚注、作者 byline 一应俱全", "排版克制，学术气质强"],
+      cons: ["distill.pub 从 2021 年起休刊，模板基本停更", "没有多页导航、深色模式和搜索"],
+      note: "适合拿来做 <b>锚点论文 / 精读导读</b> 这类单篇长文的版式参考。" },
+    { id: "alfolio", name: "al-folio", fw: "Jekyll（Ruby）", cat: "学术长文",
+      stars: "16.2k", upd: "2026-09 活跃", lic: "MIT", demo: "https://alshedivat.github.io/al-folio/blog/2021/distill/", repo: "https://github.com/alshedivat/al-folio",
+      fit: "yppyyy", reskin: "中", migrate: 4,
+      pros: ["最流行的学术个人站模板", "博文可以用 Distill 版式：悬停引用、旁注、固定目录", "MathJax、BibTeX 出版物列表、深色模式、⌘K 搜索都有"],
+      cons: ["定位是个人学术主页，不是多页知识库", "需要 Ruby/Jekyll 工具链，v1.x 起拆成多个插件 gem"],
+      note: "如果以后想做 <b>个人学术主页 + 这份调研作为一篇长文</b>，它最合适。" },
+    { id: "tufte", name: "Tufte CSS", fw: "纯 CSS 单文件", cat: "学术长文",
+      stars: "6.6k", upd: "2026-06", lic: "MIT", demo: "https://edwardtufte.github.io/tufte-css/", repo: "https://github.com/edwardtufte/tufte-css",
+      fit: "ppnyny", reskin: "高", migrate: 1,
+      pros: ["Tufte 书籍版式：旁注、边注、宽窄栏并用", "只有一张样式表，接入成本最低", "跟随系统切换深色"],
+      cons: ["只提供排版，没有导航、目录和搜索", "中文衬线字体配旁注在窄屏上需要额外调"],
+      note: "最适合 <b>路线 A</b>：可以直接把旁注和边注样式借到 <code>styles.css</code>。" },
+    { id: "quarto", name: "Quarto 网站", fw: "Quarto（Pandoc，Posit 出品）", cat: "学术长文", rec: true,
+      stars: "6.0k", upd: "2026-09 活跃", lic: "MIT", demo: "https://quarto.org/docs/authoring/article-layout.html", repo: "https://github.com/quarto-dev/quarto-cli",
+      fit: "yyyypy", reskin: "中", migrate: 3, homeLabel: "Tufte 版式示例",
+      pros: ["专为科研出版设计：BibTeX 引用、交叉引用、callout 提示框", "页边栏可以放旁注、引用和图（column-margin）", "多页网站、侧栏、目录、搜索、深浅切换都是自带的", "同一份源文件能导出 PDF，还能嵌入 Observable JS 做交互表格"],
+      cons: ["JSON 驱动的页面需要改写成 .qmd，或者嵌入原生 HTML/JS", "默认的 Bootstrap 外观有点工具感，需要调主题", "中文搜索没有实测过"],
+      note: "如果走 <b>路线 B</b>，它和“科研综述 + 学习路线”这类内容最契合。" },
+    { id: "papermod", name: "PaperMod（Lil'Log 同款）", fw: "Hugo（Go，不需要 Node）", cat: "技术博客", rec: true,
+      stars: "14.0k", upd: "2026-08", lic: "MIT", demo: "https://lilianweng.github.io/posts/2023-06-23-agent/", repo: "https://github.com/adityatelange/hugo-PaperMod",
+      fit: "pynyyn", reskin: "高", migrate: 3, homeLabel: "官方 demo", artLabel: "Lil'Log",
+      pros: ["Lilian Weng 的 Lil'Log（Agent、Diffusion 等综述长文）就是基于它，最接近“ML 综述博客”的观感", "极简、加载快，构建不需要 JS 工具链", "自动目录、面包屑、Fuse.js 搜索、深浅自动切换"],
+      cons: ["数学公式需要自己加 KaTeX/MathJax partial", "是按时间排列的博客流，没有侧栏导航，多页知识库得靠系列或目录页来组织"],
+      note: "阅读体验是这批里最好的之一，<b>路线 A</b> 可以拿它当正文排版的主要参考。" },
+    { id: "blowfish", name: "Blowfish", fw: "Hugo + Tailwind", cat: "技术博客",
+      stars: "2.9k", upd: "2026-09 活跃", lic: "MIT", demo: "https://blowfish.page/samples/mathematical-notation/", repo: "https://github.com/nunocoracao/blowfish",
+      fit: "yypyyn", reskin: "低", migrate: 3,
+      pros: ["短代码自带 KaTeX、Mermaid、Chart.js", "支持系列文章、Zen 阅读模式、时间线、画廊", "有搜索，也有深色模式"],
+      cons: ["视觉偏个人品牌或落地页风格，比较花哨", "demo 默认深色，浅色需要配置"],
+      note: "功能全，但气质和调研报告不太搭。" },
+    { id: "stack", name: "Stack", fw: "Hugo", cat: "技术博客",
+      stars: "6.5k", upd: "2026-05", lic: "GPL-3.0", demo: "https://demo.stack.jimmycai.com/p/math-typesetting/", repo: "https://github.com/CaiJimmy/hugo-theme-stack",
+      fit: "yypyyn", reskin: "中", migrate: 3,
+      pros: ["中文技术博客圈最流行的主题之一，教程很多", "左侧栏加右侧目录小部件，卡片式布局", "front matter 写 math: true 就能开 KaTeX，自带搜索、归档和深色模式"],
+      cons: ["卡片配封面图的风格偏生活博客", "GPL-3.0 许可，衍生主题也要开源"],
+      note: "中文生态最省心的 Hugo 博客方案。" },
+    { id: "fuwari", name: "Fuwari", fw: "Astro + Svelte + Tailwind", cat: "技术博客",
+      stars: "5.0k", upd: "2026-03（维护较慢）", lic: "MIT", demo: "https://fuwari.vercel.app/posts/markdown-extended/", repo: "https://github.com/saicaca/fuwari",
+      fit: "yynyyn", reskin: "低", migrate: 4,
+      pros: ["颜值高，主题色可以用色相滑块调", "Swup 实现无刷新切页，Pagefind 提供全文搜索", "支持 KaTeX"],
+      cons: ["二次元视觉和科研调研的气质不搭", "上游维护慢，PR 堆积"],
+      note: "放在这里是作为中文圈热门博客的参照，不推荐用于本站。" },
+    { id: "material", name: "Material for MkDocs → Zensical", fw: "Python（MkDocs）/ Rust（Zensical）", cat: "文档/知识库",
+      stars: "27.5k / 5.8k", upd: "Material 自 2025-11 起维护模式；Zensical 活跃", lic: "MIT", demo: "https://zensical.org/docs/get-started/", repo: "https://github.com/zensical/zensical",
+      fit: "yyyyyn", reskin: "中", migrate: 3, homeLabel: "Zensical", artLabel: "Material·公式",
+      pros: ["文档站的标杆：顶部标签页、左侧导航、右侧目录", "提示框（admonition）、内容标签页、MathJax/KaTeX 都有", "Zensical 由原团队重写，兼容 mkdocs.yml，自带搜索引擎 Disco，0.0.52 起支持中文"],
+      cons: ["Material 已进入维护模式，承诺的安全修复大约到 2026-11", "Zensical 还是 0.0.x 版本，观感偏文档站"],
+      note: "我们的 Python 构建习惯迁过去最顺，但要选就选 <b>Zensical</b>，不要选 Material。" },
+    { id: "starlight", name: "Starlight", fw: "Astro（Node）", cat: "文档/知识库",
+      stars: "9.3k", upd: "2026-09 活跃", lic: "MIT", demo: "https://starlight.astro.build/getting-started/", repo: "https://github.com/withastro/starlight",
+      fit: "pyyyyn", reskin: "中", migrate: 3,
+      pros: ["Astro 官方文档主题，侧栏、目录、Pagefind 搜索、i18n 都有", "自带 Steps、Tabs、Cards、Aside 组件，MDX 里可以嵌交互组件", "加上 starlight-blog 插件就能挂博客"],
+      cons: ["公式要自己加 remark-math 和 rehype-katex", "需要 Node 工具链"],
+      note: "论文库这类交互页可以做成 MDX 组件，<b>是迁移路线里最灵活的一个</b>。" },
+    { id: "vitepress", name: "VitePress", fw: "Vue + Vite（Node）", cat: "文档/知识库",
+      stars: "18.4k", upd: "2026-09 活跃", lic: "MIT", demo: "https://vitepress.dev/guide/what-is-vitepress", repo: "https://github.com/vuejs/vitepress",
+      fit: "yyyypn", reskin: "中", migrate: 3,
+      pros: ["默认主题很干净，中文社区用的人很多", "打开 markdown.math 就能用 MathJax", "开发体验好，热更新快"],
+      cons: ["内置本地搜索默认搜不到中文词，要自己写 tokenizer", "想定制布局就得写 Vue"],
+      note: "如果熟悉 Vue 可以考虑，否则优先 Starlight 或 Hextra。" },
+    { id: "hextra", name: "Hextra", fw: "Hugo + Tailwind（不需要 Node）", cat: "文档/知识库", rec: true,
+      stars: "2.4k", upd: "2026-09 活跃", lic: "MIT", demo: "https://imfing.github.io/hextra/docs/guide/latex/", repo: "https://github.com/imfing/hextra",
+      fit: "yyyypn", reskin: "中", migrate: 3,
+      pros: ["现代知识库风格，相当于 Hugo 版的 Nextra", "KaTeX 开箱即用，FlexSearch 全文搜索", "侧栏、目录、深色、i18n 都有，只要一个 Hugo 二进制"],
+      cons: ["社区比较小", "中文搜索效果没有实测过"],
+      note: "知识库观感和零 Node 依赖兼得，是 <b>迁移路线里依赖最轻的</b>。" },
+    { id: "hugobook", name: "Hugo Book", fw: "Hugo", cat: "文档/知识库",
+      stars: "4.1k", upd: "2026-09 活跃", lic: "MIT", demo: "https://alex-shpak.github.io/hugo-book/", repo: "https://github.com/alex-shpak/hugo-book",
+      fit: "yyyypn", reskin: "中", migrate: 2,
+      pros: ["像一本书：左侧章节树加右侧目录", "几乎零 JS，自带 KaTeX 短代码和 FlexSearch", "可以设成跟随系统深浅（demo 是浅色）"],
+      cons: ["视觉非常朴素，组件少"],
+      note: "如果想要“教科书”式的学习路线，可以参考它的章节树。" }
+  ];
+
+  var box = document.getElementById("box"), boxImg = box.querySelector("img");
+  function zoom(src) { boxImg.src = src; box.classList.add("on"); }
+  box.addEventListener("click", function () { box.classList.remove("on"); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") box.classList.remove("on"); });
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  // Notes contain only <b>/<code> markup authored above; rebuild them as DOM nodes instead of using innerHTML.
+  function rich(parent, s) {
+    s.split(/(<b>.*?<\/b>|<code>.*?<\/code>)/).forEach(function (part) {
+      var m = part.match(/^<(b|code)>(.*)<\/\1>$/);
+      parent.appendChild(m ? el(m[1], null, m[2]) : document.createTextNode(part));
+    });
+    return parent;
+  }
+  function img(src, alt) {
+    var i = el("img"); i.src = src; i.alt = alt; i.loading = "lazy";
+    i.addEventListener("click", function () { zoom(i.src); });
+    return i;
+  }
+
+  var ours = document.getElementById("ours");
+  [["ours-home", "现状 · 首页"], ["ours-light", "现状 · 基础知识页（浅）"], ["ours-dark", "现状 · 基础知识页（深）"]].forEach(function (o) {
+    var f = el("figure"); f.appendChild(img("shots/" + o[0] + ".png", o[1])); f.appendChild(el("figcaption", null, o[1])); ours.appendChild(f);
+  });
+
+  var grid = document.getElementById("grid"), cards = [];
+  THEMES.forEach(function (t, i) {
+    var c = el("article", "card" + (t.rec ? " rec" : "")); c.dataset.cat = t.cat; c.id = "t-" + t.id;
+    var top = el("div", "top");
+    top.appendChild(el("span", "num", "#" + (i + 1)));
+    top.appendChild(el("h2", null, t.name));
+    top.appendChild(el("span", "fw", t.fw));
+    if (t.rec) top.appendChild(el("span", "recflag", "★ 推荐候选"));
+    top.appendChild(el("span", "cat", t.cat));
+    c.appendChild(top);
+
+    var views = [];
+    var hasHome = ["distill", "tufte", "hugobook"].indexOf(t.id) < 0;
+    if (hasHome) views.push([t.homeLabel || "首页", t.id + "-home"]);
+    views.push([(t.artLabel || "文章") + " · 浅", t.id + "-light"], [(t.artLabel || "文章") + " · 深", t.id + "-dark"]);
+    var tabs = el("div", "tabs"), shot = el("div", "shot"), pic = img("shots/" + views[0][1] + ".png", t.name);
+    shot.appendChild(pic);
+    views.forEach(function (v, k) {
+      var b = el("button", k === 0 ? "on" : "", v[0]); b.type = "button";
+      b.addEventListener("click", function () {
+        tabs.querySelectorAll("button").forEach(function (x) { x.classList.remove("on"); });
+        b.classList.add("on"); pic.src = "shots/" + v[1] + ".png";
+      });
+      tabs.appendChild(b);
+    });
+    c.appendChild(tabs); c.appendChild(shot);
+
+    var fit = el("div", "fit");
+    FIT_KEYS.forEach(function (k, j) {
+      var ch = t.fit[j], d = el("div");
+      d.appendChild(el("b", ch, ch === "y" ? "●" : ch === "p" ? "◐" : "○"));
+      d.appendChild(document.createTextNode(k));
+      fit.appendChild(d);
+    });
+    c.appendChild(fit);
+
+    var pc = el("div", "pc");
+    [["亮点", t.pros], ["短板", t.cons]].forEach(function (g) {
+      var d = el("div"); d.appendChild(el("h4", null, g[0]));
+      var ul = el("ul"); g[1].forEach(function (s) { ul.appendChild(el("li", null, s)); });
+      d.appendChild(ul); pc.appendChild(d);
+    });
+    c.appendChild(pc);
+    c.appendChild(rich(el("div", "fitnote"), t.note));
+
+    var meta = el("div", "meta");
+    meta.appendChild(el("span", null, "★ " + t.stars));
+    meta.appendChild(el("span", null, "更新 " + t.upd));
+    meta.appendChild(el("span", null, t.lic));
+    meta.appendChild(el("span", null, "换皮参考价值 " + t.reskin));
+    var cost = el("span", null, "迁移成本 "), bars = el("span", "cost");
+    for (var q = 0; q < 5; q++) bars.appendChild(el("i", q < t.migrate ? "f" : ""));
+    cost.appendChild(bars); meta.appendChild(cost);
+    [["Demo ↗", t.demo], ["GitHub ↗", t.repo]].forEach(function (l) {
+      var a = el("a", null, l[0]); a.href = l[1]; a.target = "_blank"; a.rel = "noopener noreferrer"; meta.appendChild(a);
+    });
+    c.appendChild(meta);
+    grid.appendChild(c); cards.push(c);
+  });
+
+  var filters = document.getElementById("filters"), legend = filters.firstChild;
+  ["全部", "学术长文", "技术博客", "文档/知识库", "★ 推荐候选"].forEach(function (f, k) {
+    var b = el("button", k === 0 ? "on" : "", f); b.type = "button";
+    b.addEventListener("click", function () {
+      filters.querySelectorAll("button").forEach(function (x) { x.classList.remove("on"); });
+      b.classList.add("on");
+      cards.forEach(function (c) {
+        var show = f === "全部" || c.dataset.cat === f || (k === 4 && c.classList.contains("rec"));
+        c.hidden = !show;
+      });
+    });
+    filters.insertBefore(b, legend);
+  });
+})();
+</script>
+</body>
+</html>

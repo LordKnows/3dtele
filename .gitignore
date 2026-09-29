@@ -6,3 +6,6 @@ survey/.artifact/
 # Wrangler / Node (only if you run wrangler locally)
 .wrangler/
 node_modules/
+
+# Claude Code worktrees
+.claude/worktrees/
