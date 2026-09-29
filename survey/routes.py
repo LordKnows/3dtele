@@ -623,7 +623,8 @@ def deep_reads_route(ctx, xref, keys, crumbs):
     """All deep-read papers side by side: one row per paper, then how they relate and a reading order."""
     cmp_ = ctx["registry"]["compare"]
     cols = cmp_.get("columns", [])
-    rows = [[{"k": f"anchor-{r['key']}"}] + [r.get("cells", {}).get(c["id"], "") for c in cols]
+    short = paper_short(ctx)
+    rows = [[{"k": f"anchor-{r['key']}", "t": short.get(r["key"], r["key"])}] + [r.get("cells", {}).get(c["id"], "") for c in cols]
             for r in cmp_.get("rows", []) if f"anchor-{r['key']}" in xref]
     body = [SEC("逐篇对照", "table"), TABLE(["论文"] + [c["h"] for c in cols], rows, wide=True)]
     for sec in cmp_.get("sections", []):
