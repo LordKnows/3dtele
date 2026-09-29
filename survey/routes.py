@@ -758,7 +758,13 @@ def layout_diagram(d):
         text = d["out"]
         tw = sum(12 if ord(ch) > 0x2E80 else 6.5 for ch in text)
         below = [n for n in nodes.values() if n.get("col", 0) == src.get("col", 0) and n.get("row", 0) > src.get("row", 0)]
-        if below:  # a node sits underneath: step aside into the column gap and run down past the last row
+        in_loop = "loop" in spec and d["out_from"] in loop.get("nodes", [])
+        if in_loop:  # leave by the right side, clear of the loop's note, and run down past the loop box
+            bottom = max(top + rows * row_h - (row_h - NH), spec["loop"]["y"] + spec["loop"]["h"])
+            gx = min(spec["loop"]["x"] + spec["loop"]["w"] + 8, W - 4)
+            spec["edges"].append({"d": f"M{sx + nw:.0f},{sy + NH / 2:.0f} L{gx:.0f},{sy + NH / 2:.0f} L{gx:.0f},{bottom + 14:.0f}"})
+            ax, ty = gx, bottom + 32
+        elif below:  # a node sits underneath: step aside into the column gap and run down past the last row
             bottom = top + rows * row_h - (row_h - NH)
             gx = sx + nw + 11
             spec["edges"].append({"d": f"M{cx:.0f},{sy + NH:.0f} L{cx:.0f},{sy + NH + 16:.0f} L{gx:.0f},{sy + NH + 16:.0f} L{gx:.0f},{bottom + 18:.0f}"})
