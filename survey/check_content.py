@@ -1,8 +1,11 @@
-"""Compare the visible text of a reference single-page render against the union of all site/ pages.
+"""Compare the visible text of a reference render against the union of all site/ pages.
 
-Usage: python3 check_content.py <reference-dom.html>
-The reference is a `--dump-dom` of the old single-page report. Prints text present in the reference but
-missing from the new pages (should be empty apart from intended wording changes) and text that is new.
+Usage:
+  python3 check_content.py --save .baseline     # dump the current top-level site/*.html pages into .baseline/
+  python3 check_content.py .baseline            # compare: reference = union of .baseline/*.html
+  python3 check_content.py <reference-dom.html> # compare against a single `--dump-dom` file
+Prints text present in the reference but missing from the new pages (should be empty apart from intended wording
+changes) and text that is new. TeX is cut out of text nodes, so the result does not depend on whether MathJax loaded.
 """
 import os
 import re
@@ -14,9 +17,11 @@ from collections import Counter
 from html.parser import HTMLParser
 from pathlib import Path
 
-CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+from chrome import chrome_cmd
+
 SITE = Path(__file__).resolve().parent / "site"
 SKIP = {"script", "style", "nav", "mjx-container", "title"}
+TEX = re.compile(r"\\\((?:.|\n)*?\\\)|\\\[(?:.|\n)*?\\\]")
 
 
 class TextNodes(HTMLParser):
@@ -34,9 +39,12 @@ class TextNodes(HTMLParser):
             self.skip -= self.stack.pop()
 
     def handle_data(self, data):
-        t = re.sub(r"\s+", " ", data).strip()
-        if t and not self.skip:
-            self.out.append(t)
+        if self.skip:
+            return
+        for part in TEX.split(data):
+            t = re.sub(r"\s+", " ", part).strip()
+            if t:
+                self.out.append(t)
 
 
 def texts(html: str) -> Counter:
@@ -49,8 +57,8 @@ def dump(page: Path, attempts: int = 3) -> str:
     """--dump-dom via headless Chrome; Chrome occasionally hangs after printing, so kill it and retry if empty."""
     for _ in range(attempts):
         with tempfile.TemporaryDirectory() as prof, tempfile.TemporaryFile() as sink:
-            proc = subprocess.Popen([CHROME, "--headless=new", "--disable-gpu", "--no-first-run", "--disable-extensions",
-                                     f"--user-data-dir={prof}", "--timeout=20000", "--dump-dom", page.resolve().as_uri()],
+            proc = subprocess.Popen(chrome_cmd("--headless=new", "--disable-gpu", "--no-first-run", "--disable-extensions",
+                                     f"--user-data-dir={prof}", "--timeout=20000", "--dump-dom", page.resolve().as_uri()),
                                     stdout=sink, stderr=subprocess.DEVNULL, start_new_session=True)
             try:
                 proc.wait(timeout=45)
@@ -64,10 +72,28 @@ def dump(page: Path, attempts: int = 3) -> str:
     raise RuntimeError(f"could not render {page}")
 
 
+def site_pages():
+    return sorted(p for p in SITE.rglob("*.html") if not p.name.startswith("."))
+
+
 def main() -> int:
-    ref = texts(Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace"))
+    args = sys.argv[1:]
+    if len(args) == 2 and args[0] == "--save":
+        out = Path(args[1])
+        out.mkdir(parents=True, exist_ok=True)
+        for p in sorted(SITE.glob("*.html")):
+            (out / p.name).write_text(dump(p), encoding="utf-8")
+            print("saved", out / p.name)
+        return 0
+    if len(args) != 1:
+        print(__doc__)
+        return 2
+    src = Path(args[0])
+    ref = Counter()
+    for f in (sorted(src.glob("*.html")) if src.is_dir() else [src]):
+        ref.update(texts(f.read_text(encoding="utf-8", errors="replace")))
     new = Counter()
-    for p in sorted(SITE.glob("*.html")):
+    for p in site_pages():
         new.update(texts(dump(p)))
     missing = {k: v - new.get(k, 0) for k, v in ref.items() if v > new.get(k, 0)}
     added = {k: v - ref.get(k, 0) for k, v in new.items() if v > ref.get(k, 0)}

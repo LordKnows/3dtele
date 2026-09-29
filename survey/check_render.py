@@ -13,7 +13,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+from chrome import chrome_cmd
+
 SITE = Path(__file__).resolve().parent / "site"
 COUNTS = {
     "sections": r"<section id=", "concepts": r'class="concept"', "steps": r'class="step"', "classics": r'class="classic"',
@@ -26,8 +27,8 @@ COUNTS = {
 def run_chrome(extra_args, wait_s):
     # Output goes to files and the whole process group is killed on timeout: Chrome helpers can keep a pipe open.
     with tempfile.TemporaryDirectory() as prof, tempfile.TemporaryFile() as so, tempfile.TemporaryFile() as se:
-        args = [CHROME, "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
-                "--disable-extensions", f"--user-data-dir={prof}", "--enable-logging=stderr", "--v=0"] + extra_args
+        args = chrome_cmd("--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
+                          "--disable-extensions", f"--user-data-dir={prof}", "--enable-logging=stderr", "--v=0", *extra_args)
         proc = subprocess.Popen(args, stdout=so, stderr=se, start_new_session=True)
         try:
             proc.wait(timeout=wait_s)

@@ -14,7 +14,8 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+from chrome import chrome_cmd
+
 SITE = Path(__file__).resolve().parent / "site"
 WIDTHS = [390, 1400]
 DEEP_LINKS = ["foundations.html#concept-g-pinhole", "guided.html#walk-ha-h3", "classics.html#classic-40",
@@ -73,9 +74,9 @@ def measure(job):
         harness.write_text(HARNESS % {"job": json.dumps(job)}, encoding="utf-8")
         try:
             with tempfile.TemporaryFile() as sink:
-                proc = subprocess.Popen([CHROME, "--headless=new", "--disable-gpu", "--no-first-run", "--disable-extensions",
+                proc = subprocess.Popen(chrome_cmd("--headless=new", "--disable-gpu", "--no-first-run", "--disable-extensions",
                                          "--allow-file-access-from-files", f"--user-data-dir={tmp}", "--window-size=1500,1000",
-                                         "--virtual-time-budget=30000", "--dump-dom", harness.as_uri()],
+                                         "--virtual-time-budget=30000", "--dump-dom", harness.as_uri()),
                                         stdout=sink, stderr=subprocess.DEVNULL, start_new_session=True)
                 try:
                     proc.wait(timeout=120)

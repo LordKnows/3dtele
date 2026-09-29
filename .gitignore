@@ -9,3 +9,6 @@ node_modules/
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# Pre-redesign DOM snapshots (check_content.py --save survey/.baseline)
+survey/.baseline/
