@@ -220,7 +220,9 @@ def build_learn(stats: dict):
             s["concept_ids"] = lk.c([i for i in ids if not str(i).startswith("a-")], f"guide {g['anchor']} {s.get('id')}")
             s["adv_ids"] = lk.a([i for i in ids if str(i).startswith("a-")], f"guide {g['anchor']} {s.get('id')}")
         for x in g.get("exercises", []):
-            x["concept_ids"] = lk.c(x.get("concept_ids"), f"guide {g['anchor']} exercise")
+            ids = x.get("concept_ids") or []
+            x["concept_ids"] = lk.c([i for i in ids if not str(i).startswith("a-")], f"guide {g['anchor']} exercise")
+            x["adv_ids"] = lk.a([i for i in ids if str(i).startswith("a-")], f"guide {g['anchor']} exercise")
         guided[g["anchor"]] = g
     stats.update(guide_fixes=guide_fixes, new_fixes=new_fixes)
 

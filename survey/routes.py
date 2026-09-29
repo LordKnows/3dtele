@@ -650,7 +650,7 @@ def walk_part_body(field, items, xref):
     if field == "exercises":
         out = []
         for x in items:
-            need = links([f"concept-{c}" for c in x.get("concept_ids", [])], xref)
+            need = links([f"concept-{c}" for c in x.get("concept_ids", [])] + [f"adv-{a}" for a in x.get("adv_ids", [])], xref)
             out += [H3(x.get("title_zh"), tag=x.get("level", "")), P(x.get("task_zh"), mn=note("概念", links=need) if need else None),
                     P(x.get("expected_zh"), label="预期结果"), P(x.get("hint_zh"), label="提示")]
         return out
@@ -724,7 +724,8 @@ def layout_diagram(d):
     row_h = 112 if loop else 100
     top = 48 if loop else 24
     pos = {k: (round(10 + n.get("col", 0) * col_w), top + n.get("row", 0) * row_h) for k, n in nodes.items()}
-    spec = {"w": W, "nodes": [{"x": pos[k][0], "y": pos[k][1], "w": nw, "h": NH, "t": n.get("t", ""), "s": n.get("s", ""), "k": n.get("k", ""),
+    # "step", not "k": a "k" anywhere in page data means a link to an element id (refs_of).
+    spec = {"w": W, "nodes": [{"x": pos[k][0], "y": pos[k][1], "w": nw, "h": NH, "t": n.get("t", ""), "s": n.get("s", ""), "step": n.get("k", ""),
                                **({"data": True} if n.get("data") else {})} for k, n in nodes.items()], "edges": []}
     for e in d.get("edges", []):
         if len(e) < 2 or e[0] not in nodes or e[1] not in nodes:
@@ -756,10 +757,17 @@ def layout_diagram(d):
         cx = sx + nw / 2
         text = d["out"]
         tw = sum(12 if ord(ch) > 0x2E80 else 6.5 for ch in text)
-        tx = min(max(cx, tw / 2 + 6), W - tw / 2 - 6)
-        spec["edges"].append({"d": f"M{cx:.0f},{sy + NH:.0f} L{cx:.0f},{sy + NH + 26:.0f}"})
-        spec["out"] = {"x": round(tx), "y": sy + NH + 44, "text": text}
-        h = max(h, sy + NH + 56)
+        below = [n for n in nodes.values() if n.get("col", 0) == src.get("col", 0) and n.get("row", 0) > src.get("row", 0)]
+        if below:  # a node sits underneath: step aside into the column gap and run down past the last row
+            bottom = top + rows * row_h - (row_h - NH)
+            gx = sx + nw + 11
+            spec["edges"].append({"d": f"M{cx:.0f},{sy + NH:.0f} L{cx:.0f},{sy + NH + 16:.0f} L{gx:.0f},{sy + NH + 16:.0f} L{gx:.0f},{bottom + 18:.0f}"})
+            ax, ty = gx, bottom + 36
+        else:
+            spec["edges"].append({"d": f"M{cx:.0f},{sy + NH:.0f} L{cx:.0f},{sy + NH + 26:.0f}"})
+            ax, ty = cx, sy + NH + 44
+        spec["out"] = {"x": round(min(max(ax, tw / 2 + 6), W - tw / 2 - 6)), "y": round(ty), "text": text}
+        h = max(h, ty + 12)
     spec["h"] = round(h)
     return spec
 

@@ -80,6 +80,7 @@
     }
     spec.edges.forEach(function (e) { svg.appendChild(sv("path", { class: "dedge" + (e.fb ? " fb" : ""), d: e.d, "marker-end": "url(#" + (e.fb ? "ahf-" : "ah-") + anchorKey + ")" })); });
     spec.nodes.forEach(function (n) {
+      n.k = n.k || n.step;
       svg.appendChild(step(n.k, [
         sv("rect", { class: n.data ? "data" : null, x: n.x, y: n.y, width: n.w, height: n.h, rx: 3 }),
         sv("text", { class: "k", x: n.x + 10, y: n.y + 16, text: n.k }),
