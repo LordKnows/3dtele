@@ -593,10 +593,16 @@ ul.plain li, .res span, .threat span { overflow-wrap: anywhere; }
 
   // ---------- math (MathJax, typeset lazily) ----------
   var mathReady = false, mathQueue = [];
-  window.__atlasMathReady = function () { mathReady = true; var q = mathQueue.slice(); mathQueue = []; q.forEach(typeset); };
+  function mathUsable() { return !!(window.MathJax && typeof window.MathJax.typesetPromise === "function"); }
+  function flushMath() { mathReady = true; var q = mathQueue.slice(); mathQueue = []; q.forEach(typeset); }
+  window.__atlasMathReady = flushMath;
+  // MathJax may finish loading before this script runs (cached/async), so also poll for it.
+  var mathPoll = setInterval(function () { if (mathUsable()) { clearInterval(mathPoll); flushMath(); } }, 200);
+  setTimeout(function () { clearInterval(mathPoll); }, 30000);
   function typeset(node) {
     if (!node) return;
-    if (!mathReady || !window.MathJax || typeof window.MathJax.typesetPromise !== "function") { mathQueue.push(node); return; }
+    if (!mathReady && mathUsable()) mathReady = true;
+    if (!mathReady || !mathUsable()) { mathQueue.push(node); return; }
     try { window.MathJax.typesetPromise([node]).catch(function () { /* leave raw TeX visible */ }); } catch (e) { /* leave raw TeX visible */ }
   }
   function eqList(eqs) {
