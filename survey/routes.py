@@ -15,7 +15,7 @@ Links are dicts: {"k": element id} (an entry of the xref table, with hover previ
 """
 import re
 
-BRAND = "3D 临场研究图谱"
+BRAND = "3D Telepresence: a field guide"
 ANCHOR_SHORT = {"quark": "Quark", "ha": "Ha et al."}
 ID_TOKEN = re.compile(r"(a-[a-z0-9]+(?:-[a-z0-9]+)*|[fgdrilnv]-[a-z0-9]+)")
 PRIORITY = {"must": "必读", "should": "建议", "optional": "选读"}
@@ -778,7 +778,7 @@ def overview_routes(ctx, xref, legacy_home):
         if sec.get("links"):
             body.append(TOC([{"items": key_items(sec["links"], xref)}]))
     home = route("index.html", "overview", "index.html", BRAND,
-                 page("top", BRAND, body, sub="3D telepresence: a field guide", epigraph=intro["epigraph"]),
+                 page("top", BRAND, body, epigraph=intro["epigraph"]),
                  [["Overview", ""], ["Introduction", ""]], desc["top"], head_extra=legacy_home)
     home["title"] = ""
 

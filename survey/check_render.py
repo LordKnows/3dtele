@@ -17,11 +17,10 @@ from chrome import chrome_cmd
 
 SITE = Path(__file__).resolve().parent / "site"
 COUNTS = {
-    "sections": r"<section id=", "concepts": r'class="concept"', "steps": r'class="step"', "classics": r'class="classic"',
-    "adv": r'class="card-d"', "diagrams": r'class="diagram"', "lane dots": r'<g class="m"', "mjx": r"<mjx-container",
-    "chips": r'class="cchip', "idrefs": r'class="idref"', "stages": r'class="stage"', "glossary rows": r'<td class="en">',
-    "db rows": r'<td class="y">', "ideas": r'class="idea"', "areas": r'class="area"', "nav pages": r'class="page', "pager": r'class="pager"',
-    "sidenotes": r'class="sidenote"', "marginnotes": r'class="marginnote"', "xrefs": r"data-xref=", "raw tex": r'class="math-block">\\\[',
+    "sections": r"<section", "sidenotes": r'class="sidenote"', "marginnotes": r'class="marginnote"', "xrefs": r"data-xref=",
+    "toc items": r'class="toc-t"', "tables": r'class="booktabs', "quiz": r'class="quiz"', "diagrams": r'class="diagram"',
+    "chart dots": r'<a class="m"', "glossary rows": r'<td class="en">', "db rows": r'<td class="y">', "mjx": r"<mjx-container",
+    "raw tex": r'class="math-block">\\\[',
 }
 
 

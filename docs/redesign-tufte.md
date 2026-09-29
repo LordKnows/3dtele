@@ -3,7 +3,7 @@
 - 日期：2026-09-29（第 2 版：用户已回答全部待确认问题）
 - 分支：`worktree-tufte-redesign`，基于 `origin/main` d78071e；worktree 路径 `.claude/worktrees/tufte-redesign`
 - 范围：`survey/`（构建脚本、页面渲染、样式、检查脚本）；线上站点 https://3dv.zyhu.dev
-- 状态：**P0 已确认；P1、P2 已完成；P3 初稿已完成，等用户审阅新写的文字**（见第 10 节）。审阅通过后进入 P4。
+- 状态：**P0–P3 已确认，P4 收尾已完成，等用户在 Cloudflare 预览上验收**（见第 10 节）。验收通过后再合并到 `main`（合并即上线）。
 - 执行方：另一个 Claude Code session 会按本文档执行。**请先读第 9 节“给执行 session 的说明”。**
 
 ---
@@ -321,7 +321,10 @@ Overview           Basics              Works          Future
 | `survey/data/learn/skeleton.json` | 概念 id（`f-`/`g-`/`d-`/`r-`/`i-`/`l-`/`n-`/`v-` 前缀）、专题 id（`a-*`）、经典论文主题（`t-*`）。所有交叉链接都用这些 id |
 | `survey/data/review.json` + `ideas_zh.json` | 18 个研究方向 |
 | `survey/meta.json` | 页面导语、`method_zh`、`learn_method_zh` |
-| `survey/src/shell.html`、`styles.css`、`core.js`、`pages/*.js` | 外壳、样式、公共函数、各页渲染代码。`build.py` 把 core 和页面脚本拼成一个 IIFE 内联进每页 |
+| `survey/routes.py` | 改版后：导航、id → 网址 / 悬停预览表、各类页面的组装（“块”）、旧网址映射 |
+| `survey/wording.py` | 改版后：“锚点”措辞的显示层替换规则和技术用法例外 |
+| `survey/data/site/overview.json` | 改版后：新写的文字（首页导览、技术总览、How to use、栏目导语、页面描述） |
+| `survey/src/lib.js`、`survey/src/tufte/*` | 改版后：公共函数、外壳、样式、页面框架（顶栏、旁注、悬停预览）、块渲染和各插槽脚本。`build.py` 把它们拼成一个 IIFE 内联进每页。旧版的 `shell.html`、`styles.css`、`core.js`、`pages/*.js` 已在 P4 删除 |
 | `wrangler.jsonc`、`.github/workflows/deploy.yml` | Cloudflare 部署：CI 会运行 `python survey/build.py`，然后发布 `survey/site` |
 
 ### 9.3 构建与检查
@@ -430,3 +433,13 @@ python3 survey/check_layout.py
 - 措辞替换写在 `survey/wording.py`，构建时在显示层替换，数据文件不改。数据里“锚点”459 处，替换 371 处，剩下 88 处是技术术语（Quark 的等视差锚点、Scaffold-GS / HAC 的锚点、4D 方法的时间锚点、“作为锚点纳入”的参照基线等），保留原样。`check_content.py` 用同一套规则比对旧文，并报告页面上不属于技术用法的“锚点”（目前 0 处）。
 - 内容完整检查：旧文片段 19,726 个，缺失 0；改写掉的旧导语和页面描述（9 段）列入白名单，新版本在 `overview.json` 里。
 - **待用户决定**：学习路线“最后一个阶段改名为结业项目‘复现两篇重点论文’”与数据不符（复现在第 6、7 阶段，第 8 阶段是“系统视角与前沿——从复现走向选题”），暂未改名；首页标题沿用站名；首页不再放全站目录。
+
+**用户的决定（P3 审阅）**：第 8 阶段不改名；站名改为 “3D Telepresence: a field guide”，去掉中文站名（顶栏、页面标题、首页 H1 都用这个名字）；首页不放全站目录。
+
+### P4 收尾（2026-09-29）
+
+- 按用户决定改站名；首页 H1 即站名，不再有副标题。
+- 删掉旧版的外壳、样式和页面脚本（`survey/src/shell.html`、`styles.css`、`core.js`、`pages/*.js`）；`build.py` 早在 P1 就不再读取它们。`check_render.py` 的计数项换成新页面的部件。
+- `survey/telepresence-atlas.html` 在 P1 已改为指向新网址，这次随站名一起重新生成。
+- 全量检查（最终构建）：render 149 页无报错、无空白区块；layout 329 项全部通过；links 6,725 条站内链接加 302 个旧锚点，0 错误；content 旧文片段缺失 0（白名单 536，比 P3 多出的 11 处是旧中文站名），页面上没有非技术用法的“锚点”。
+- 分支已推送，Cloudflare 预览地址在该次 Actions 运行的任务摘要里。**合并到 `main` 前需要用户验收预览。**
