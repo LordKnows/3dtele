@@ -1,0 +1,19 @@
+docs/redesign-tufte.md
+  s_467e6385dc9488::t_566c35b5905c13 3-7,13-15,17,43,54,59-62,71-76,79-81,87-89,91,93-100,102-118,122-130,132-135,143,145,150,158,164-169,178,181-182,185,188-196,199-201,203,207-250,257-261,269-273,277-289,291,293-297,301,303,305-309,311,313-354,360
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "2a7bb842fc55e3d9def9452ba518aa4476215d81",
+  "prompts": {},
+  "sessions": {
+    "s_467e6385dc9488": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "589535cd-0087-4246-8307-4fbd896585ed",
+        "model": "unknown"
+      },
+      "human_author": "ZhongyuanHu <zandywho@gmail.com>"
+    }
+  }
+}
