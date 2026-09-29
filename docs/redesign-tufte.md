@@ -302,7 +302,9 @@ Overview           Basics              Works          Future
 
 ### 9.1 工作环境
 
-- 在 worktree **`/Users/ZhongyuanHu/research/3dtele/.claude/worktrees/tufte-redesign`**（分支 `worktree-tufte-redesign`）里工作。如果 session 是从主仓库启动的，先用 EnterWorktree 并传 `path` 切进这个 worktree。
+- 工作分支是 **`worktree-tufte-redesign`**，已经推送到 `origin`。
+  - **Cloud session**：`git fetch origin && git checkout worktree-tufte-redesign`，直接在这个分支上工作。
+  - **本机 session**：在 worktree `/Users/ZhongyuanHu/research/3dtele/.claude/worktrees/tufte-redesign` 里工作。如果 session 是从主仓库启动的，先用 EnterWorktree 并传 `path` 切进来。
 - 用中文和用户交流。
 - 每个阶段结束都要提交。提交信息用英文，末尾加上 session 要求的 Co-Authored-By 行。
 - `survey/site/` 下的构建产物是纳入 git 的，改完要重新构建并一起提交。
@@ -331,13 +333,20 @@ python3 survey/check_layout.py
 ```
 
 - **基线**：P0 **动手之前**，先用当前代码构建一次，再用 headless Chrome `--dump-dom` 把旧站 11 页的 DOM 分别存到 `survey/.baseline/`（加进 `.gitignore`）。`check_content.py` 改成接受这个目录，把 11 页合起来作为参照。
-- headless Chrome 的路径是 `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`。它的子进程可能卡住管道，所以要把 stdout 写到文件，用 `start_new_session=True` 启动，超时后用 `os.killpg` 结束。现有检查脚本都是这么写的，照着来。
+- 检查脚本和 `theme-gallery/shoot.py` 里的 Chrome 路径写死成了 macOS 的 `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`。
+  - 在 Linux / cloud 环境里要先改成可配置：读环境变量 `CHROME_BIN`，没设置时依次尝试 macOS 路径、`google-chrome`、`chromium`、`chromium-browser`。
+  - 这个改动放在 P0 最开始做。
+  - 如果环境里没有 Chrome，先装 Chromium；装不上的话，要告诉用户哪些检查没法跑，不能跳过不提。
+- headless Chrome 的子进程可能卡住管道，所以要把 stdout 写到文件，用 `start_new_session=True` 启动，超时后用 `os.killpg` 结束。现有检查脚本都是这么写的，照着来。
 - headless Chrome 的窗口宽度不能小于约 500px。手机宽度用 iframe 模拟，参考 `check_layout.py` 的做法。
 - `theme-gallery/shoot.py` 可以批量截图，环境变量 `WS=宽,高`，每行第三列写 `light` / `dark` 强制配色。
 
-### 9.4 本地预览
+### 9.4 预览
 
-- 内置浏览器的一键预览只读主仓库根目录的 `.claude/launch.json`，而隔离在 worktree 里的 session 写不了主仓库。
+- **Cloud session**：没有内置浏览器。给用户看效果有两种方式：
+  - 用 headless Chrome 截图（桌面 1400px、手机宽度，浅色和深色各一张），发给用户。
+  - 推送分支，由 GitHub Actions 部署 Cloudflare 预览，预览地址在 Actions 任务摘要里。推送前仍要先征得用户同意，除非用户明确授权每个阶段结束都可以推送。
+- **本机 session**：内置浏览器的一键预览只读主仓库根目录的 `.claude/launch.json`，而隔离在 worktree 里的 session 写不了主仓库。
 - 所以在 worktree 里直接起服务器：
 
   ```bash
