@@ -1,0 +1,887 @@
+{
+ "overview_zh": "这条学习路线面向刚进入 3D telepresence / 实时三维视觉方向的研究生。目标分三步：先能读懂 Quark（Flynn et al., SIGGRAPH Asia 2024）和 Ha et al.（CVPR 2025）这两篇锚点论文，再能复现其中的关键模块，最后能读懂 2025–2026 年的前沿工作并确定自己的研究方向。按每周约 15 小时估算，全程 8 个阶段，约 27 周（6–7 个月）。有 CV 或图形学背景的同学可以把阶段 1、3、4 各压缩约 1 周。\n\n路线顺着一条数据流来组织：“多台相机拍到的像素 → 三维几何 → 另一个视点下的像素 → 连续、不闪烁的视频 → 可部署的系统”。\n- 阶段 1–2 补基础：数学、相机几何、深度与融合。Ha et al. 的 RAFT-Stereo 深度、image-based TSDF 和 EMA 时间滤波全部建立在这里。\n- 阶段 3 讲经典渲染与 IBR：体渲染、alpha 合成、光场、ULR 混合权重、分层表示。这是 Quark 的 LDM 加 IBR 输出和 Ha 的逐视角 warping 加混合所用的语言。\n- 阶段 4–5 进入神经渲染：从 NeRF 到 3DGS，再到可泛化和前馈 NVS。学完后能在方法地图上给两篇锚点论文定位。\n- 阶段 6、7 分别精读并部分复现 Quark 和 Ha et al.，直接使用本站导读中的练习题。\n- 阶段 8 转向系统视角和 2025–2026 前沿（几何基础模型、无几何 Transformer 渲染器、流式 4D、延迟与压缩），最后完成选题。\n\n每个阶段都遵循同一套做法：先学概念（concept id 对应本站“基础知识”模块），再读对应的奠基论文（优先读 2026 年以前的高影响力经典），然后动手完成一个有明确交付物的小项目，最后用检查题自测。每篇论文都注明了它在两篇锚点论文中的对应位置，目的是把基础知识和原论文连起来读，而不是孤立地背公式。阶段之间有依赖：阶段 2 依赖阶段 1 的投影与反投影；阶段 3 的前向 warping 依赖阶段 2 的深度图；阶段 6 和 7 分别依赖阶段 3–5 和阶段 2–5。阶段 6 与阶段 7 相互独立，可以交换顺序；如果你更关心时间一致性和动态场景，可以先做阶段 7。",
+ "stages": [
+  {
+   "id": "S1",
+   "title_zh": "阶段 1：数学、图像与相机几何——把像素、射线和三维点来回搬",
+   "duration_zh": "3 周（约 45 小时）",
+   "goal_zh": "熟练使用齐次坐标、SE(3) 位姿和针孔模型，在像素、射线、三维点之间正确转换。理解视差与深度的关系，以及误差随 Z² 增长的规律。会用 COLMAP 得到位姿，并能分清 OpenCV、OpenGL、LLFF 三种坐标约定。掌握最小二乘、RANSAC、Adam 与学习率日程，以及加权平均、EMA、卡尔曼滤波的直觉；这些在后面读 Ha et al. 的 Eq.(1)–(2)、(10)–(12) 和 Quark 的 Eq.(3)–(4) 时都会用到。另外要知道相机阵列的标定、同步和卷帘快门会怎样影响评测，ENeRF-Outdoor 就是一个例子。",
+   "concept_ids": [
+    "f-linalg",
+    "f-optim",
+    "f-prob",
+    "f-image",
+    "g-pinhole",
+    "g-epipolar",
+    "g-depth",
+    "g-sfm",
+    "g-rig"
+   ],
+   "advanced_ids": [],
+   "papers": [
+    {
+     "title": "Structure-from-Motion Revisited (Schönberger & Frahm, CVPR 2016)",
+     "url": "https://openaccess.thecvf.com/content_cvpr_2016/html/Schonberger_Structure-From-Motion_Revisited_CVPR_2016_paper.html",
+     "why_zh": "COLMAP 背后的论文。两篇锚点的相机位姿都来自 COLMAP 或数据集自带的标定，Quark 还用 SfM 点的深度来设定 LDM 的近/远平面。读懂增量式 SfM 和 BA，才知道位姿误差从哪里来。"
+    },
+    {
+     "title": "A Flexible New Technique for Camera Calibration (Zhang, MSR-TR-98-71 / TPAMI 2000)",
+     "url": "https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr98-71.pdf",
+     "why_zh": "棋盘格标定的标准方法，讲清了内参 K、畸变和外参如何从单应中分解出来。Ha et al. 明确要求相机同步且标定良好，搭建自己的相机阵列时第一步就用它。"
+    },
+    {
+     "title": "A computer algorithm for reconstructing a scene from two projections (Longuet-Higgins, Nature 1981)",
+     "url": "https://www.nature.com/articles/293133a0",
+     "why_zh": "本质矩阵和八点法的源头，篇幅很短。读完能理解极线约束为什么成立，后面的立体校正、平面扫描和逐平面单应都从这里推出来。"
+    },
+    {
+     "title": "Panoptic Studio: A Massively Multiview System for Social Interaction Capture (Joo et al.)",
+     "url": "https://arxiv.org/abs/1612.03153",
+     "why_zh": "大规模多相机穹顶的工程范例，涵盖硬件同步、数百台相机的联合标定和时间对齐。拿它和 DyNeRF、ENeRF-Outdoor 这类小阵列对比，就能看出标定和同步质量为什么会直接写进评测结论。"
+    }
+   ],
+   "resources": [
+    {
+     "title": "TUM Computer Vision II: Multiple View Geometry (Daniel Cremers) — Ch.1–2, 5",
+     "url": "https://cvg.cit.tum.de/teaching/online/mvg",
+     "type": "course",
+     "note_zh": "有免费幻灯片和 YouTube 录像。第 1 章复习线性代数和 SVD，第 2 章讲 SO(3)/SE(3) 刚体运动，第 5 章讲对极几何。建议作为本阶段的主线课程。"
+    },
+    {
+     "title": "Stanford CS231A Course Notes 1: Camera Models / Notes 3: Epipolar Geometry",
+     "url": "https://web.stanford.edu/class/cs231a/course_notes/01-camera-models.pdf",
+     "type": "course",
+     "note_zh": "约 20 页的讲义，从针孔模型一直推到 K[R|t]。适合配合手算练习阅读；Notes 3 在同一目录下（03-epipolar-geometry.pdf）。"
+    },
+    {
+     "title": "Szeliski, Computer Vision: Algorithms and Applications (2nd ed.) — §2.1, §2.3, §11, Appendix A",
+     "url": "https://szeliski.org/Book/",
+     "type": "book",
+     "note_zh": "免费 PDF。§2.1 讲几何基元与变换，§2.3 讲采样与走样，§11 讲 SfM，附录 A 讲 SVD 和最小二乘。"
+    },
+    {
+     "title": "COLMAP Tutorial + Output Format",
+     "url": "https://colmap.github.io/tutorial.html",
+     "type": "tutorial",
+     "note_zh": "跑通 feature extraction → matching → mapping 的完整流程。配合 https://colmap.github.io/format.html 弄清 images.txt 是 world-to-camera 位姿、四元数采用 Hamilton 约定、相机中心等于 −Rᵀt。"
+    }
+   ],
+   "project": {
+    "title_zh": "多视角投影与 COLMAP 位姿管线",
+    "task_zh": "（1）用手机围绕一个桌面物体拍 40–60 张照片，用 COLMAP 重建，得到 cameras.txt、images.txt 和 points3D.txt。（2）用 NumPy 自己写解析器：把四元数转成 R，检查 RᵀR=I、det=+1；把 3D 点投影回每张图，计算平均重投影误差，并与 COLMAP 报告的数值对照；用 viser 或 Open3D 画出所有相机视锥和点云。（3）写 OpenCV↔OpenGL↔LLFF（[down,right,back]）三种约定的位姿转换，导出成 nerfstudio 的 transforms.json，并用 ns-viewer 检查相机是否都朝向物体。（4）任取两台相机，用像素加深度反投影再投影到另一台相机，验证误差为零；再给深度加 1% 的噪声，画出重投影位移随深度变化的曲线。（5）选做：在含 30% 外点的对应点上，分别用最小二乘和 RANSAC 估计单应，比较结果。",
+    "deliverable_zh": "一个包含 colmap_io.py、conventions.py、reproject.py 的小仓库；一张相机视锥加点云的截图；重投影误差统计（应与 COLMAP 的 mean reprojection error 同量级，约 0.5–1 像素）；一张“深度噪声 → 像素位移”曲线。",
+    "hints_zh": "相机中心是 C=−Rᵀt，不是 t。nerfstudio 采用 OpenGL 约定（y 上、z 后）。LLFF 的 poses_bounds.npy 是 N×17 数组，前 15 列是 3×5 的位姿（最后一列为 H,W,f），最后两列是近/远深度，后面 Quark 练习会用到。深度误差可以套用 δZ≈Z²·δd/(f·b) 来估算。"
+   },
+   "checkpoint_zh": [
+    "COLMAP 的 images.txt 存的是 T_cw 还是 T_wc？给定 (q,t)，相机中心在世界坐标系中的位置是什么？如果把 OpenCV 位姿当成 OpenGL 位姿使用，渲染结果会出现什么现象？",
+    "已知 f=1000 px、基线 b=0.3 m、Z=2 m，1 像素的视差误差对应多大的深度误差？Z=4 m 时呢？据此解释为什么 Quark 按等视差（逆深度）间隔放置 LDM 各层。",
+    "齐次方程 Ax=0 在 ‖x‖=1 约束下的最小二乘解，如何用 SVD 求出？这个方法在三角化和 DLT 单应估计中分别怎样使用？",
+    "EMA 滤波 x_t = M·x_{t−1} + (1−M)·z_t 在静止区域能把噪声标准差降到原来的多少倍？这个量与“对运动的响应延迟”之间是什么关系？（提示：√((1−M)/(1+M))；本站 f-prob 与 Ha et al. 导读中按 Eq.(2) 的记号写作 √(M/(2−M))，这里的 M 指新测量的权重。）",
+    "相机不同步 10 ms、物体以 1 m/s 运动时，多视角三角化的误差大约是多少？这对 ENeRF-Outdoor 的评测有什么影响？"
+   ]
+  },
+  {
+   "id": "S2",
+   "title_zh": "阶段 2：深度从哪里来——立体匹配、MVS、光流与 TSDF 融合",
+   "duration_zh": "3 周（约 45 小时）",
+   "goal_zh": "理解匹配代价、代价体、SGM 和平面扫描，读懂 GC-Net、MVSNet、RAFT-Stereo 所代表的三代学习式深度估计。知道单目深度的尺度歧义，以及光流和 warping 如何用来衡量时间一致性。重点掌握 Curless & Levoy 的 TSDF 加权融合、KinectFusion 的 raycasting，以及 Starline/Ha et al. 采用的 image-based TSDF：沿目标射线把采样点投影到 K 个输入视角，计算截断后的有符号距离，加权融合后找零交叉。同时认识深度传感器的噪声特性，包括飞点、多路径和边缘噪声。选读：GC-Net（arXiv 1703.04309）、MVSNet（1804.02505）、CasMVSNet（1912.06378）、RAFT（2003.12039）、MiDaS（1907.01341）、Depth Anything（2401.10891）、DynamicFusion（CVPR 2015）。",
+   "concept_ids": [
+    "d-stereo",
+    "d-mvs",
+    "d-mono",
+    "d-flow",
+    "d-tsdf",
+    "d-sensors",
+    "g-epipolar",
+    "g-depth",
+    "f-prob"
+   ],
+   "advanced_ids": [
+    "a-learned-stereo",
+    "a-learned-mvs"
+   ],
+   "papers": [
+    {
+     "title": "A Taxonomy and Evaluation of Dense Two-Frame Stereo Correspondence Algorithms (Scharstein & Szeliski, IJCV 2002)",
+     "url": "https://doi.org/10.1023/A:1014573219977",
+     "why_zh": "把立体匹配拆成“代价计算 → 代价聚合 → 视差优化 → 后处理”四步，并建立了 Middlebury 基准。后面 GC-Net 的 soft-argmin、RAFT-Stereo 的迭代更新，都可以看作对其中某一步的学习化替代。"
+    },
+    {
+     "title": "Stereo Processing by Semiglobal Matching and Mutual Information (Hirschmüller, TPAMI 2008)",
+     "url": "https://doi.org/10.1109/TPAMI.2007.1166",
+     "why_zh": "SGM 至今仍是工业界实时立体匹配的主力，OpenCV 的 StereoSGBM 就是它的变体。读它可以理解多路径动态规划如何近似二维 MRF，以及弱纹理和遮挡为什么难处理。"
+    },
+    {
+     "title": "A Space-Sweep Approach to True Multi-Image Matching (Collins, CVPR 1996)",
+     "url": "https://doi.org/10.1109/CVPR.1996.517097",
+     "why_zh": "平面扫描的源头：把深度假设离散成一组平面，逐平面做单应变换再比较一致性。Quark 把 update feature 按当前深度反投影回层空间，DeepStereo、MVSNet 构造代价体，本质上都是这个思路。"
+    },
+    {
+     "title": "A Volumetric Method for Building Complex Models from Range Images (Curless & Levoy, SIGGRAPH 1996)",
+     "url": "https://doi.org/10.1145/237170.237269",
+     "why_zh": "TSDF 加权平均融合的奠基论文。Ha et al. 附录 A.1 的 Eq.(10)–(12)（截断到 τ=0.02 m、按局部深度方差加权、找零交叉）就是它的 image-based 版本。"
+    },
+    {
+     "title": "KinectFusion: Real-time dense surface mapping and tracking (Newcombe et al., ISMAR 2011)",
+     "url": "https://doi.org/10.1109/ISMAR.2011.6092378",
+     "why_zh": "首次在 GPU 上实时完成“ICP 跟踪 + 体素 TSDF 融合 + raycasting 出图”。它是 Holoportation 等实时体融合 telepresence 系统的直接前身，Ha 的 raymarch 与二分求交在这里已有原型。"
+    },
+    {
+     "title": "RAFT-Stereo: Multilevel Recurrent Field Transforms for Stereo Matching (Lipson et al., 3DV 2021)",
+     "url": "https://arxiv.org/abs/2109.07547",
+     "why_zh": "Ha et al. 在 DyNeRF 和 Spaces 上的逐视角深度直接来自 RAFT-Stereo。它的相关体加 ConvGRU 迭代更新范式，也是理解 Quark“学习化迭代细化”的另一个入口。Ha 的主要失败模式（高光区域）就源于这里。"
+    }
+   ],
+   "resources": [
+    {
+     "title": "Multi-View Stereo: A Tutorial (Furukawa & Hernández, FnT CGV 2015)",
+     "url": "https://carlos-hernandez.org/papers/fnt_mvs_2015.pdf",
+     "type": "book",
+     "note_zh": "MVS 的系统教程。先读第 2 章（光度一致性）和第 3 章（深度图重建，含平面扫描），再读融合部分。"
+    },
+    {
+     "title": "CMU 16-385 Computer Vision (Spring 2020), Lecture 13: Stereo",
+     "url": "https://www.cs.cmu.edu/~16385/lectures/lecture13.pdf",
+     "type": "course",
+     "note_zh": "用图示讲清校正、视差与深度、窗口匹配和 SGM 的直觉，适合在读 Scharstein 分类之前浏览。"
+    },
+    {
+     "title": "Open3D tutorial: RGBD integration (ScalableTSDFVolume)",
+     "url": "https://www.open3d.org/docs/release/tutorial/pipelines/rgbd_integration.html",
+     "type": "code",
+     "note_zh": "几十行代码就能跑通体素 TSDF 融合与网格提取，可作为自己实现的对照基准。"
+    },
+    {
+     "title": "RAFT-Stereo 官方代码",
+     "url": "https://github.com/princeton-vl/RAFT-Stereo",
+     "type": "code",
+     "note_zh": "demo.py 加 --save_numpy 可以直接输出视差。README 提供 Middlebury、ETH3D 等预训练权重，本阶段项目和阶段 7 都会用到。"
+    }
+   ],
+   "project": {
+    "title_zh": "平面扫描立体 + TSDF 融合 + raycasting",
+    "task_zh": "（1）平面扫描：在 LLFF 的 fern 场景（阶段 1 已会读 poses_bounds.npy）上，以一张图为参考、其余 8 张为源图，在 near–far 之间按逆深度均匀取 64 个平面。逐平面做单应 warping（grid_sample），计算跨视角方差代价，取 winner-take-all 深度，再加 3×3 盒滤波聚合，做对比。（2）双目：在 Middlebury 或 KITTI 的一对校正图上，比较 OpenCV StereoSGBM 和 RAFT-Stereo 预训练模型的视差图与 bad-2 误差。（3）融合：在 TUM RGB-D 的 freiburg1_xyz 序列上，用 NumPy/PyTorch 自己实现体素 TSDF（截断 τ、加权平均），再对一个新视角做 raycasting 得到深度和法线图，并与 Open3D 的 ScalableTSDFVolume 对比。（4）image-based TSDF 预习：用 30 行代码实现单射线版本，沿目标射线采样，投影到 3 个深度图，计算 s_k=D_k−z_k 并截断、加权，找到零交叉后做 3 步二分。",
+    "deliverable_zh": "一份实验报告，内容包括：fern 的 PSV 深度图（WTA 版与盒滤波聚合版）；SGBM 与 RAFT-Stereo 的对比表和误差图；自写 TSDF 与 Open3D 在同一视角下的 raycast 深度对比（MAE、覆盖率）；单射线 image-based TSDF 的收敛步数统计。",
+    "hints_zh": "TUM 的深度 png 要除以 5000 才是米；位姿是 camera-to-world。平面扫描中 H = K_s (R − t nᵀ/d) K_r⁻¹，注意平面法向和 d 的符号。image-based TSDF 要采用“表面前方为正”（s=D−z）的约定；Ha et al. 附录 A.1 字面印成了 z−D，按字面实现无法收敛，本站 d-tsdf/f-prob 条目对此有说明。"
+   },
+   "checkpoint_zh": [
+    "GC-Net 的四维代价体与 RAFT-Stereo 的 H×W×W 相关体，在显存和最大视差限制上有什么区别？为什么 RAFT-Stereo 可以在推理时增加迭代次数，而显存不变？",
+    "TSDF 为什么要截断？τ 取太大或太小分别会怎样？Ha et al. 取 τ=0.02 m 隐含了什么前提（度量尺度、深度质量）？",
+    "体素 TSDF（KinectFusion/Holoportation）与 image-based TSDF（Starline/Ha）在存储、计算量、分辨率上限和视角依赖性上各有什么取舍？",
+    "单目深度估计（MiDaS、Depth Anything）输出的深度有什么歧义？直接用它替换 Ha et al. 的 RAFT-Stereo 深度，会破坏哪一步？",
+    "ToF/结构光传感器的飞点是怎么产生的？Ha et al. 为什么选择逐视角渲染、再用网络混合，而不是把所有视角的点一次性渲染？"
+   ]
+  },
+  {
+   "id": "S3",
+   "title_zh": "阶段 3：经典渲染与基于图像的渲染（IBR）——两篇锚点共同的语言",
+   "duration_zh": "3 周（约 45 小时）",
+   "goal_zh": "掌握光栅化与 z-buffer、EWA 点溅射、Porter–Duff over 合成和预乘 alpha，推导体渲染方程的离散形式，并证明它与 alpha 合成等价。了解光线步进和球面追踪，以及视角相关外观。在 IBR 方面，理解全光函数、光场与 Lumigraph、Plenoptic Sampling 给出的“深度层数与相机间距”采样规律、ULR 的混合权重原则、前向与后向 warping 中空洞和飞点的成因，以及 MPI、LDI、LDM 分层表示和平面扫描体。学完后应当能看出：Quark 实际上是“为目标视角即时预测分层深度 + ULR 式的逐层混合权重”，Ha et al. 则是“逐视角前向 warping + 学习式混合”。",
+   "concept_ids": [
+    "r-raster",
+    "r-alpha",
+    "r-volume",
+    "r-raymarch",
+    "r-appearance",
+    "r-reps",
+    "i-lightfield",
+    "i-blending",
+    "i-warping",
+    "i-layered",
+    "i-psv"
+   ],
+   "advanced_ids": [
+    "a-diff-render"
+   ],
+   "papers": [
+    {
+     "title": "Light Field Rendering (Levoy & Hanrahan, SIGGRAPH 1996)",
+     "url": "https://graphics.stanford.edu/papers/light/",
+     "why_zh": "用双平面参数化 4D 光场，渲染只需对采样射线做插值，不需要几何。这是“直接复用输入像素”这一 IBR 思想的起点，Quark 最终输出也是从输入图像取色后混合。"
+    },
+    {
+     "title": "Plenoptic Sampling (Chai, Tong, Chan & Shum, SIGGRAPH 2000)",
+     "url": "https://doi.org/10.1145/344779.344932",
+     "why_zh": "从频域分析了“要达到无走样渲染，需要多少深度层、多大的相机间距”。LLFF 的采样指南和 Quark 在逆深度上均匀放层，都可以用这篇的结论来解释。"
+    },
+    {
+     "title": "Unstructured Lumigraph Rendering (Buehler et al., SIGGRAPH 2001)",
+     "url": "https://doi.org/10.1145/383259.383309",
+     "why_zh": "提出 IBR 混合权重应满足的一组原则（角度偏差最小、分辨率敏感、连续性等）。Quark 的逐层 blend weights 和 Ha et al. 的 distance-based 基线（消融中只有 26.08 dB），都可以看作 ULR 权重的学习化或简化版。"
+    },
+    {
+     "title": "High-Quality Video View Interpolation Using a Layered Representation (Zitnick et al., SIGGRAPH 2004)",
+     "url": "https://doi.org/10.1145/1015706.1015766",
+     "why_zh": "最早的实时多视角视频自由视点系统之一：8 台相机、逐帧立体深度、边界处做两层 matting。它与 Ha et al.“逐帧深度 + 逐视角 warping + 混合”的流水线几乎同构，读完会发现 20 年来问题的结构没有变。"
+    },
+    {
+     "title": "Soft 3D Reconstruction for View Synthesis (Penner & Zhang, SIGGRAPH Asia 2017)",
+     "url": "https://doi.org/10.1145/3130800.3130855",
+     "why_zh": "用“软可见性”体积表达深度的不确定性，再做 IBR 混合，是在深度估计与视图合成之间传递不确定性的经典范例。Quark 的 density 层和 Ha et al. 的 TSDF 置信度都在处理同一个问题。"
+    },
+    {
+     "title": "Deep Blending for Free-Viewpoint Image-Based Rendering (Hedman et al., SIGGRAPH Asia 2018)",
+     "url": "https://doi.org/10.1145/3272127.3275084",
+     "why_zh": "先用几何把多张输入图 warp 到目标视角，再用 CNN 学习混合权重。这正是 Ha et al. 几何引导混合网络的直系祖先；它发布的 Deep Blending 数据集也是 Quark 在 Tab.3 中表现最差的数据集。"
+    }
+   ],
+   "resources": [
+    {
+     "title": "Volume Rendering Digest (for NeRF) (Tagliasacchi & Mildenhall, 2022)",
+     "url": "https://arxiv.org/abs/2209.02417",
+     "type": "tutorial",
+     "note_zh": "用约 10 页推导体渲染方程、透射率和离散求积，并说明它与 alpha 合成的等价关系。进入阶段 4 之前必读。"
+    },
+    {
+     "title": "Scratchapixel: Rasterization — a Practical Implementation",
+     "url": "https://www.scratchapixel.com/lessons/3d-basic-rendering/rasterization-practical-implementation/overview-rasterization-algorithm.html",
+     "type": "tutorial",
+     "note_zh": "从投影、边函数、重心插值讲到 z-buffer，帮你真正理解 3DGS 和 Ha et al. 所用光栅器在做什么。"
+    },
+    {
+     "title": "UCSD CSE 274: Sampling and Reconstruction of Visual Appearance (Ramamoorthi, Winter 2018)",
+     "url": "https://cseweb.ucsd.edu/~viscomp/classes/cse274/wi18/274.html",
+     "type": "course",
+     "note_zh": "包含光场、Plenoptic Sampling 与 IBR 的阅读列表和讲义，适合作为本阶段的论文阅读主线。"
+    },
+    {
+     "title": "tinyrenderer (Dmitry Sokolov)",
+     "url": "https://github.com/ssloy/tinyrenderer/wiki",
+     "type": "code",
+     "note_zh": "用约 500 行 C++ 从零写一个软件光栅器。如果图形学基础薄弱，可以花 2–3 个晚上跟着做完。"
+    }
+   ],
+   "project": {
+    "title_zh": "前向 warping + ULR 混合 + MPI 渲染器",
+    "task_zh": "（1）DIBR：用阶段 2 得到的 fern 深度图（或 TUM RGB-D 的传感器深度），实现“反投影 → 变换 → 投影 → z-buffer”的前向 warping，统计空洞比例，观察深度边缘处的飞点。（2）ULR：选 4 个源视角 warp 到同一个目标视角，分别用等权、按角度偏差（ULR 风格）和按距离三种权重混合，在留出视角上报告 PSNR 和空洞率。（3）MPI：把阶段 2 的平面扫描体改造成 32 层 RGBA 的 MPI（alpha 由逐层匹配代价经 softmax 得到），实现逐平面单应渲染和从后向前的 over 合成，沿一条平移轨迹渲染出新视角视频。（4）数值验证：对同一条射线，分别用 NeRF 离散求积公式和 over 合成计算颜色，确认两者相等。",
+    "deliverable_zh": "一段约 5 秒的新视角视频（MPI 渲染），一张 DIBR / ULR / MPI 三种方法在留出视角上的 PSNR 与空洞率对比表，以及体渲染与 over 合成等价性的数值验证脚本。",
+    "hints_zh": "前向 warping 可以先用最近像素 splat，再试 2×2 双线性 splat。预乘 alpha 的 over 公式是 C = C_front + (1−α_front)·C_back。MPI 的单应与阶段 2 平面扫描中的 H 互为逆映射（从目标视角到参考视角），注意方向。这一部分也是 Quark 导读练习 1、2 的预热。"
+   },
+   "checkpoint_zh": [
+    "写出体渲染离散公式 C=Σ T_i (1−exp(−σ_i δ_i)) c_i，并证明它等价于“从前往后的 over 合成”。Quark 的 LDM 层数在这个公式里对应什么？",
+    "ULR 提出了哪些混合权重原则？Quark 的 blend weights 和 Ha et al. 的混合网络，分别满足或违反了其中哪几条？",
+    "前向 warping 为什么会产生空洞和飞点？为什么 3DGS 或 Ha et al. 的“像素高斯”能缓解空洞，而高斯尺度过大又会让画面变糊？",
+    "MPI、LDI 和 Quark 的 LDM 有什么区别？为什么 LDM 每层可以在各自的视差带内移动，而 MPI 的层深度是固定的？",
+    "按照 Plenoptic Sampling / LLFF 的结论，相机间距加倍时，要保持无走样需要多少深度层？"
+   ]
+  },
+  {
+   "id": "S4",
+   "title_zh": "阶段 4：3D 视觉里的深度学习 + NeRF",
+   "duration_zh": "3 周（约 45 小时）",
+   "goal_zh": "掌握读懂锚点网络部分所需的深度学习基础：卷积、残差和 U-Net（Ha et al. 的混合网络、Quark 的多尺度骨干），注意力与 Transformer（Quark 的 One-to-many attention），位置编码、傅里叶特征与射线编码（Quark 的 γ），L1、SSIM、LPIPS 等损失，以及学习式迭代细化与展开优化（Quark 的 render-and-refine）。在此基础上吃透 NeRF：射线采样、体渲染、位置编码、分层采样，并通过 Instant-NGP 和 nerfacto 了解加速手段。同时学会 PSNR、SSIM、LPIPS 三个指标各自衡量什么、有什么局限。",
+   "concept_ids": [
+    "l-cnn",
+    "l-attention",
+    "l-encoding",
+    "l-loss",
+    "l-iterative",
+    "n-nerf",
+    "v-metrics",
+    "r-volume"
+   ],
+   "advanced_ids": [
+    "a-nerf-fast",
+    "a-diff-render"
+   ],
+   "papers": [
+    {
+     "title": "NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis (Mildenhall et al., ECCV 2020)",
+     "url": "https://arxiv.org/abs/2003.08934",
+     "why_zh": "神经渲染的分水岭，用 MLP 加体渲染加位置编码表示场景。两篇锚点都把自己定位成“逐场景优化 NeRF/3DGS 的实时、可泛化替代”，不懂 NeRF 就看不懂它们的对比实验和动机。"
+    },
+    {
+     "title": "Fourier Features Let Networks Learn High Frequency Functions in Low Dimensional Domains (Tancik et al., NeurIPS 2020)",
+     "url": "https://arxiv.org/abs/2006.10739",
+     "why_zh": "从神经正切核的角度解释为什么需要位置编码（频谱偏差）。Quark 对射线方向差向量做 8 个 octave 的正弦编码，消融显示去掉后下降 0.09 dB，原理就在这里。"
+    },
+    {
+     "title": "Image Quality Assessment: From Error Visibility to Structural Similarity (Wang et al., TIP 2004)",
+     "url": "https://doi.org/10.1109/TIP.2003.819861",
+     "why_zh": "SSIM 的原始论文。Ha et al. 的 TCC 指标直接对帧差图计算 SSIM，读懂 SSIM 的亮度、对比度、结构三项分解，才能理解 TCC 衡量的是什么。"
+    },
+    {
+     "title": "The Unreasonable Effectiveness of Deep Features as a Perceptual Metric (Zhang et al., CVPR 2018)",
+     "url": "https://arxiv.org/abs/1801.03924",
+     "why_zh": "LPIPS 指标。Quark 用 10·L1 + LPIPS 训练，两篇锚点都用 LPIPS 评测；Ha et al. 在 ENeRF-Outdoor 上四项保真度指标里唯一领先的就是 LPIPS。"
+    },
+    {
+     "title": "Instant Neural Graphics Primitives with a Multiresolution Hash Encoding (Müller et al., SIGGRAPH 2022)",
+     "url": "https://arxiv.org/abs/2201.05989",
+     "why_zh": "用多分辨率哈希网格加小 MLP，把 NeRF 训练从小时级降到秒级。它是 Quark Tab.3 中 INGP 基线的来源，也让你理解“显式网格特征 + 小网络”这一加速范式。"
+    },
+    {
+     "title": "Advances in Neural Rendering (Tewari et al., Eurographics 2022 STAR)",
+     "url": "https://arxiv.org/abs/2111.05849",
+     "why_zh": "神经渲染的系统综述，覆盖表示、可泛化、动态和人体等方向。读完可以给阶段 5–7 要读的论文建立一张总地图。"
+    }
+   ],
+   "resources": [
+    {
+     "title": "Dive into Deep Learning — Ch.7–8 (CNN, ResNet), Ch.11 (Attention & Transformers)",
+     "url": "https://d2l.ai/chapter_attention-mechanisms-and-transformers/index.html",
+     "type": "book",
+     "note_zh": "免费在线书，附 PyTorch 代码。第 7–8 章补卷积与残差网络，第 11 章补注意力。建议亲手写一个多头 cross-attention，为阶段 6 的 One-to-many attention 练习做准备。"
+    },
+    {
+     "title": "MIT 6.S980 Machine Learning for Inverse Graphics (Vincent Sitzmann, Fall 2023)",
+     "url": "https://scenerepresentations.org/courses/2023/fall/inverse-graphics/",
+     "type": "course",
+     "note_zh": "系统讲解场景表示、可微渲染、NeRF、可泛化方法和光场网络，是“神经渲染核心”最贴近的一门课，可以覆盖阶段 4 和阶段 5。"
+    },
+    {
+     "title": "tiny_nerf.ipynb（NeRF 官方仓库）",
+     "url": "https://github.com/bmild/nerf/blob/master/tiny_nerf.ipynb",
+     "type": "code",
+     "note_zh": "不到 200 行的极简 NeRF。先读懂它，再用 PyTorch 重写一遍。"
+    },
+    {
+     "title": "Nerfstudio 文档：Nerfacto",
+     "url": "https://docs.nerf.studio/nerfology/methods/nerfacto.html",
+     "type": "tutorial",
+     "note_zh": "说明了一个工程化 NeRF 如何组合哈希编码、proposal 采样、外观嵌入和位姿优化，可以用来在自采数据上快速跑出结果。"
+    }
+   ],
+   "project": {
+    "title_zh": "从零写一个 tiny NeRF，并在自采场景上跑 nerfacto",
+    "task_zh": "（1）用 PyTorch 从零实现 NeRF：射线生成（复用阶段 1 的代码）、分层采样与层级采样、位置编码、体渲染（复用阶段 3 的公式），在 Blender lego 或 LLFF fern 上用 100×100 到 200×200 的分辨率训练。（2）消融：去掉位置编码；把 L 从 10 改成 4；只用粗网络。报告 PSNR、SSIM、LPIPS（用 pip 安装的 lpips 包）。（3）把阶段 1 的自采场景用 nerfstudio 的 nerfacto 训练，记录训练时间和各项指标。（4）小练习：实现一个标准多头 cross-attention（1 个 query 对 M 个 key/value），为阶段 6 做准备。",
+    "deliverable_zh": "tiny NeRF 代码及其训练曲线；一张消融表（PE、L、层级采样）；自采场景的 nerfacto 环绕视频；一份不超过 1 页的笔记，比较 PSNR、SSIM、LPIPS 三个指标在你的结果上排序是否一致。",
+    "hints_zh": "近/远平面可以直接用 LLFF 的 bounds。先在单张图上做 2D 坐标拟合，把位置编码的效果看清楚，再上 3D。训练不稳定时，先检查射线方向约定和像素中心的 +0.5 偏移。"
+   },
+   "checkpoint_zh": [
+    "不加位置编码时 NeRF 为什么会糊？从 Fourier Features 的角度解释。Quark 为什么对“射线方向差向量”而不是 3D 坐标做编码？",
+    "NeRF 的层级采样和 Quark 的“由粗到细 + layer collapse”都在做“把计算集中到表面附近”。两者有什么异同？",
+    "PSNR 提高 1 dB 相当于 MSE 下降多少？为什么 LPIPS 与 PSNR 的排序有时不一致？论文中的 L1 数值应当如何确认量纲（0–1 还是 0–255）？",
+    "什么是展开优化（algorithm unrolling）？DeepView 为什么把它称为 learned gradient descent？Quark 的 Update & Fuse 对应梯度下降中的哪一步？",
+    "Instant-NGP 的哈希冲突为什么通常不会严重损害质量？"
+   ]
+  },
+  {
+   "id": "S5",
+   "title_zh": "阶段 5：3D Gaussian Splatting 与可泛化 / 前馈新视角合成",
+   "duration_zh": "3 周（约 45 小时）",
+   "goal_zh": "吃透 3DGS：各向异性高斯的参数化，按 EWA 把 3D 协方差投影成 2D，tile 化光栅、排序后 alpha 合成，以及自适应致密化，并会用 gsplat。然后理解 NVS 从“逐场景优化”走向“前馈泛化”的四条路线：①IBR 式（IBRNet、ENeRF：从源视图取特征或颜色，沿目标射线聚合）；②像素对齐前馈高斯（pixelSplat、MVSplat、GPS-Gaussian、GS-LRM）；③几何基础模型（DUSt3R、VGGT）；④无几何 Transformer 渲染器（LVSM）。学完应当能说清：Quark 属于“IBR + 分层表示”路线，ENeRF 是两篇锚点共同的主要基线，GPS-Gaussian 是 Ha et al. 的重训基线，而 Ha et al. 的“像素高斯 + 逐视角光栅”借用了 3DGS 的光栅器。",
+   "concept_ids": [
+    "n-3dgs",
+    "n-generalizable",
+    "r-raster",
+    "i-blending",
+    "l-attention",
+    "d-mvs"
+   ],
+   "advanced_ids": [
+    "a-3dgs-ext",
+    "a-generalizable-ibr",
+    "a-ff-3dgs",
+    "a-geometry-free"
+   ],
+   "papers": [
+    {
+     "title": "3D Gaussian Splatting for Real-Time Radiance Field Rendering (Kerbl et al., SIGGRAPH 2023)",
+     "url": "https://arxiv.org/abs/2308.04079",
+     "why_zh": "用可微光栅化的 3D 高斯取代 NeRF 的光线步进，实现 1080p 实时渲染。Ha et al. 直接用 3DGS 光栅器把逐像素高斯渲染到目标视角；Quark 在 DL3DV 和 Mip-NeRF360 上与 3DGS 正面比较。"
+    },
+    {
+     "title": "IBRNet: Learning Multi-View Image-Based Rendering (Wang et al., CVPR 2021)",
+     "url": "https://arxiv.org/abs/2102.13090",
+     "why_zh": "可泛化 IBR 的代表作：对每个 3D 采样点从邻近源视图聚合特征和颜色，预测混合权重和密度，再做体渲染。它和 Quark“从输入图像取色、学习 blend weights”的思路相同，也是 Ha et al. 的基线之一。"
+    },
+    {
+     "title": "Efficient Neural Radiance Fields for Interactive Free-viewpoint Video (ENeRF, Lin et al., SIGGRAPH Asia 2022)",
+     "url": "https://arxiv.org/abs/2112.01517",
+     "why_zh": "用级联代价体预测深度，只在表面附近少量采样做体渲染，实现可泛化的实时动态 NVS。它是 Quark（Tab.1 中 ENeRF 为 205 ms）和 Ha et al. 共同的主要对手，ENeRF-Outdoor 数据集也出自这里。"
+    },
+    {
+     "title": "MVSplat: Efficient 3D Gaussian Splatting from Sparse Multi-View Images (Chen et al., ECCV 2024)",
+     "url": "https://arxiv.org/abs/2403.14627",
+     "why_zh": "用平面扫描代价体预测深度，再回归像素对齐高斯，把阶段 2 的 MVS 与 3DGS 接在一起，是前馈 3DGS 中可读性最好的基线。"
+    },
+    {
+     "title": "GPS-Gaussian: Generalizable Pixel-wise 3D Gaussian Splatting for Real-time Human Novel View Synthesis (Zheng et al., CVPR 2024)",
+     "url": "https://arxiv.org/abs/2312.02155",
+     "why_zh": "先做立体匹配得到深度，再预测逐像素高斯参数，用于实时人体 NVS。Ha et al. 用自己的数据重训了它作为基线，它的逐帧独立预测在时间一致性（STED）上表现很差，这正好说明了 Ha et al. 的研究动机。"
+    },
+    {
+     "title": "LVSM: A Large View Synthesis Model with Minimal 3D Inductive Bias (Jin et al., ICLR 2025)",
+     "url": "https://arxiv.org/abs/2410.17242",
+     "why_zh": "不显式建模 3D 几何，直接用 Transformer 从 Plücker 射线 token 回归像素。它代表与 Quark 强几何偏置相对的另一端，也是 2026 年 Efficient-LVSM、SVSM、LagerNVS 等工作的起点。"
+    }
+   ],
+   "resources": [
+    {
+     "title": "Mathematical Supplement for the gsplat Library (Ye & Kanazawa, 2023)",
+     "url": "https://arxiv.org/abs/2312.02121",
+     "type": "tutorial",
+     "note_zh": "逐步推导 3DGS 的前向投影、协方差变换和反向梯度，是读懂 3DGS 论文附录的最佳配套材料。"
+    },
+    {
+     "title": "gsplat 官方文档（含 rasterization API 与示例）",
+     "url": "https://docs.gsplat.studio/",
+     "type": "code",
+     "note_zh": "rasterization() 接口可以直接输出 RGB、alpha 和深度。本阶段项目，以及阶段 7 Ha et al. 的像素高斯练习，都基于它。"
+    },
+    {
+     "title": "graphdeco-inria/gaussian-splatting（官方实现）",
+     "url": "https://github.com/graphdeco-inria/gaussian-splatting",
+     "type": "code",
+     "note_zh": "原版训练代码和 SIBR 查看器，适合对照阅读致密化与剪枝的具体实现。"
+    },
+    {
+     "title": "donydchen/mvsplat（官方代码）",
+     "url": "https://github.com/donydchen/mvsplat",
+     "type": "code",
+     "note_zh": "提供 RealEstate10K 和 ACID 上的预训练模型，可以在自己的两视角数据上直接推理，体验前馈 3DGS 的速度与失败模式。"
+    }
+   ],
+   "project": {
+    "title_zh": "gsplat 逐场景优化 vs 像素高斯前向 warping vs 前馈模型",
+    "task_zh": "（1）用 gsplat 的 simple_trainer 在阶段 1 的自采场景（或 Mip-NeRF360 的一个场景）上训练 3DGS，记录训练时间、高斯数量、FPS、PSNR 和 LPIPS，并与阶段 4 的 nerfacto 对比。（2）像素高斯（即 Ha et al. 导读练习 2）：在 TUM RGB-D 上把每个像素反投影成各向同性高斯，σ=c·D/f，c 取 0.5、1、2，用 gsplat 渲染到相隔约 10 帧的目标视角；比较“逐视角渲染后按 alpha 选择”和“合并后单次渲染”两种方式的空洞率与 PSNR。（3）用 MVSplat 或 IBRNet 的预训练模型，在你自己的 2–3 视角输入上推理，记录耗时，观察遮挡边缘和大基线下的失败情况。",
+    "deliverable_zh": "一张“nerfacto / 3DGS / 像素高斯 warping / 前馈模型”四种方法的对比表（重建耗时、渲染 FPS、PSNR、LPIPS），以及一组典型失败案例截图（飞点、边缘交错条纹、外推空洞），每张配一句原因分析。",
+    "hints_zh": "TUM 的位姿要转成 world-to-camera 的 viewmat。注意 gsplat 输出的颜色是否已经预乘 alpha。合并单次渲染时，深度边缘出现交错条纹，对应 Ha et al. 论文 Fig.4a，这是理解他们为什么逐视角渲染的关键现象。"
+   },
+   "checkpoint_zh": [
+    "推导 3D 协方差 Σ 投影到屏幕的 2D 协方差 Σ' = J W Σ Wᵀ Jᵀ，J 是什么？为什么是近似？这和 EWA splatting 有什么关系？",
+    "3DGS 与 NeRF 的渲染公式有哪些相同之处（排序后的 alpha 合成）和不同之处（光栅化 vs 光线步进）？为什么 3DGS 会出现 popping（StopThePop 要解决的问题）？",
+    "IBRNet/ENeRF 为什么能泛化到新场景，而 NeRF 或 3DGS 不能？它们付出的代价是什么？",
+    "像素对齐前馈高斯（MVSplat、GPS-Gaussian）逐帧独立预测时，为什么会闪烁？Ha et al. 分别用哪两个模块缓解这个问题？",
+    "LVSM 这类“无几何”模型与 Quark 这类“强几何偏置”模型，在数据需求、外推能力和实时性上各有什么取舍？"
+   ]
+  },
+  {
+   "id": "S6",
+   "title_zh": "阶段 6：分层表示、learned render-and-refine 与 Quark 精读复现",
+   "duration_zh": "4 周（约 60 小时）",
+   "goal_zh": "沿 Stereo Magnification → LLFF → DeepView → Layered Mesh（DeepView Video）→ Quark 这条谱系读完学习式分层 NVS。重点理解以下几点：MPI 如何从平面扫描体学出来；DeepView 为什么把“渲染 → 比较 → 更新”写成学习化梯度下降，以及其中的 P 与 Pᵀ（splat 与反投影互为伴随）；Quark 如何把这套机制嵌入由粗到细的多尺度 UNet 结构，包括 LDM（每层含深度、density 和 blend weights）、层随分辨率提高而合并的 layer collapse、One-to-many attention（把 K/V 投影折叠进 Q 和输出投影）、射线方向编码 γ，以及 post-activation 上采样；最后用 IBR 混合全分辨率输入图像，在单张 A100 上达到 1080p/30fps。完成本站 Quark 导读中的 6 个练习，其中 Mini-Quark 是本阶段的核心交付。",
+   "concept_ids": [
+    "i-layered",
+    "i-psv",
+    "l-iterative",
+    "l-attention",
+    "l-encoding",
+    "r-alpha",
+    "g-depth",
+    "f-image",
+    "i-blending"
+   ],
+   "advanced_ids": [
+    "a-layered-nvs",
+    "a-diff-render"
+   ],
+   "papers": [
+    {
+     "title": "Stereo Magnification: Learning View Synthesis using Multiplane Images (Zhou et al., SIGGRAPH 2018)",
+     "url": "https://arxiv.org/abs/1805.09817",
+     "why_zh": "学习式 MPI 的起点：网络从平面扫描体一次性预测每层的 RGBA 和混合权重。Quark 的 LDM 与 blend weights 设计都可以从这里找到源头。"
+    },
+    {
+     "title": "Local Light Field Fusion: Practical View Synthesis with Prescriptive Sampling Guidelines (Mildenhall et al., SIGGRAPH 2019)",
+     "url": "https://arxiv.org/abs/1905.00889",
+     "why_zh": "为每个输入视角预测一个 MPI，再在渲染时混合相邻 MPI，并用 Plenoptic Sampling 给出拍摄指南。它的 LLFF 数据格式和 fern 等场景，是本站 Quark 练习的默认数据。"
+    },
+    {
+     "title": "DeepView: View Synthesis with Learned Gradient Descent (Flynn et al., CVPR 2019)",
+     "url": "https://arxiv.org/abs/1906.07316",
+     "why_zh": "Quark 的直系前身，一作相同：把 MPI 估计写成展开的梯度下降，每步把当前 MPI 渲染回输入视角、计算梯度分量，再由网络更新。Quark 的 render-and-refine（消融中去掉后下降 0.70 dB）就是它的实时化版本。Spaces 数据集也出自这篇。"
+    },
+    {
+     "title": "Immersive Light Field Video with a Layered Mesh Representation (Broxton et al., SIGGRAPH 2020)",
+     "url": "https://augmentedperception.github.io/deepviewvideo/",
+     "why_zh": "把 DeepView 扩展到 46 相机的光场视频，把 MSI 转成分层网格加纹理图集后用视频编码压缩传输。Quark 团队的视频化和系统化路线从这里开始，也展示了分层表示如何进入 v-codec 层面。"
+    },
+    {
+     "title": "Quark: Real-time, High-resolution, and General Neural View Synthesis (Flynn et al., SIGGRAPH Asia 2024)",
+     "url": "https://arxiv.org/abs/2411.16680",
+     "why_zh": "锚点 A。精读 Sec.3（LDM 参数化 Eq.3–4、Init/Update & Fuse、One-to-many attention、post-activation、Eq.1 的 IBR 输出）、Tab.1–4 和附录 A 的 FLOPs 分析。结合本站导读的 reading experiments，特别留意三点：Tab.2 的 DL3DV 设定更接近插值；Tab.3 在 Deep Blending 上失败；消融中“直接输出 RGB”下降 1.23 dB，是降幅最大的一项。"
+    }
+   ],
+   "resources": [
+    {
+     "title": "DeepView 项目主页",
+     "url": "https://augmentedperception.github.io/deepview/",
+     "type": "tutorial",
+     "note_zh": "包含论文、补充视频和 Spaces 数据集链接。建议先看补充视频中迭代过程的可视化，再读论文。"
+    },
+    {
+     "title": "augmentedperception/spaces_dataset",
+     "url": "https://github.com/augmentedperception/spaces_dataset",
+     "type": "code",
+     "note_zh": "Quark 和 DeepView 使用的 16 相机阵列数据，附带读取工具。Mini-Quark 可以用它代替 LLFF 做多视角训练。"
+    },
+    {
+     "title": "google/stereo-magnification（官方代码）",
+     "url": "https://github.com/google/stereo-magnification",
+     "type": "code",
+     "note_zh": "MPI 生成与渲染的参考实现（TensorFlow）。其中单应和 over 合成部分可以直接对照你在阶段 3 写的 MPI 渲染器。"
+    },
+    {
+     "title": "Quark 项目主页",
+     "url": "https://quark-3d.github.io/",
+     "type": "blog",
+     "note_zh": "官方视频和逐数据集的结果对比页。截至 2026-09 代码与数据均未公开，因此需要自己动手复现。"
+    }
+   ],
+   "project": {
+    "title_zh": "Mini-Quark：低分辨率 LDM + IBR render-and-refine（复用 Quark 导读练习）",
+    "task_zh": "按顺序完成本站 Quark 导读的练习：①等视差分层与 over 合成（NumPy 实现 Eq.3–4，用 LLFF 的 bounds 设定 η、f）；②用 grid_sample 实现反投影 Pᵀ，用 autograd 得到 splat P，做伴随测试 ⟨Px,y⟩=⟨x,Pᵀy⟩，并在 fern 上构建 32 层平面扫描体；③射线方向编码 γ 与最近 8 视角选择；④One-to-many attention 的折叠等价性验证与 FLOPs/耗时测量（对照附录表 6、7）；⑤post-activation 上采样的边缘实验。最后完成⑥ Mini-Quark：M=4–8 个输入、2 级特征金字塔、C=32、初始 L=8 层；Init 后接 2 个 Update & Fuse 步，第 2 步把 8 层合并为 4 层；按 Eq.1 用 β 混合输入图后做 over 合成；损失为 10·L1 + LPIPS。做两组消融：把 Ĩ 置零（去掉 render-and-refine），以及直接输出 RGB。",
+    "deliverable_zh": "一个 mini_quark 仓库，包含练习 1–5 的单元测试（伴随测试在 float64 下的相对误差约 1e-10，折叠 attention 与标准 attention 的误差约 1e-12）；在 LLFF 或 Spaces 留出视角上的 PSNR/LPIPS 消融表，趋势应与论文 Tab.4 一致（直接输出 RGB 退化最大，去掉 Ĩ 次之）；可视化结果包括各层深度图、σ 图和 β 的 argmax 视角图；以及“单帧推理时间随 M 变化”的曲线。",
+    "hints_zh": "先在 128×192 的分辨率上让流水线跑通，再逐步加分辨率。splat 直接用 grid_sample 的伴随，靠 autograd 实现即可，不必自己写 CUDA。LLFF 位姿要先从 [down,right,back] 转成 OpenCV 约定。论文没有给出频率基，可以用 2^j·π。softmax 的缩放常数在两种 attention 实现中必须一致（论文 Eq.5 写的是 √C）。"
+   },
+   "checkpoint_zh": [
+    "Quark 为什么输出 blend weights（从输入图像取色），而不是直接输出 RGB？结合 Tab.4 的 −1.23 dB 和 IBR 的原理回答。",
+    "P 与 Pᵀ 分别是什么操作？为什么 DeepView/Quark 的更新步要先把当前 LDM splat 到输入视角（Ĩ），再把差异反投影回层空间？这和 min‖P x − I‖² 的梯度有什么关系？",
+    "One-to-many attention 为什么可以把 W^k、W^v 折叠进 Q 和输出投影？这样做节省了哪部分计算？M 增大时，复杂度如何变化？",
+    "layer collapse 如何在“空间分辨率提高”和“层数减少”之间分配计算？为什么最终几何分辨率低于输出分辨率，却仍能输出锐利的 2K 图像？",
+    "Quark 在 Deep Blending 数据集上远低于 3DGS（23.61 vs 30.04），根本原因是什么？如果让你改进，会从视角选择、全局几何还是时间记忆入手？"
+   ]
+  },
+  {
+   "id": "S7",
+   "title_zh": "阶段 7：动态场景、时间一致性与 Ha et al. 精读复现",
+   "duration_zh": "4 周（约 60 小时）",
+   "goal_zh": "理解“3D 视频”和“逐帧新视角合成”的区别：闪烁从哪里来（逐帧独立的深度估计误差、逐视角权重跳变），以及如何度量它（TCC、STED、SDT、SDV、x–t 切片、EPI）。梳理动态表示的几条路线：DyNeRF/K-Planes 这类时空场，D-NeRF/Nerfies 这类形变场，4DGS/Dynamic 3D Gaussians 这类 4D 高斯，以及 3DGStream 这类流式逐帧更新；再对比人体专用路线（Neural Volumes、Neural Body、4K4D）。精读 Ha et al.：逐视角 RAFT-Stereo 深度、颜色差分掩码加 EMA 的时间深度滤波（λ_t、β）、像素高斯逐视角光栅化、image-based TSDF 引导（τ=0.02 m，权重来自局部深度方差），以及以 TSDF 深度、warp 结果和相机特征为输入的 U-Net 混合网络。完成本站 Ha 导读中的 6 个练习。选读：D-NeRF（2011.13961）、Neural Scene Flow Fields（2011.13084）、K-Planes（2301.10241）、Dynamic 3D Gaussians（2308.09713）、4K4D（2310.11448）、Neural Volumes（1906.07751）、Neural Body（2012.15838）、DynamicFusion（CVPR 2015）。",
+   "concept_ids": [
+    "n-dynamic",
+    "v-temporal",
+    "v-metrics",
+    "d-tsdf",
+    "d-stereo",
+    "d-flow",
+    "f-prob",
+    "g-rig",
+    "l-cnn",
+    "l-loss"
+   ],
+   "advanced_ids": [
+    "a-dynamic-4d",
+    "a-temporal-video",
+    "a-human-capture"
+   ],
+   "papers": [
+    {
+     "title": "Neural 3D Video Synthesis from Multi-view Video (DyNeRF, Li et al., CVPR 2022)",
+     "url": "https://arxiv.org/abs/2103.02597",
+     "why_zh": "提出时间条件化的 NeRF，并发布了 N3DV/DyNeRF 多视角视频数据集。两篇锚点都在这个数据集上评测，Ha et al. 用其中 3 个场景训练。读它可以了解数据的采集设置（相机数、分辨率、同步方式）和评测协议的局限。"
+    },
+    {
+     "title": "Learning Blind Video Temporal Consistency (Lai et al., ECCV 2018)",
+     "url": "https://arxiv.org/abs/1808.00449",
+     "why_zh": "用光流 warping 定义短期和长期时间损失，并提出 warping error 指标。它是“逐帧处理 → 后处理去闪烁”这条路线的代表，可以和 Ha et al.“在几何层面做时间滤波”的思路对照。"
+    },
+    {
+     "title": "Project Starline: A High-Fidelity Telepresence System (Lawrence et al., SIGGRAPH Asia 2021)",
+     "url": "https://doi.org/10.1145/3478513.3480490",
+     "why_zh": "Ha et al. 的 image-based TSDF 融合直接来自 Starline：沿目标射线投影到各深度视角，计算截断距离并加权，找零交叉。Starline 同时给出了完整的 telepresence 系统：采集、压缩、头部追踪的裸眼 3D 显示，端到端延迟约 105.8 ms。"
+    },
+    {
+     "title": "4D Gaussian Splatting for Real-Time Dynamic Scene Rendering (Wu et al., CVPR 2024)",
+     "url": "https://arxiv.org/abs/2310.08528",
+     "why_zh": "用 HexPlane 形变场驱动一组规范空间的 3D 高斯，是“逐场景离线优化的 4D 表示”的代表基线。它质量高、一致性好，但需要离线训练，正好与 Ha 和 Quark 的在线前馈设定形成对比。"
+    },
+    {
+     "title": "3DGStream: On-the-Fly Training of 3D Gaussians for Efficient Streaming of Photo-Realistic Free-Viewpoint Videos (Sun et al., CVPR 2024)",
+     "url": "https://arxiv.org/abs/2403.01444",
+     "why_zh": "逐帧用神经变换缓存和少量新增高斯更新上一帧的 3DGS，实现流式的每帧秒级训练。它代表“在线优化”这条路线，介于逐场景 4DGS 和纯前馈的 Quark、Ha 之间。"
+    },
+    {
+     "title": "Geometry-guided Online 3D Video Synthesis with Multi-View Temporal Consistency (Ha et al., CVPR 2025)",
+     "url": "https://arxiv.org/abs/2505.18932",
+     "why_zh": "锚点 B。精读 Sec.3 和附录 A.1–A.8。要特别读懂两张表：Table 3 显示画质几乎全部来自混合网络（No Blending 24.64 dB，完整模型 31.17 dB），而 TSDF 引导和时间滤波主要把 STED 从 95.42 和 89.62 降到 68.76；Table 1 和 2 显示 ENeRF-Outdoor 上的优势只体现在部分指标上。"
+    }
+   ],
+   "resources": [
+    {
+     "title": "Neural 3D Video Synthesis 项目主页（N3DV / DyNeRF 数据集）",
+     "url": "https://neural-3d-video.github.io/",
+     "type": "tutorial",
+     "note_zh": "数据下载入口在 https://github.com/facebookresearch/Neural_3D_Video。poses_bounds.npy 采用 LLFF 格式，阶段 1 写的解析器可以直接复用。"
+    },
+    {
+     "title": "Ha et al. 项目主页",
+     "url": "https://nkhan2.github.io/projects/geometry-guided-2025/",
+     "type": "blog",
+     "note_zh": "截至 2026-09 只有论文和 bibtex，没有代码、权重或数据，需要自己复现。CVF 提供的补充材料 zip 中多为结果视频，建议逐帧对照观察闪烁。"
+    },
+    {
+     "title": "An Introduction to the Kalman Filter (Welch & Bishop, UNC TR 95-041)",
+     "url": "https://www.cs.utexas.edu/~pstone/Courses/393Rfall15/readings/Welch+Bishop-TR-95.pdf",
+     "type": "tutorial",
+     "note_zh": "用来理解 Ha et al. 的 EMA 与固定增益卡尔曼滤波的等价关系，以及“噪声抑制 vs 运动响应”这一权衡的来源。"
+    },
+    {
+     "title": "richzhang/PerceptualSimilarity (LPIPS)",
+     "url": "https://github.com/richzhang/PerceptualSimilarity",
+     "type": "code",
+     "note_zh": "LPIPS 的官方实现。在一致性评测工具箱里用它补充感知指标。"
+    }
+   ],
+   "project": {
+    "title_zh": "复现 Ha et al. 的几何与时间模块 + 迷你混合网络（复用 Ha 导读练习）",
+    "task_zh": "按顺序完成本站 Ha 导读的练习：①EMA 与软差分掩码的数值实验：在合成数据上验证静止区标准差之比，再在 DyNeRF 视频上可视化掩码；②像素高斯前向 warping（阶段 5 已完成，这里直接复用）；③用 PyTorch 实现 image-based TSDF 与 raymarch（Eq.9–12），分别实现两种符号约定并记录哪种能收敛，再与 Open3D 体素 TSDF 对比；④在 DyNeRF 两台相邻相机上用 RAFT-Stereo 估计 60 帧深度，诊断时间闪烁（标准差是否随 Z² 增长），再加上 EMA；⑥实现一致性评测工具箱（TCC、SDT、SDV、x–t 切片、EPI），并用“加亮度闪烁 / 全部帧模糊 / 一半帧模糊”三组对照实验检验每个指标的敏感性。最后完成⑤：在 1/4 分辨率下，用 K=4、共 37 通道的输入训练一个 4 层 U-Net 混合网络，训练四个版本（完整版、去掉 TSDF 输入、L_Depth 系数设为 0、按距离加权），报告 PSNR、TCC 和 SDT。",
+    "deliverable_zh": "一个 mini_ha 仓库，包含：EMA 实验的理论值与实测值对照（β=0.6 时静止区标准差比约 0.65）；TSDF 深度与传感器深度的 MAE 和覆盖率；RAFT-Stereo“时间标准差 vs Z”曲线；一致性评测工具箱及三组对照实验的结论；迷你混合网络的四版本对比表（预期：有网络与无网络差距很大，去掉 TSDF 或 L_Depth 主要让一致性指标变差），以及一段不少于 30 帧的新视角视频和对应的 x–t 切片。",
+    "hints_zh": "所有 warp 结果都预先计算并缓存到磁盘；相机特征要在空间上广播；Eq.(7) 的分母要补上求和并加 ε。DyNeRF 的 poses_bounds 没有畸变参数，可以先假设无畸变。TCC 的输入是帧差的绝对值图。如果结果与论文 Table 3 的趋势不同，要区分原因是深度质量、数据量，还是训练集与测试集同域的程度。"
+   },
+   "checkpoint_zh": [
+    "Ha et al. 的时间滤波为什么只在“静止区域”生效？颜色差分掩码为什么在 1/4 分辨率上计算、再做 3×3 max-pool 并上采样？它会把哪些情况误判为运动（火焰、反光、压缩噪声）？",
+    "TCC、STED、SDT、SDV 分别衡量什么？为什么对所有帧做同样的模糊时 PSNR 会下降，而 SDT 几乎不变？",
+    "Table 3 中 No TSDF Guidance 与完整模型的 PSNR 只差 0.01 dB，而 STED 从 95.42 降到 68.76。这说明 TSDF 引导的作用是什么？论文还缺少哪些消融（L_Depth、𝒟^{t−1} 回灌、超参数）？",
+    "逐场景 4DGS、流式在线优化（3DGStream）、逐帧前馈（Quark、Ha）三条路线，在延迟、画质、时间一致性和是否需要预处理上各处于什么位置？",
+    "如果把 Quark 用在视频上，你会从 Ha et al. 借用哪些机制来解决它的闪烁问题？需要付出多少额外延迟？"
+   ]
+  },
+  {
+   "id": "S8",
+   "title_zh": "阶段 8：系统视角与 2025–2026 前沿——从复现走向选题",
+   "duration_zh": "4 周起（约 60 小时，之后持续进行）",
+   "goal_zh": "把算法放回真实系统中理解：采集阵列、深度前端、表示、编码传输、渲染、裸眼 3D 或头显显示，以及端到端延迟预算和人眼感知（辐辏–调节冲突、运动视差）。对比 Holoportation（传显式体融合几何）、Starline/Google Beam（接收端图像域渲染）、VirtualCube 和 Tele-Aloha（稀疏 RGB 相机加学习式合成）几种架构。然后跟进 2025–2026 年的前沿方向：几何基础模型（DUSt3R → VGGT → 流式与 4D 几何）可能取代“标定 + 立体匹配”前端；无几何 Transformer 渲染器的缩放与实时化（Efficient-LVSM、SVSM、LagerNVS）；Quark 谱系的实时前馈插值（3DTV）；带持久记忆的在线动态 NVS（NSTM）；免标定的前馈直播（LiveStre4m）；扩散先验（DDPM/LDM → 视频扩散 → 单步修复）；以及体积视频和高斯的压缩与跨层延迟。最终写出一份可在 3 个月内验证的研究计划。选读：DDPM（2006.11239）、Latent Diffusion（2112.10752）、VirtualCube（2112.06730）、DUSt3R（2312.14132）、Depth Anything（2401.10891）、GS-LRM（2404.19702）、Montage4D、High-quality streamable free-viewpoint video（Collet et al., 2015）。",
+   "concept_ids": [
+    "v-codec",
+    "v-perception",
+    "l-diffusion",
+    "d-mono",
+    "g-rig",
+    "v-temporal"
+   ],
+   "advanced_ids": [
+    "a-telepresence-sys",
+    "a-compression",
+    "a-geo-fm",
+    "a-geometry-free",
+    "a-diffusion-3d",
+    "a-ff-3dgs",
+    "a-human-capture"
+   ],
+   "papers": [
+    {
+     "title": "Holoportation: Virtual 3D Teleportation in Real-time (Orts-Escolano et al., UIST 2016)",
+     "url": "https://doi.org/10.1145/2984511.2984517",
+     "why_zh": "实时体融合 telepresence 的经典工作：多组深度相机做 Fusion4D 式融合，再压缩传输网格和纹理。拿它和 Starline 对照，可以理解“传显式 3D”与“接收端图像域渲染”两种架构在带宽、延迟和画质上的差别。"
+    },
+    {
+     "title": "Tele-Aloha: A Low-budget and High-authenticity Telepresence System Using Sparse RGB Cameras (Tu et al., SIGGRAPH 2024)",
+     "url": "https://arxiv.org/abs/2405.14866",
+     "why_zh": "只用 4 台稀疏 RGB 相机，加上级联视差估计和学习式合成，搭出一个低成本 telepresence 系统。它和 Ha et al. 同属“深度 + warping + 学习混合”的系统化落地，适合作为你搭建原型的参照。"
+    },
+    {
+     "title": "VGGT: Visual Geometry Grounded Transformer (Wang et al., CVPR 2025)",
+     "url": "https://arxiv.org/abs/2503.11651",
+     "why_zh": "一次前向就能输出多视角的相机参数、深度图和点图，是几何基础模型的代表。它提出了一个开放问题：Quark 和 Ha 依赖的“离线标定 + COLMAP + RAFT-Stereo”前端，能否被一个统一模型取代？代价是什么？"
+    },
+    {
+     "title": "3DTV: A Feedforward Interpolation Network for Real-Time View Synthesis (arXiv 2026)",
+     "url": "https://arxiv.org/abs/2604.11211",
+     "why_zh": "Quark 谱系在 2026 年的实时前馈工作：用 Delaunay 三角为目标视角选 3 个输入视角以保证角度覆盖，配合位姿感知的深度模块做插值。它针对的正是 Quark 用“最近 8 视角”选视角的失败模式。"
+    },
+    {
+     "title": "Online Neural Space Time Memory for Dynamic Novel View Synthesis (NSTM, arXiv 2026)",
+     "url": "https://arxiv.org/abs/2607.15271",
+     "why_zh": "把周期性的记忆更新和逐帧的记忆使用解耦，在摊销实时的条件下维持分钟级的持久记忆。它直接回应了 Quark 逐帧独立、没有时间记忆的局限，是“前馈 NVS + 时间一致性”方向最接近两篇锚点交集的前沿工作之一。"
+    },
+    {
+     "title": "Latency in Real-Time 3D Volumetric Streaming: A Comprehensive Study (arXiv 2026)",
+     "url": "https://arxiv.org/abs/2605.22131",
+     "why_zh": "在一个真实的体积流系统上，对应用层、传输层和网络层的延迟做跨层剖析。算法论文通常只报告 GPU 推理时间，这篇可以帮你把“30 fps”换算成端到端延迟预算，判断一个新方法离能部署还差多远。"
+    }
+   ],
+   "resources": [
+    {
+     "title": "Google Beam technology specifications",
+     "url": "https://beam.google/technology/",
+     "type": "blog",
+     "note_zh": "Starline 产品化后的官方技术说明，可以与 Starline 论文中的采集、显示和延迟设计对照阅读。"
+    },
+    {
+     "title": "3DGS.zip: A survey on 3D Gaussian Splatting Compression Methods（交互式对比页）",
+     "url": "https://w-m.github.io/3dgs-compression-survey/",
+     "type": "tutorial",
+     "note_zh": "持续更新的 3DGS 压缩方法对比表，列出大小、PSNR 和方法类别，帮助你判断“传表示”这条路线的带宽下限。"
+    },
+    {
+     "title": "CMU 16-825 Learning for 3D Vision",
+     "url": "https://learning3d.github.io/",
+     "type": "course",
+     "note_zh": "课程每年更新，覆盖几何基础模型、前馈重建、扩散与 3D 生成等较新的主题。可以把它的阅读列表当作跟进前沿的索引。"
+    },
+    {
+     "title": "MIT 6.S184: Introduction to Flow Matching and Diffusion Models",
+     "url": "https://diffusion.csail.mit.edu/",
+     "type": "course",
+     "note_zh": "扩散与 flow matching 的系统入门课，附讲义和实验。读 Difix3D+ 这类单步修复、视频扩散插帧、LiveStre4m 等工作之前建议先学。"
+    }
+   ],
+   "project": {
+    "title_zh": "最小可行研究：给逐帧前馈 NVS 加上时间一致性，并完成选题报告",
+    "task_zh": "（1）系统实验：以阶段 6 的 Mini-Quark（或 MVSplat 等预训练前馈模型）作为逐帧基线，在 DyNeRF 的一段 60 帧序列上渲染固定新视角视频，用阶段 7 的工具箱测 PSNR、LPIPS、TCC、STED、SDT。然后至少尝试两种时间一致性改进：（a）借用 Ha et al. 的差分掩码加 EMA，对 LDM 深度或 blend weights 做时间滤波；（b）把上一帧的特征或 LDM 作为额外输入（循环状态）；（c）选做：用 VGGT 或 Depth Anything 系列替换深度前端，评估免标定的代价。报告每种改进的质量、一致性和额外延迟。（2）延迟预算：参照 Starline（约 105.8 ms 端到端）和上面的延迟研究，为你的系统写出“采集 → 编码 → 传输 → 重建 → 渲染 → 显示”的分项预算表。（3）选题：读 10 篇以上 2025–2026 前沿论文（可从本站调研的 rt-nvs、ff-nvs、geo-fm、4d-recon、tele-sys 各区挑选），整理成对比表，写一份 2 页的研究计划，包括问题、假设、最小实验、评测协议、风险和被抢先（scooping）的风险。",
+    "deliverable_zh": "一张“基线 vs 两种时间一致性改进”的质量、一致性、延迟对比表，以及对应视频的 x–t 切片；一张端到端延迟预算表；一份 10 篇以上前沿论文的对比表；一份 2 页研究计划，需经导师或组会讨论后定稿。",
+    "hints_zh": "选题时优先找两篇锚点共同留下的空白：Quark 缺时间一致性；Ha et al. 依赖高质量同步深度，在高光处失败；两者都要求离线标定；评测都偏向近轨迹插值。先用最便宜的实验验证假设是否成立（例如只在 1/4 分辨率、单个场景上测 STED），再决定是否投入大模型训练。每周固定在 arXiv cs.CV 和本站调研页上检索新工作，降低被抢先的风险。"
+   },
+   "checkpoint_zh": [
+    "Holoportation、Starline、Tele-Aloha 分别在发送端传什么（几何、RGB-D、RGB）、在哪一端做重建和渲染？这些选择如何影响带宽、延迟和多人扩展性？",
+    "一个 30 fps 的前馈 NVS 模型（约 33 ms）放进 telepresence 系统后，端到端延迟还包括哪些环节？约 100 ms 的预算应当怎样分配？",
+    "几何基础模型（VGGT 等）取代“标定 + 立体匹配”前端，会带来哪些好处（免标定、鲁棒）？又会带来哪些风险（度量尺度、时间抖动、延迟）？",
+    "Quark 与 LVSM/SVSM 这类无几何渲染器，在“强 3D 偏置 vs 可扩展性”的连续谱上分别处于什么位置？你认为 2026 年的趋势是什么，依据是什么？",
+    "用一句话写出你的研究假设，并说明：能在 2 周内证伪它的最小实验是什么？"
+   ]
+  }
+ ],
+ "tools": [
+  {
+   "name": "COLMAP",
+   "url": "https://colmap.github.io/",
+   "use_zh": "SfM 与 MVS 的标准工具，用来获得相机位姿、稀疏点和近/远平面（阶段 1–2）。GLOMAP（https://github.com/colmap/glomap）提供更快的全局 SfM 替代方案。"
+  },
+  {
+   "name": "OpenCV",
+   "url": "https://github.com/opencv/opencv",
+   "use_zh": "相机标定、stereoRectify、StereoSGBM、图像 I/O 和几何变换。阶段 1、2、7 都会用到。"
+  },
+  {
+   "name": "Open3D",
+   "url": "https://www.open3d.org/",
+   "use_zh": "点云、网格和 RGB-D 的处理与可视化，ScalableTSDFVolume 体素 TSDF 融合与 raycasting。可作为自写 TSDF 的对照（阶段 2、7）。"
+  },
+  {
+   "name": "PyTorch3D",
+   "url": "https://pytorch3d.org/",
+   "use_zh": "可微网格与点云渲染器、相机工具和 3D 变换，适合快速搭建可微渲染实验（阶段 3–4，对应 a-diff-render）。"
+  },
+  {
+   "name": "nerfstudio",
+   "url": "https://docs.nerf.studio/",
+   "use_zh": "模块化的 NeRF/3DGS 框架，数据处理（ns-process-data）、nerfacto 训练和交互式查看器（阶段 4–5）。"
+  },
+  {
+   "name": "gsplat",
+   "url": "https://docs.gsplat.studio/",
+   "use_zh": "高效开源的 3DGS CUDA 光栅化库，rasterization() 可以同时输出 RGB、alpha 和深度。3DGS 训练和 Ha et al. 的像素高斯练习都用它（阶段 5、7）。"
+  },
+  {
+   "name": "NVIDIA Kaolin",
+   "url": "https://github.com/NVIDIAGameWorks/kaolin",
+   "use_zh": "NVIDIA 的 3D 深度学习库，提供可微渲染、网格和体素运算以及表示转换，适合在做三维表示研究时使用。"
+  },
+  {
+   "name": "nvdiffrast",
+   "url": "https://github.com/NVlabs/nvdiffrast",
+   "use_zh": "高性能可微光栅化基元。需要网格加纹理的表示（例如 layered mesh、人体网格）时使用。"
+  },
+  {
+   "name": "RAFT-Stereo",
+   "url": "https://github.com/princeton-vl/RAFT-Stereo",
+   "use_zh": "Ha et al. 使用的立体深度前端。demo.py 加 --save_numpy 可以直接输出视差（阶段 2、7）。光流版 RAFT 见 https://github.com/princeton-vl/RAFT。"
+  },
+  {
+   "name": "Depth Anything V2",
+   "url": "https://github.com/DepthAnything/Depth-Anything-V2",
+   "use_zh": "强鲁棒的单目相对与度量深度模型，可作为深度前端的替代或先验（阶段 2、8）。"
+  },
+  {
+   "name": "VGGT",
+   "url": "https://github.com/facebookresearch/vggt",
+   "use_zh": "前馈几何基础模型，一次前向输出相机、深度和点图。可用来评估免标定的前端（阶段 8）。"
+  },
+  {
+   "name": "Instant-NGP / tiny-cuda-nn",
+   "url": "https://github.com/NVlabs/instant-ngp",
+   "use_zh": "哈希编码 NeRF 的官方实现和查看器，底层 CUDA 小网络库见 https://github.com/NVlabs/tiny-cuda-nn（阶段 4）。"
+  },
+  {
+   "name": "LPIPS (PerceptualSimilarity)",
+   "url": "https://github.com/richzhang/PerceptualSimilarity",
+   "use_zh": "感知损失与感知指标。Quark 用 10·L1 + LPIPS 训练，两篇锚点都用它评测（阶段 4–8）。"
+  },
+  {
+   "name": "Kornia",
+   "url": "https://github.com/kornia/kornia",
+   "use_zh": "基于 PyTorch 的可微几何视觉库，包含单应 warping、深度与相机工具、SSIM 等，适合写 TCC 等指标和平面扫描（阶段 2、7）。"
+  },
+  {
+   "name": "viser",
+   "url": "https://github.com/nerfstudio-project/viser",
+   "use_zh": "浏览器端 3D 可视化，用来画相机视锥、点云和 LDM 各层，排查坐标约定错误（阶段 1、6）。"
+  },
+  {
+   "name": "EasyVolcap",
+   "url": "https://github.com/zju3dv/EasyVolcap",
+   "use_zh": "浙大开源的体积视频研究框架，集成了 ENeRF、4K4D 等动态方法以及多视角视频数据处理（阶段 5、7）。"
+  },
+  {
+   "name": "FFmpeg",
+   "url": "https://ffmpeg.org/",
+   "use_zh": "多视角视频的抽帧、编码和码率实验（v-codec），以及生成对比视频（阶段 7–8）。"
+  }
+ ],
+ "courses_books": [
+  {
+   "title": "Computer Vision: Algorithms and Applications, 2nd ed. (Richard Szeliski)",
+   "url": "https://szeliski.org/Book/",
+   "type": "book",
+   "note_zh": "免费 PDF，覆盖几何、立体、SfM、IBR 和计算摄影，是整条路线的“字典”。重点读第 2、7、11、12、14 章。"
+  },
+  {
+   "title": "Multiple View Geometry in Computer Vision, 2nd ed. (Hartley & Zisserman)",
+   "url": "https://www.robots.ox.ac.uk/~vgg/hzbook/",
+   "type": "book",
+   "note_zh": "多视几何的权威教材，相机模型、对极几何、三角化和 BA 都有严谨推导。遇到问题时当作参考书查阅即可，不必通读（阶段 1–2）。"
+  },
+  {
+   "title": "TUM Computer Vision II: Multiple View Geometry (Daniel Cremers)",
+   "url": "https://cvg.cit.tum.de/teaching/online/mvg",
+   "type": "course",
+   "note_zh": "有录像和幻灯片的多视几何课程，节奏适合入门（阶段 1–2）。"
+  },
+  {
+   "title": "Stanford CS231A: Computer Vision, From 3D Perception to 3D Reconstruction and Beyond",
+   "url": "https://web.stanford.edu/class/cs231a/",
+   "type": "course",
+   "note_zh": "课程讲义（course notes）短小精悍，覆盖相机模型、对极几何、SfM、立体、光流和场景流（阶段 1–2）。"
+  },
+  {
+   "title": "Physically Based Rendering, 4th ed. (Pharr, Jakob, Humphreys)",
+   "url": "https://pbr-book.org/4ed/contents",
+   "type": "book",
+   "note_zh": "免费在线版。用第 8 章（采样与重建）、第 9 章（反射模型）和第 11 章（透射率与体渲染）打牢渲染基础（阶段 3）。"
+  },
+  {
+   "title": "Dive into Deep Learning (Zhang, Lipton, Li, Smola)",
+   "url": "https://d2l.ai/",
+   "type": "book",
+   "note_zh": "附可运行 PyTorch 代码的深度学习教材，覆盖卷积、残差、注意力、优化与学习率日程（阶段 4）。"
+  },
+  {
+   "title": "Foundations of Computer Vision (Torralba, Isola, Freeman)",
+   "url": "https://visionbook.mit.edu/",
+   "type": "book",
+   "note_zh": "MIT 的新一代视觉教材，在线免费。其中学习式单目深度、光流、神经辐射场等章节，把经典方法与学习方法衔接得很好（阶段 2、4）。"
+  },
+  {
+   "title": "MIT 6.S980: Machine Learning for Inverse Graphics (Vincent Sitzmann)",
+   "url": "https://scenerepresentations.org/courses/2023/fall/inverse-graphics/",
+   "type": "course",
+   "note_zh": "神经场景表示、可微渲染、可泛化 NVS 与光场网络。与阶段 4–5 最贴合的一门研究生课。"
+  },
+  {
+   "title": "CMU 16-825: Learning for 3D Vision",
+   "url": "https://learning3d.github.io/",
+   "type": "course",
+   "note_zh": "每年更新的 3D 学习课程，覆盖三维表示、NeRF/3DGS、几何基础模型与三维生成，作业质量高（阶段 4–8）。"
+  },
+  {
+   "title": "Advances in Neural Rendering (Tewari et al., Eurographics 2022 STAR)",
+   "url": "https://arxiv.org/abs/2111.05849",
+   "type": "paper",
+   "note_zh": "神经渲染的综述，帮你在进入 3DGS 时代之前建立完整的地图。建议在阶段 4 结束时读完。"
+  }
+ ],
+ "tips_zh": [
+  "先把坐标约定写成单元测试：投影后再反投影的误差应为零；相机中心应等于 −Rᵀt；把所有视锥画出来检查是否朝向场景。3D 视觉项目里一大半的 bug 来自 OpenCV、OpenGL、LLFF 三种约定混用，这些检查在阶段 1 就要养成习惯，后面每个项目都复用。",
+  "读每篇论文都按“基础概念 → 公式 → 锚点对应位置”三步走：先在本站基础模块里找到相关的 concept（例如 Ha 的 Eq.(10)–(12) 对应 d-tsdf 和 f-prob），再逐符号手推公式，最后写一句“它在 Quark 或 Ha 里对应什么”。这样经典论文和前沿论文才能连成一张图，而不是一堆孤立的方法名。",
+  "每读一篇论文，至少复现一个“能在 1 小时内跑完的最小数值实验”，例如伴随测试、EMA 方差比、over 合成与体渲染的等价性。能用 20 行代码验证的结论，不要只靠看懂公式来确认。",
+  "看实验表格时先看设定再看数字：训练集是否包含评测场景的同源数据（Ha 用了 DyNeRF 的 3 个场景训练）；评测协议是插值还是外推（Quark 在 DL3DV 上相邻视角很近）；基线是重训的还是直接用原作者权重。本站两篇导读的 reading experiments 就是示范。",
+  "同时关注保真度和时间一致性两类指标。单帧 PSNR 高不代表视频不闪，务必同时报告 TCC、STED、x–t 切片，并用对照实验（加闪烁、模糊）先检验指标本身是否可靠。",
+  "从低分辨率、单场景、短序列开始（例如 1/4 分辨率、30 帧），先把流水线跑通、把趋势看清楚，再逐步放大。warp 结果和深度图这类中间量要缓存到磁盘，这样消融实验能快很多。",
+  "记录延迟时拆开计时：预处理、深度、重建、渲染、后处理分别统计，并注明 GPU 型号和分辨率。Quark 报告的是 A100 上重建加渲染的时间；telepresence 关心的是端到端延迟。两者不能混为一谈。",
+  "建立每周的文献跟踪习惯：固定浏览 arXiv cs.CV 的新论文，并对照本站调研页的前沿分区（rt-nvs、ff-nvs、geo-fm、4d-recon、tele-sys）。给每篇新论文写一句“它和 Quark 或 Ha 的关系”，积累下来就是你的相关工作一节。",
+  "每个阶段结束时，用检查题做一次 10 分钟的口头讲解，讲给同门听或录音给自己听。讲不清楚的地方，就回到该阶段对应的 concept 条目重读。",
+  "选题从两篇锚点的公开局限出发，例如 Quark 没有时间一致性、Ha et al. 在高光处失败、两者都依赖离线标定、评测偏向近轨迹。先用最便宜的实验证明问题存在且可以量化，再动手设计方法。"
+ ]
+}

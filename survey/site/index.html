@@ -1,0 +1,797 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>3D 临场研究图谱</title>
+<meta name="description" content="全站概览、执行摘要、内容导航与调研方法。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]] },
+    options: { skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code", "input", "select", "button"] },
+    svg: { fontCache: "global" },
+    startup: {
+      typeset: false,
+      ready: function () {
+        window.MathJax.startup.defaultReady();
+        if (typeof window.__atlasMathReady === "function") window.__atlasMathReady();
+      }
+    }
+  };
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js"></script>
+<style>
+/* ---------- base (previously supplied by the artifact page skeleton) ---------- */
+html, body { margin: 0; }
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+[hidden] { display: none !important; }
+img { max-width: 100%; }
+
+:root {
+  --bg: #F1F4F3;
+  --surface: #FFFFFF;
+  --surface-2: #E7ECEB;
+  --ink: #111918;
+  --ink-2: #34423F;
+  --muted: #62716E;
+  --rule: #D0D9D7;
+  --accent: #0B6B63;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #D5ECE8;
+  --mile: #8F5400;
+  --mile-soft: #F5E6CC;
+  --good: #1D7438;
+  --good-soft: #DCEFE2;
+  --warn: #9A5A00;
+  --warn-soft: #F7E9D2;
+  --bad: #AE2A1F;
+  --bad-soft: #F7DEDA;
+  --flash: #FFF3C4;
+  --v1: #440154; --v2: #3B528B; --v3: #21918C; --v4: #5EC962; --v5: #FDE725;
+  --serif: "Noto Serif SC", "Songti SC", "STSong", Georgia, serif;
+  --sans: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0B1110; --surface: #121A19; --surface-2: #1A2422; --ink: #E3EBE9; --ink-2: #BCC9C6;
+    --muted: #8A9B98; --rule: #26322F; --accent: #4CCFBE; --accent-ink: #04201D; --accent-soft: #10312D;
+    --mile: #F0B45A; --mile-soft: #37280F; --good: #62D38F; --good-soft: #10301D; --warn: #F0B45A;
+    --warn-soft: #37280F; --bad: #FF8F80; --bad-soft: #3A1714; --flash: #3A3312;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0B1110; --surface: #121A19; --surface-2: #1A2422; --ink: #E3EBE9; --ink-2: #BCC9C6;
+  --muted: #8A9B98; --rule: #26322F; --accent: #4CCFBE; --accent-ink: #04201D; --accent-soft: #10312D;
+  --mile: #F0B45A; --mile-soft: #37280F; --good: #62D38F; --good-soft: #10301D; --warn: #F0B45A;
+  --warn-soft: #37280F; --bad: #FF8F80; --bad-soft: #3A1714; --flash: #3A3312;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.75; }
+a { color: var(--accent); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3, h4 { font-family: var(--serif); text-wrap: balance; line-height: 1.3; margin: 0; }
+p { margin: 0; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.ramp { height: 4px; background: linear-gradient(90deg, var(--v1), var(--v2), var(--v3), var(--v4), var(--v5)); border-radius: 2px; }
+
+.shell { max-width: 1280px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 80px; display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 48px; }
+.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 20px); align-self: start; max-height: calc(100vh - 40px); overflow-y: auto; font-size: 13px; }
+.toc .brand { display: block; font-family: var(--serif); font-weight: 700; font-size: 15px; margin-bottom: 10px; color: var(--ink); text-decoration: none; }
+.toc .brand:hover { color: var(--accent); }
+.toc ol { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 1px; }
+.toc li.grp { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 12px 10px 4px; }
+.toc a { display: block; color: var(--ink-2); text-decoration: none; padding: 3px 10px; border-left: 2px solid var(--rule); }
+.toc a:hover { color: var(--ink); border-left-color: var(--accent); }
+.toc a.on { color: var(--accent); border-left-color: var(--accent); font-weight: 500; }
+.toc a.page.cur { color: var(--ink); border-left-color: var(--accent); font-weight: 700; }
+.toc ol.sub { margin: 2px 0 6px 12px; gap: 0; }
+.toc ol.sub a { font-size: 12.5px; padding: 2px 10px; }
+
+/* ---------- multi-page navigation ---------- */
+.crumbs { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.crumbs a { color: var(--ink-2); text-decoration: none; }
+.crumbs a:hover { color: var(--accent); }
+.crumbs .sep { color: var(--rule); }
+.crumbs b { color: var(--ink); font-weight: 500; }
+.page-head { display: grid; gap: 10px; margin-bottom: -48px; }
+.toc-mobile { display: none; }
+.toc-mobile .chips { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
+.toc-mobile .chips > * { flex: none; }
+.pager { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding-top: 8px; border-top: 1px solid var(--rule); }
+.pager a { display: grid; gap: 2px; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); color: var(--ink); text-decoration: none; }
+.pager a:hover { border-color: var(--accent); }
+.pager a small { font-size: 12px; color: var(--muted); }
+.pager a b { font-family: var(--serif); font-size: 15px; }
+.pager a.next { text-align: right; grid-column: 2; }
+.sitemap { display: grid; gap: 22px; }
+.sitemap .grp-card { display: grid; gap: 10px; }
+.sitemap .grp-card > p { color: var(--ink-2); max-width: 72ch; font-size: 14px; }
+.sitemap .pages { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.sitemap .pages a { display: grid; gap: 4px; align-content: start; padding: 14px 16px; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); color: var(--ink); text-decoration: none; }
+.sitemap .pages a:hover { border-color: var(--accent); }
+.sitemap .pages a b { font-family: var(--serif); font-size: 15.5px; }
+.sitemap .pages a span { font-size: 13px; color: var(--ink-2); }
+.sitemap .pages a i { font-style: normal; font-family: var(--mono); font-size: 11.5px; color: var(--accent); }
+a.start, a.mod { text-decoration: none; }
+a.cchip { display: inline-block; text-decoration: none; }
+a.idref { display: inline; }
+
+main { min-width: 0; display: grid; gap: 72px; }
+section { display: grid; gap: 22px; scroll-margin-top: 24px; min-width: 0; }
+:root { --jump-offset: 16px; }
+[id] { scroll-margin-top: var(--jump-offset); }
+section[id] { scroll-margin-top: calc(var(--jump-offset) + 8px); }
+.part { display: grid; gap: 6px; padding-top: 12px; border-top: 1px solid var(--rule); }
+.part .eyebrow { color: var(--accent); }
+.part h2 { font-size: clamp(26px, 3vw, 34px); }
+.part p { color: var(--ink-2); max-width: 72ch; }
+.eyebrow { font-family: var(--mono); font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.sec-head { display: grid; gap: 8px; }
+.sec-head h2 { font-size: clamp(22px, 2.6vw, 28px); }
+.sec-head .lede { color: var(--ink-2); max-width: 72ch; }
+.prose { display: grid; gap: 12px; max-width: 74ch; color: var(--ink-2); }
+.prose p { text-align: justify; white-space: pre-line; }
+.sec-head .lede { white-space: pre-line; }
+
+.hero { display: grid; gap: 18px; padding-top: 8px; }
+.hero h1 { font-size: clamp(30px, 4.6vw, 46px); letter-spacing: .01em; }
+.hero .sub { max-width: 68ch; color: var(--ink-2); font-size: 16px; }
+.anchors-line { display: flex; flex-wrap: wrap; gap: 10px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; padding: 2px 10px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--rule); white-space: nowrap; }
+.chip.accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.stats { display: flex; flex-wrap: wrap; gap: 28px; padding-top: 6px; }
+.stat { display: grid; gap: 0; }
+.stat b { font-family: var(--mono); font-size: 22px; font-weight: 500; color: var(--ink); }
+.stat span { font-size: 12.5px; color: var(--muted); }
+.starts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.start { appearance: none; text-align: left; font: inherit; cursor: pointer; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; display: grid; gap: 4px; color: var(--ink); }
+.start:hover { border-color: var(--accent); }
+.start b { font-family: var(--serif); font-size: 15.5px; }
+.start span { font-size: 13px; color: var(--ink-2); }
+.start i { font-style: normal; font-family: var(--mono); font-size: 11.5px; color: var(--accent); }
+
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 22px; min-width: 0; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--rule); }
+.tab { appearance: none; background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 14px; font: inherit; font-size: 14px; color: var(--ink-2); cursor: pointer; margin-bottom: -1px; }
+.tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
+.anchor-body { display: grid; gap: 26px; padding-top: 22px; min-width: 0; }
+.meta-line { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.tldr { font-size: 16px; color: var(--ink); border-left: 3px solid var(--accent); padding-left: 14px; max-width: 72ch; }
+h3.sub { font-size: 17px; }
+.stages { list-style: none; counter-reset: st; margin: 0; padding: 0; display: grid; gap: 12px; }
+.stages li { counter-increment: st; display: grid; grid-template-columns: 34px minmax(0,1fr); gap: 10px; }
+.stages li::before { content: counter(st); font-family: var(--mono); font-size: 13px; width: 26px; height: 26px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; margin-top: 2px; }
+.stages b { display: block; color: var(--ink); }
+.stages span { color: var(--ink-2); font-size: 14px; }
+.kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+.kv div { background: var(--surface); padding: 10px 12px; display: grid; gap: 2px; }
+.kv .k { font-size: 12px; color: var(--muted); }
+.kv .v { font-family: var(--mono); font-size: 13px; color: var(--ink); overflow-wrap: anywhere; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 24px; }
+ul.plain { margin: 0; padding-left: 1.1em; display: grid; gap: 6px; color: var(--ink-2); font-size: 14px; }
+ul.plain li::marker { color: var(--muted); }
+
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--rule); }
+th { font-weight: 500; color: var(--muted); font-size: 12px; letter-spacing: .04em; background: var(--surface-2); position: sticky; top: 0; z-index: 1; }
+tr:last-child td { border-bottom: 0; }
+td.dim { color: var(--ink); font-weight: 500; white-space: nowrap; }
+td.code { font-family: var(--mono); font-size: 12.5px; color: var(--ink); white-space: nowrap; }
+
+.stack { display: grid; gap: 0; border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.layer { display: grid; grid-template-columns: 200px minmax(0,1fr) 150px; gap: 20px; padding: 16px 18px; border-bottom: 1px solid var(--rule); }
+.layer:last-child { border-bottom: 0; }
+.layer .name b { display: block; font-family: var(--serif); font-size: 16px; }
+.layer .name span { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.layer .body { display: grid; gap: 8px; font-size: 14px; color: var(--ink-2); }
+.layer .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.layer .bneck { font-size: 13px; }
+.layer .bneck em { font-style: normal; color: var(--bad); font-weight: 500; }
+.mat { display: grid; gap: 6px; align-content: start; }
+.mat .bar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; }
+.mat .bar i { height: 8px; border-radius: 2px; background: var(--surface-2); }
+.mat .bar i.f1 { background: var(--v1); } .mat .bar i.f2 { background: var(--v2); } .mat .bar i.f3 { background: var(--v3); } .mat .bar i.f4 { background: var(--v4); } .mat .bar i.f5 { background: var(--v5); }
+.mat small { font-size: 11.5px; color: var(--muted); }
+
+details.area, details.card-d { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; min-width: 0; }
+details.area > summary, details.card-d > summary { list-style: none; cursor: pointer; padding: 14px 20px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+details.area > summary::-webkit-details-marker, details.card-d > summary::-webkit-details-marker, details.idea > summary::-webkit-details-marker, details.step > summary::-webkit-details-marker, details.qa > summary::-webkit-details-marker { display: none; }
+details.area > summary h3 { font-size: 18px; }
+details.area > summary .cnt, details.card-d > summary .cnt { font-size: 12.5px; color: var(--muted); }
+.tog { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--accent); }
+details[open] > summary .tog::after { content: "收起"; }
+details:not([open]) > summary .tog::after { content: "展开"; }
+.area-body { padding: 18px 20px 22px; display: grid; gap: 22px; border-top: 1px solid var(--rule); min-width: 0; }
+.subgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.subcard { border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px; display: grid; gap: 6px; align-content: start; }
+.subcard b { font-size: 14px; }
+.subcard .en { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.subcard p { font-size: 13.5px; color: var(--ink-2); }
+.subcard .reps { font-size: 12px; color: var(--muted); }
+.timeline { display: grid; gap: 0; border-left: 2px solid var(--rule); margin-left: 6px; }
+.timeline div { display: grid; grid-template-columns: 58px minmax(0,1fr); gap: 10px; padding: 4px 0 4px 14px; position: relative; font-size: 13.5px; color: var(--ink-2); }
+.timeline div::before { content: ""; position: absolute; left: -6px; top: 12px; width: 10px; height: 10px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); }
+.timeline .y { font-family: var(--mono); color: var(--ink); }
+.btn { appearance: none; border: 1px solid var(--accent); background: transparent; color: var(--accent); border-radius: 6px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; justify-self: start; }
+.btn:hover { background: var(--accent-soft); }
+
+.db-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.field { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.field select { max-width: min(360px, 86vw); }
+.field input, .field select { font: inherit; font-size: 14px; color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 7px 10px; min-width: 0; }
+.field input { width: min(320px, 80vw); }
+.db-count { font-size: 13px; color: var(--muted); margin-left: auto; }
+.db-wrap { max-height: 78vh; overflow: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+.db td.t { min-width: 260px; }
+.db td.t a { font-weight: 500; }
+.db td.t small { display: block; color: var(--muted); font-size: 12px; }
+.db td.s { min-width: 280px; color: var(--ink-2); }
+.db td.n { font-family: var(--mono); font-size: 12px; color: var(--ink-2); min-width: 160px; }
+.db td.y { font-family: var(--mono); }
+.tier { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.tier.milestone { background: var(--mile-soft); color: var(--mile); }
+.tier.important { background: var(--accent-soft); color: var(--accent); }
+.tier.relevant { background: var(--surface-2); color: var(--muted); }
+.areatag { font-size: 11.5px; color: var(--muted); white-space: nowrap; display: block; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 18px; display: grid; gap: 8px; align-content: start; }
+.card h4 { font-size: 15.5px; }
+.card p { font-size: 13.5px; color: var(--ink-2); }
+.card .lbl { font-size: 11.5px; color: var(--muted); letter-spacing: .04em; }
+
+.pill { font-size: 12px; padding: 1px 9px; border-radius: 999px; white-space: nowrap; font-weight: 500; }
+.pill.pursue, .pill.open, .pill.yes { background: var(--good-soft); color: var(--good); }
+.pill.pursue_with_repositioning, .pill.partially_scooped { background: var(--warn-soft); color: var(--warn); }
+.pill.drop, .pill.scooped { background: var(--bad-soft); color: var(--bad); }
+.pill.no { background: var(--surface-2); color: var(--muted); font-weight: 400; }
+.pill.must { background: var(--mile-soft); color: var(--mile); }
+.pill.should { background: var(--accent-soft); color: var(--accent); }
+.pill.optional { background: var(--surface-2); color: var(--muted); font-weight: 400; }
+.score { display: inline-grid; grid-template-columns: 60px 1fr; align-items: center; gap: 8px; width: 100%; }
+.score .track { height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
+.score .track i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.score .num { font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+
+details.idea { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; min-width: 0; }
+details.idea .head { min-width: 0; }
+details.idea .pills .chip { white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
+details.idea > summary { list-style: none; cursor: pointer; padding: 16px 20px; display: grid; grid-template-columns: 44px minmax(0,1fr) auto; gap: 14px; align-items: start; }
+details.idea .rank { font-family: var(--mono); font-size: 20px; color: var(--muted); }
+details.idea .head { display: grid; gap: 6px; }
+details.idea .head h3 { font-size: 17px; }
+details.idea .head p { font-size: 14px; color: var(--ink-2); }
+details.idea .en-title { font-family: var(--mono); font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+details.idea .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+details.idea .ov { font-family: var(--mono); font-size: 24px; color: var(--ink); text-align: right; line-height: 1; }
+details.idea .ov small { display: block; font-size: 11px; color: var(--muted); }
+.idea-body { border-top: 1px solid var(--rule); padding: 18px 20px 22px; display: grid; gap: 20px; min-width: 0; }
+.scores { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px 18px; }
+.idea-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 18px 26px; }
+.blk { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.blk h4 { font-family: var(--sans); font-size: 12.5px; font-weight: 700; color: var(--muted); letter-spacing: .05em; }
+.blk p, .blk li { font-size: 14px; color: var(--ink-2); }
+.blk p { white-space: pre-line; }
+.threat { font-size: 13.5px; color: var(--ink-2); border-left: 2px solid var(--rule); padding-left: 10px; display: grid; gap: 2px; }
+.threat.high { border-left-color: var(--bad); }
+.threat.medium { border-left-color: var(--warn); }
+.obj { display: grid; gap: 2px; font-size: 13.5px; }
+.obj b { color: var(--ink); font-weight: 500; }
+.obj span { color: var(--ink-2); }
+
+.path { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; }
+.path ol { margin: 0; padding-left: 1.3em; display: grid; gap: 10px; font-size: 13.5px; }
+.path ol li small { display: block; color: var(--muted); }
+.note { font-size: 13px; color: var(--muted); max-width: 80ch; }
+
+/* ---------- learning part ---------- */
+.cchip { appearance: none; font: inherit; font-size: 12.5px; padding: 1px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); border: 1px solid transparent; cursor: pointer; white-space: nowrap; }
+.cchip:hover { border-color: var(--accent); }
+.cchip.ghost { background: transparent; border-color: var(--rule); color: var(--ink-2); }
+.cchip.ghost:hover { border-color: var(--accent); color: var(--accent); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chips .lbl { font-size: 12px; color: var(--muted); margin-right: 2px; }
+.flash { animation: flash 1.6s ease-out 1; }
+@keyframes flash { 0% { background-color: var(--flash); } 100% { background-color: transparent; } }
+@media (prefers-reduced-motion: reduce) { .flash { animation: none; outline: 2px solid var(--accent); } }
+
+.math-block { overflow-x: auto; overflow-y: hidden; padding: 8px 12px; background: var(--surface-2); border-radius: 6px; font-family: var(--mono); font-size: 13px; color: var(--ink); }
+.math-block mjx-container { margin: 4px 0 !important; }
+.eq { display: grid; gap: 6px; }
+.eq p { font-size: 13.5px; color: var(--ink-2); white-space: pre-line; }
+.eqs { display: grid; gap: 14px; }
+.aside { background: var(--surface-2); border-radius: 8px; padding: 10px 14px; font-size: 14px; color: var(--ink-2); display: grid; gap: 2px; }
+.aside b { font-size: 12px; color: var(--muted); letter-spacing: .05em; font-weight: 700; }
+.aside span { white-space: pre-line; }
+.idref { appearance: none; background: none; border: 0; padding: 0 1px; font: inherit; font-family: var(--mono); font-size: .86em; color: var(--accent); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.idref:hover { text-decoration-style: solid; }
+
+.roadmap { display: grid; gap: 10px; }
+details.stage { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; min-width: 0; }
+details.stage > summary { list-style: none; cursor: pointer; padding: 14px 18px; display: grid; grid-template-columns: 40px minmax(0,1fr) auto; gap: 12px; align-items: start; }
+details.stage > summary::-webkit-details-marker { display: none; }
+details.stage .num { font-family: var(--mono); width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-size: 13px; }
+details.stage .head { display: grid; gap: 4px; }
+details.stage .head h3 { font-size: 16.5px; }
+details.stage .head p { font-size: 13.5px; color: var(--ink-2); }
+details.stage .dur { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+.mods { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.mod { appearance: none; text-align: left; font: inherit; cursor: pointer; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; display: grid; gap: 4px; align-content: start; color: var(--ink); }
+.mod:hover { border-color: var(--accent); }
+.mod i { font-style: normal; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.mod b { font-family: var(--serif); font-size: 14.5px; }
+.mod span { font-size: 12.5px; color: var(--ink-2); }
+
+details.concept { border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); min-width: 0; }
+details.concept > summary { list-style: none; cursor: pointer; padding: 12px 16px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px 12px; }
+details.concept > summary::-webkit-details-marker { display: none; }
+details.concept .nm { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+details.concept .nm b { font-family: var(--serif); font-size: 15.5px; }
+details.concept .nm span { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+details.concept .tl { grid-column: 1 / -1; font-size: 13.5px; color: var(--ink-2); }
+details.concept .uses { display: flex; gap: 6px; align-items: center; }
+.concept-body { border-top: 1px solid var(--rule); padding: 16px 16px 20px; display: grid; gap: 18px; min-width: 0; }
+.anchor-use { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+.anchor-use > div { border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; align-content: start; }
+.anchor-use h5 { margin: 0; font-family: var(--sans); font-size: 12.5px; font-weight: 700; color: var(--ink); display: flex; gap: 8px; align-items: center; }
+.anchor-use p { font-size: 13.5px; color: var(--ink-2); }
+.anchor-use small { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+details.qa { border-top: 1px dashed var(--rule); }
+details.qa > summary { list-style: none; cursor: pointer; padding: 8px 0; font-size: 14px; color: var(--ink); display: flex; gap: 8px; }
+details.qa > summary::before { content: "问"; font-size: 11.5px; color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 0 6px; height: fit-content; margin-top: 3px; }
+details.qa > p { font-size: 13.5px; color: var(--ink-2); padding: 0 0 10px 30px; white-space: pre-line; }
+.res { display: grid; gap: 6px; font-size: 13.5px; }
+.res div { display: grid; grid-template-columns: 58px minmax(0,1fr); gap: 8px; }
+.res .ty { font-family: var(--mono); font-size: 11px; color: var(--muted); padding-top: 3px; }
+.res small { color: var(--muted); display: block; }
+
+.diagram-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); padding: 10px; }
+svg.diagram { display: block; width: 100%; min-width: 860px; height: auto; }
+.dnode rect { fill: var(--surface-2); stroke: var(--rule); stroke-width: 1; }
+.dnode.data rect { fill: var(--surface); stroke-dasharray: 4 3; }
+.dnode.click { cursor: pointer; }
+.dnode.click:hover rect, .dnode.click:focus rect { stroke: var(--accent); stroke-width: 1.6; }
+.dnode.click:focus { outline: none; }
+.dnode .t { fill: var(--ink); font-family: var(--sans); font-size: 13px; font-weight: 500; }
+.dnode .s { fill: var(--muted); font-family: var(--sans); font-size: 11px; }
+.dnode .k { fill: var(--accent); font-family: var(--mono); font-size: 10.5px; font-weight: 500; }
+.dedge { stroke: var(--muted); stroke-width: 1.4; fill: none; }
+.dedge.fb { stroke: var(--accent); stroke-dasharray: 5 4; }
+.dhead { fill: var(--muted); }
+.dhead.fb { fill: var(--accent); }
+.dloop { fill: var(--accent-soft); fill-opacity: .45; stroke: var(--accent); stroke-width: 1; }
+.dlabel { fill: var(--accent); font-family: var(--sans); font-size: 12px; font-weight: 700; }
+.dnote { fill: var(--muted); font-family: var(--sans); font-size: 11.5px; }
+
+details.step { border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); min-width: 0; }
+details.step > summary { list-style: none; cursor: pointer; padding: 12px 16px; display: grid; grid-template-columns: 44px minmax(0,1fr) auto; gap: 10px; align-items: baseline; }
+details.step .sid { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+details.step .st { display: grid; gap: 2px; }
+details.step .st b { font-size: 15px; font-weight: 500; color: var(--ink); }
+details.step .st small { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.step-body { border-top: 1px solid var(--rule); padding: 16px; display: grid; gap: 16px; min-width: 0; }
+.checklist { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.checklist div { border: 1px solid var(--rule); border-radius: 8px; padding: 8px 12px; display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); align-content: start; }
+
+.lanes-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); padding: 12px 12px 6px; position: relative; }
+svg.lanes { display: block; width: 100%; min-width: 820px; height: auto; }
+.lanes .grid { stroke: var(--rule); stroke-width: 1; }
+.lanes .axis { fill: var(--muted); font-family: var(--mono); font-size: 11px; }
+.lanes .lane-l { fill: var(--ink-2); font-family: var(--sans); font-size: 12px; }
+.lanes .dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+.lanes .dot.hollow { fill: var(--surface); stroke: var(--accent); stroke-width: 1.6; }
+.lanes .hit { fill: transparent; cursor: pointer; }
+.lanes g.m:hover .dot, .lanes g.m:focus .dot { stroke: var(--ink); }
+.lanes g.m:focus { outline: none; }
+.lanes .brk { stroke: var(--muted); stroke-width: 1; }
+.vtip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; color: var(--ink); max-width: 320px; box-shadow: 0 4px 16px rgba(0,0,0,.12); display: grid; gap: 2px; z-index: 3; }
+.vtip small { color: var(--muted); font-family: var(--mono); }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); align-items: center; padding: 4px 4px 0; }
+.legend svg { vertical-align: middle; }
+.classic-list { display: grid; gap: 10px; }
+details.classic { border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); min-width: 0; }
+details.classic > summary { list-style: none; cursor: pointer; padding: 10px 16px; display: grid; grid-template-columns: 52px minmax(0,1fr) auto; gap: 10px; align-items: baseline; }
+details.classic > summary::-webkit-details-marker { display: none; }
+details.classic .yr { font-family: var(--mono); font-size: 13px; color: var(--ink); }
+details.classic .ti { display: grid; gap: 2px; }
+details.classic .ti b { font-size: 14.5px; font-weight: 500; }
+details.classic .ti small { font-size: 12px; color: var(--muted); }
+details.classic .cit { font-family: var(--mono); font-size: 12px; color: var(--ink-2); text-align: right; white-space: nowrap; }
+.classic-body { border-top: 1px solid var(--rule); padding: 12px 16px 16px; display: grid; gap: 12px; }
+
+.gl-wrap { max-height: 72vh; overflow: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+.gl td.en { font-weight: 500; color: var(--ink); min-width: 170px; }
+.gl td.zh { min-width: 110px; }
+.gl td.def { min-width: 300px; color: var(--ink-2); }
+
+@media (max-width: 1000px) {
+  .shell { grid-template-columns: minmax(0,1fr); gap: 20px; padding-top: 0; }
+  .toc { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); max-height: none; overflow-x: auto; overflow-y: hidden; padding-block: 10px; border-bottom: 1px solid var(--rule); margin-inline: -20px; padding-inline: 20px; }
+  .toc .brand, .toc .ramp, .toc li.grp, .toc ol.sub { display: none; }
+  .toc ol { display: flex; gap: 4px; margin: 0; white-space: nowrap; }
+  .toc a { border-left: 0; border-bottom: 2px solid transparent; padding: 4px 8px; }
+  .toc a.on, .toc a.page.cur { border-bottom-color: var(--accent); }
+  .toc-mobile { display: grid; gap: 6px; }
+  :root { --jump-offset: 72px; }
+  .toc { scrollbar-width: none; }
+  .toc::-webkit-scrollbar { display: none; }
+  .pager { grid-template-columns: minmax(0, 1fr); }
+  .pager a.next { grid-column: 1; }
+  .layer { grid-template-columns: minmax(0,1fr); gap: 10px; }
+  .two, .idea-grid, .path, .anchor-use { grid-template-columns: minmax(0,1fr); }
+  .mods { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .starts { grid-template-columns: minmax(0,1fr); }
+}
+@media (max-width: 560px) {
+  .shell { padding-inline: 16px; }
+  .toc { margin-inline: -16px; padding-inline: 16px; }
+  .panel { padding: 16px; }
+  details.idea > summary { grid-template-columns: minmax(0,1fr) auto; }
+  details.idea .rank { display: none; }
+  details.step > summary { grid-template-columns: minmax(0,1fr) auto; }
+  details.step .sid { display: none; }
+  details.classic > summary { grid-template-columns: 44px minmax(0,1fr); }
+  details.classic .cit { grid-column: 2; text-align: left; }
+  .mods { grid-template-columns: minmax(0,1fr); }
+  .area-body, .idea-body, .concept-body, .step-body { padding-inline: 12px; }
+}
+
+/* ---------- overflow guards: long labels wrap inside cards instead of widening the page ---------- */
+.cchip, .chip { max-width: 100%; }
+.chips .cchip, .classic-body .chip, .card .chip { white-space: normal; overflow-wrap: anywhere; text-align: left; }
+.toc-mobile .chips > * { white-space: nowrap; }
+.card, .anchor-use > div, .classic-body, .concept-body, .step-body, .area-body, .idea-body, .blk, .subcard { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1001px) { .page-head.only-mobile { display: none; } }
+@media (max-width: 1000px) { .page-head { margin-bottom: -40px; } }
+main { overflow-wrap: break-word; }
+.prose, .sec-head, .hero, .threat, .obj, .eqs, .eq, .kv div, .checklist div, .layer .body, .anchor-body, .classic-list, .roadmap { grid-template-columns: minmax(0, 1fr); }
+mjx-container[jax="SVG"]:not([display="true"]) { display: inline-block; max-width: 100%; overflow-x: auto; overflow-y: hidden; vertical-align: middle; }
+ul.plain, .path ol, .res, .timeline, .stages, .subgrid > *, .cards > * { grid-template-columns: minmax(0, 1fr); }
+ul.plain li, .res span, .threat span { overflow-wrap: anywhere; }
+
+</style>
+</head>
+<body>
+<div class="shell">
+  <nav class="toc" id="site-nav" aria-label="站点导航"></nav>
+  <main id="main"></main>
+</div>
+<script type="application/json" id="data">{"meta": {"date": "2026-09-28", "subtitle": "以 Quark（Google，SIGGRAPH Asia 2024）与 Ha et al.（KAIST + Meta，CVPR 2025）两篇实时多视角新视角合成论文为出发点，分三部分展开。第一部分帮你入门：基础知识、进阶专题、经典论文，以及把基础知识和两篇论文逐步对上的精读导读。第二部分梳理 3D 临场（telepresence）的全栈调研：采集、几何、表示、渲染、传输、显示与感知。第三部分给出 18 个经过对抗式查新和模拟 AC 评审的研究方向。", "learn_lede": "面向刚进入 3D 视觉 / 临场方向的研究生，默认你有本科线代、概率、Python 和基础深度学习。建议的用法：按“学习路线”推进；遇到不懂的词查“术语表”；读两篇锚点论文时开着“精读导读”，每一步都能点回需要的基础概念。基础概念卡片也会反过来标出它在 Quark 和 Ha et al. 的哪一步用到。", "foundations_lede": "8 个模块按学习顺序排列。每个概念都有：一句话要点、直觉解释、类比、逐项拆解的公式、带数字的例子、易错点、它在两篇锚点论文中的具体位置、学习资源和自测题。标签“Quark 用到 / Ha 用到”表示该概念是否直接出现在对应论文中。", "guided_lede": "把两篇论文按流水线拆成若干步。每一步写清楚：做什么（输入 → 输出）、白话解释、类比、论文公式逐项拆解、具体超参、为什么这样设计、容易误解的地方和自测题，并链接到需要的基础概念。点击流程图的方框可以直接跳到对应步骤。内容写完后由另一个 agent 对照论文原文逐条核查，并修正了发现的错误。", "advanced_lede": "16 个进阶专题，每个包含核心思想、关键公式、演进时间线、按优先级排序的奠基论文（附 Semantic Scholar / OpenAlex 引用数）、与两篇锚点论文的关系、争论与开放问题。", "classics_lede": "按 6 个主题收录 2025 年及以前发表的高影响论文。入选标准是引用数高或改变了领域走向，并且偏重两篇锚点论文所依赖的工作。每篇都由另一个 agent 复核了是否存在、年份与会议，以及引用数（来源为 Semantic Scholar 或 OpenAlex，2026 年 9 月）。上图横轴 2010 年以前做了压缩。", "survey_lede": "以两篇锚点论文为坐标原点，覆盖 10 个子方向、350 余条论文 / 产品 / 标准，以及全栈地图、范式对比、趋势与挑战。", "ideas_lede": "这些方向来自 5 个独立视角（失败模式、基础模型、系统、问题重构/评测、跨领域）共 30 个 idea，聚类为 18 个方向。每个方向先由一个 agent 专门找“已经被做过”的证据，再由一个模拟 AC 的 agent 重新定位、打分、设计实验。结论：没有一个方向是完全空白的，18 个全部判定为“部分已被做，需要重新定位”。综合分 5 分约等于一篇普通录用论文的水平。列表按综合分排序，点开可看核心论点、查新找到的撞车工作、两周验证实验和止损标准。", "method_zh": "本报告由多 agent 工作流生成，所有 agent 都能联网检索（arXiv API、Semantic Scholar、OpenAlex、网页搜索）。\n\n调研部分：先精读两篇锚点论文（含附录），并对照原文逐条核查未言明的问题，例如 Ha et al. 的运行时间没算立体深度估计，TSDF 消融几乎没有增益。然后分 10 个子方向检索，每个方向 25–45 篇带真实链接的工作，分为里程碑 / 重要 / 相关三档，再由一个综合 agent 写出全景图、范式对比、趋势、重大挑战和阅读清单。\n\n研究方向部分：5 个视角各自提出 idea，聚类为 18 个方向。每个方向先做对抗式查新（抽查引用是否真实存在，至少 10 组检索），再做模拟 AC 评审。\n\n使用说明：这些内容由 AI agent 检索和撰写，可能有遗漏、过时或数字不准，2026 年 7–9 月的新论文覆盖尤其有限。引用或投稿前请务必打开原文核实，尤其是 2026 年的 arXiv 编号、性能数字和引用数。评分只用于比较方向之间的相对强弱，不代表真实的录用概率。\n\n入门学习部分：先固定一份课程骨架（8 个模块、40 个概念、16 个进阶专题），所有内容都用同一套 ID 互相链接。基础知识每个模块由一个 agent 撰写，再由技术编辑 agent 核查公式、数值例子、链接以及与两篇论文的对应关系，共修正 145 处。进阶专题同样经过撰写与复核，修正 95 处。经典论文由 6 个主题检索 agent 汇总并去重，再分批逐篇复核：保留 152 篇，更正 115 篇，剔除 0 篇。精读导读共 26 步，由对抗式核查 agent 对照论文原文修正 70 处。术语表 195 条。", "learn_method_zh": "入门学习部分：先固定一份课程骨架（8 个模块、{concepts} 个概念、{advanced} 个进阶专题），所有内容都用同一套 ID 互相链接。基础知识每个模块由一个 agent 撰写，再由技术编辑 agent 核查公式、数值例子、链接以及与两篇论文的对应关系，共修正 {foundation_fixes} 处。进阶专题同样经过撰写与复核，修正 {advanced_fixes} 处。经典论文由 6 个主题检索 agent 汇总并去重，再分批逐篇复核：保留 {classics} 篇，更正 {classics_corrected} 篇，剔除 {classics_removed} 篇。精读导读共 {steps} 步，由对抗式核查 agent 对照论文原文修正 {guide_fixes} 处。术语表 {glossary} 条。"}, "xref": {"concepts": {"f-linalg": "线性代数、齐次坐标与刚体变换", "f-optim": "优化、鲁棒估计与梯度下降", "f-prob": "概率、加权平均与递归滤波", "f-image": "数字图像：颜色、采样、插值与金字塔", "g-pinhole": "针孔相机模型：内参、外参、投影与反投影", "g-epipolar": "对极几何、三角化与单应", "g-depth": "深度、视差与逆深度采样", "g-sfm": "运动恢复结构（SfM）与光束法平差", "g-rig": "多相机阵列：标定、同步与卷帘快门", "d-stereo": "双目立体匹配：从 SGM 到 RAFT-Stereo", "d-mvs": "多视角立体（MVS）与平面扫描", "d-mono": "单目与视频深度估计", "d-flow": "光流、场景流与图像 warping", "d-tsdf": "截断符号距离场（TSDF）与深度融合", "d-sensors": "深度传感器与噪声特性", "r-raster": "光栅化、z-buffer 与点溅射（splatting）", "r-alpha": "Alpha 合成与 over 算子", "r-volume": "体渲染方程与离散化", "r-raymarch": "光线步进、球面追踪与隐式表面求交", "r-appearance": "反射模型、视角相关外观与光照", "r-reps": "三维表示总览：点、网格、体素、隐式场、高斯", "i-lightfield": "全光函数、光场与 Lumigraph", "i-blending": "视角相关纹理映射与混合权重（ULR）", "i-warping": "基于深度的渲染：前向/后向 warping、空洞与飞点", "i-layered": "分层表示：MPI、LDI 与分层深度图（LDM）", "i-psv": "平面扫描体与学习式视图合成", "l-cnn": "卷积网络、残差块与 U-Net", "l-attention": "注意力机制与 Transformer", "l-encoding": "位置编码、傅里叶特征与射线编码", "l-loss": "损失函数与训练实践", "l-iterative": "学习式迭代细化与展开优化", "l-diffusion": "扩散模型入门", "n-nerf": "神经辐射场（NeRF）", "n-3dgs": "3D Gaussian Splatting（3D 高斯溅射）", "n-generalizable": "可泛化 / 前馈式新视角合成", "n-dynamic": "动态场景与 4D 表示", "v-temporal": "时间一致性、闪烁与时域滤波", "v-metrics": "图像与视频质量指标", "v-codec": "视频编码、传输与延迟预算", "v-perception": "立体视觉感知与 3D 显示"}, "adv": {"a-learned-stereo": "从深度立体匹配到立体基础模型", "a-learned-mvs": "学习式多视角立体与代价体", "a-geo-fm": "前馈三维几何基础模型", "a-nerf-fast": "NeRF 的加速与抗锯齿", "a-3dgs-ext": "3D Gaussian Splatting 的扩展", "a-layered-nvs": "学习式分层表示：从 Stereo Magnification 到 Quark", "a-generalizable-ibr": "可泛化 NeRF 与学习式 IBR", "a-ff-3dgs": "前馈 3DGS 与大重建模型", "a-geometry-free": "无几何 Transformer 渲染器", "a-dynamic-4d": "动态 NeRF、4D 高斯与流式重建", "a-human-capture": "人体表演捕捉与数字人", "a-diffusion-3d": "扩散模型与三维/新视角生成先验", "a-temporal-video": "视频时间一致性方法", "a-telepresence-sys": "三维临场系统设计", "a-compression": "体积视频与神经表示的压缩传输", "a-diff-render": "可微渲染与逆渲染"}}, "site": {"brand": "3D 临场研究图谱", "current": "home", "pages": [{"key": "home", "file": "index.html", "label": "概览", "group": null}, {"key": "roadmap", "file": "roadmap.html", "label": "学习路线", "group": "入门学习"}, {"key": "foundations", "file": "foundations.html", "label": "基础知识", "group": "入门学习"}, {"key": "guided", "file": "guided.html", "label": "精读导读", "group": "入门学习"}, {"key": "advanced", "file": "advanced.html", "label": "进阶专题", "group": "入门学习"}, {"key": "classics", "file": "classics.html", "label": "经典论文", "group": "入门学习"}, {"key": "glossary", "file": "glossary.html", "label": "术语表", "group": "入门学习"}, {"key": "anchors", "file": "anchors.html", "label": "锚点论文", "group": "领域调研"}, {"key": "landscape", "file": "landscape.html", "label": "领域全景", "group": "领域调研"}, {"key": "areas", "file": "areas.html", "label": "分方向与论文库", "group": "领域调研"}, {"key": "ideas", "file": "ideas.html", "label": "研究机会", "group": "研究"}, {"key": "method", "href": "index.html#method", "label": "方法与说明", "group": "研究", "alias": true}], "sectionPage": {"top": "index.html", "summary": "index.html", "sitemap": "index.html", "method": "index.html", "roadmap": "roadmap.html", "roadmap-resources": "roadmap.html", "foundations": "foundations.html", "guided": "guided.html", "advanced": "advanced.html", "classics": "classics.html", "reading": "classics.html", "glossary": "glossary.html", "anchors": "anchors.html", "map": "landscape.html", "paradigms": "landscape.html", "trends": "landscape.html", "areas": "areas.html", "papers": "areas.html", "ideas": "ideas.html"}, "prefixPage": [["concept-", "foundations.html"], ["module-", "foundations.html"], ["walk-", "guided.html"], ["guide-", "guided.html"], ["adv-", "advanced.html"], ["classic-", "classics.html"], ["stage-", "roadmap.html"], ["area-", "areas.html"], ["idea-", "ideas.html"], ["anchor-", "anchors.html"]]}, "home": {"counts": {"concepts": 40, "advanced": 16, "classics": 152, "papers": 359, "ideas": 18, "glossary": 195, "areas": 10, "stages": 8, "steps": {"quark": 12, "ha": 14}}, "executive_summary_zh": "以 Quark（Google，SIGGRAPH Asia 2024）和 Ha et al.（KAIST + Meta，CVPR 2025）为起点看，3D telepresence 在 2024–2026 年的核心矛盾很清楚：单帧质量与分辨率、时间和视角一致性、端到端延迟，这三者目前没有任何方法能同时做到。Quark 走“学习驱动、质量优先、无状态”：在单张 A100 上用 8 路输入逐帧即时预测 LDM，再做 IBR 混合，重建加渲染 1080p/30fps，单帧质量可与逐场景优化的 Zip-NeRF 相当，但帧间会闪烁。Ha et al. 走“几何驱动、一致性优先、弱状态”：用外部立体深度、image-based TSDF 和一个 4 层 U-Net，把 STED 从 95 降到 69，PSNR 几乎不变。两者长短互补，合起来正好勾勒出下一代实时渲染器的样子：高分辨率 IBR 细节，加上可跨视角、跨时间共享的几何或记忆状态。\n\n从全栈看，瓶颈已经从“能不能实时渲染”转到了“能不能在一致性和系统约束下实时渲染”。渲染速度本身基本解决了：逐场景 4DGS 可达数百到上千 FPS，前馈方法 Quark、3DTV、Tele360 在 1–2K 下每帧 25–35 ms。真正卡住的是四件事。第一，时间一致性：多数前馈方法逐帧独立处理，Tele360 和 Quark 都自承闪烁。第二，端到端延迟与传输：Starline 全链路 105.8 ms 仍是标杆，学术系统在普通客户端上常为 0.5 s 量级，逐帧高斯流需要 80–200 Mbps。第三，多视点显示的成本放大：双目要算两份，光场屏要 45 个以上视角。第四，评测：缺少能同时衡量画质、闪烁、延迟、码率和 QoE 的基准。\n\n表示与方法层面，六条路线在竞争中逐渐合流：分层/IBR（Quark、Ha et al.），feed-forward 3DGS（pixelSplat → GS-LRM → Tele360），无几何 Transformer（LVSM → NSTM），逐场景或流式 4DGS（STG、3DGStream、IGS），参数化化身（Codec Avatars → LCA），生成式视频和世界模型（GEN3C、Self Forcing、Genie 3）。收敛方向是“少量几何 + 高分辨率图像细节 + 学习型时间记忆 + 置信度门控的生成补全”。一个明显的信号是：Quark 所在的 Google 团队自己已经转向 Fuse-and-Refine（3DGS + 稀疏体素）、LVT 和 NSTM（LVSM + 在线时空记忆），等于承认“逐视角、无状态”这一设计需要补上时间状态。\n\n几何前端正在被基础模型改写。VGGT、Depth Anything 3、MapAnything 已基本取代 COLMAP + MVS 成为离线默认；FoundationStereo 经 Fast-FoundationStereo 蒸馏，已降到 20–50 ms 一对；CUT3R 和 TTT3R 这类流式模型在约 518 像素下有 14–20 FPS。但还缺一块关键拼图：面向“N 个固定、已标定、朝内的相机 × 时间”的流式几何模型，能以标定为条件、为每个相机维护时间记忆，并直接给出目标视角深度。它正好能替换 Ha et al. 那套 RAFT-Stereo + 手工时间滤波 + TSDF 的流程。\n\n产业上，截至 2026 年 9 月形成三条路径。第一条是采集式裸眼光场终端：Google Beam / HP Dimension，6 路 RGB 加 AI 体积模型，60 fps，约 2.5 万美元，3D 通话仅限 1:1。第二条是头显或眼镜端的写实化身：Apple Persona、Meta Codec Avatars/Hologram、Android XR Likeness，靠低码率参数驱动，但真实性依赖先验。第三条是 4DGS 体积视频串流，码率 17–75 Mbps。标准也在快速向 3DGS 收敛：Khronos KHR_gaussian_splatting、MPEG GSC 的 V-PCC 与 G-PCC 修正案均已到 CDAM。未来 1–3 年最现实的机会是：把 Quark 级的前馈 IBR 接到时间一致的几何或记忆状态上，用生成模型只补去遮挡区域，并在编码、传输、显示层做联合设计，从 1:1 走向多方，从固定头位走向真 6DoF。", "pageDesc": {"home": "全站概览、执行摘要、内容导航与调研方法。", "roadmap": "8 个阶段：每阶段的概念、论文、课程、动手项目和检查题，最后复现两篇锚点论文。", "foundations": "8 个模块、40 个概念：直觉、公式、例子、易错点，以及在两篇锚点论文中的位置。", "guided": "把 Quark（12 步）和 Ha et al.（14 步）逐步拆开，每一步链接到所需的基础概念。", "advanced": "16 个进阶专题：核心思想、演进时间线和按优先级排序的奠基论文。", "classics": "152 篇 2026 年前的高影响论文（时间分布图 + 可筛选列表），以及前沿阅读清单。", "glossary": "195 条中英术语，可搜索，并链接到基础概念。", "anchors": "两篇锚点论文的研究视角精读：精确数字、设计选择、局限与谱系，以及两者的对比与互补。", "landscape": "端到端技术栈全景、表示与渲染范式对比、跨方向趋势与重大挑战。", "areas": "10 个子方向的综述，以及 359 条可筛选的论文 / 产品 / 标准库。", "ideas": "18 个经对抗查新与模拟评审的研究方向。", "method": "调研流程、核查方式与使用注意事项（位于概览页底部）。"}}}</script>
+<script>
+(function () {
+  "use strict";
+  // ================= core: shared helpers, cross-links, math, navigation =================
+  var DATA;
+  try { DATA = JSON.parse(document.getElementById("data").textContent); } catch (e) { DATA = {}; }
+  var SITE = DATA.site || {};
+  var meta = DATA.meta || {};
+
+  // ---------- DOM helpers: all text goes through textContent; external links are https-only ----------
+  function safeUrl(u) { if (typeof u !== "string") return null; var s = u.trim(); return /^https:\/\/[^\s"'<>]+$/i.test(s) ? s : null; }
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "class") n.className = v;
+      else if (k === "text") n.textContent = String(v);
+      else if (k === "href") { var u = safeUrl(v); if (u) { n.setAttribute("href", u); n.setAttribute("target", "_blank"); n.setAttribute("rel", "noopener noreferrer"); } }
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c === null || c === undefined || c === false) return; n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return n;
+  }
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function sv(tag, attrs, kids) {
+    var n = document.createElementNS(SVGNS, tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "text") n.textContent = String(v);
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c) n.appendChild(c); });
+    return n;
+  }
+  function arr(x) { return Array.isArray(x) ? x : []; }
+  function str(x) { return typeof x === "string" ? x : (x === null || x === undefined ? "" : String(x)); }
+
+  // ---------- pages & cross-page links ----------
+  var PAGES = arr(SITE.pages);
+  var CUR_FILE = "";
+  PAGES.forEach(function (p) { if (p.key === SITE.current) CUR_FILE = p.file; });
+  function pageOf(id) {
+    var sp = SITE.sectionPage || {};
+    if (Object.prototype.hasOwnProperty.call(sp, id)) return sp[id];
+    var pre = arr(SITE.prefixPage);
+    for (var i = 0; i < pre.length; i++) if (id.indexOf(pre[i][0]) === 0) return pre[i][1];
+    return null;
+  }
+  function hrefFor(id) { var f = pageOf(id); return (!f || f === CUR_FILE) ? "#" + id : f + "#" + id; }
+  function align(id) {
+    var t = document.getElementById(id);
+    if (!t) return;
+    var root = document.documentElement, prev = root.style.scrollBehavior;
+    root.style.scrollBehavior = "auto";
+    t.scrollIntoView({ block: "start" });
+    root.style.scrollBehavior = prev;
+  }
+  function goTo(id, instant) {
+    var t = document.getElementById(id);
+    if (!t) {
+      var f = pageOf(id);
+      if (f && f !== CUR_FILE) window.location.href = f + "#" + id;
+      return;
+    }
+    var p = t;
+    while (p && p !== document.body) {
+      if (typeof p._activate === "function") p._activate();
+      if (p.tagName === "DETAILS") p.open = true;
+      p = p.parentElement;
+    }
+    typeset(t);
+    if (instant) align(id); else t.scrollIntoView({ block: "start" });
+    t.classList.remove("flash"); void t.offsetWidth; t.classList.add("flash");
+  }
+  // Internal link: a real <a href> (works across pages, middle-click opens a tab); same-page clicks also open details and flash.
+  function internalLink(targetId, cls, text, title) {
+    var a = el("a", { class: cls, text: text, title: title || null });
+    a.setAttribute("href", hrefFor(targetId));
+    a.addEventListener("click", function (e) {
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      if (document.getElementById(targetId)) {
+        e.preventDefault();
+        try { window.history.pushState(null, "", "#" + targetId); } catch (err) { /* sandboxed frame */ }
+        goTo(targetId);
+      }
+    });
+    return a;
+  }
+  function refChip(targetId, label, ghost) { return internalLink(targetId, "cchip" + (ghost ? " ghost" : ""), label); }
+
+  // Known concept / advanced-topic ids mentioned in prose become inline links.
+  var XREF = DATA.xref || {};
+  var conceptName = XREF.concepts || {}, advName = XREF.adv || {};
+  var ID_RE = /(a-[a-z0-9]+(?:-[a-z0-9]+)*|[fgdrilnv]-[a-z0-9]+)/g;
+  function rich(text) {
+    var s = str(text), out = [], last = 0, m;
+    ID_RE.lastIndex = 0;
+    while ((m = ID_RE.exec(s)) !== null) {
+      var id = m[1], prev = m.index > 0 ? s.charAt(m.index - 1) : "", next = s.charAt(m.index + id.length);
+      var target = conceptName[id] ? "concept-" + id : (advName[id] ? "adv-" + id : null);
+      if (!target || /[A-Za-z0-9_\-]/.test(prev) || /[A-Za-z0-9_]/.test(next)) continue;
+      if (m.index > last) out.push(document.createTextNode(s.slice(last, m.index)));
+      out.push(idLink(target, id, conceptName[id] || advName[id]));
+      last = m.index + id.length;
+    }
+    if (last < s.length) out.push(document.createTextNode(s.slice(last)));
+    return out;
+  }
+  function idLink(target, id, label) { return internalLink(target, "idref", id, label); }
+  function paras(text) { return str(text).split(/\n\s*\n/).map(function (t) { return t.trim(); }).filter(Boolean).map(function (t) { return el("p", null, rich(t)); }); }
+  function asideBox(label, text) { return str(text).trim() ? el("div", { class: "aside" }, [el("b", { text: label }), el("span", null, rich(text))]) : null; }
+  function link(title, url) { return safeUrl(url) ? el("a", { href: url, text: title }) : el("span", { text: title }); }
+  function ul(items, map) { return el("ul", { class: "plain" }, arr(items).map(function (x) { return el("li", null, [map ? map(x) : str(x)]); })); }
+  function secHead(eyebrow, title, lede) { return el("div", { class: "sec-head" }, [el("div", { class: "eyebrow", text: eyebrow }), el("h2", { text: title }), lede ? el("p", { class: "lede", text: lede }) : null]); }
+  function blk(title, kids) { return el("div", { class: "blk" }, [el("h4", { text: title })].concat(kids)); }
+  function textBlk(title, text) { return str(text).trim() ? blk(title, [el("div", { class: "prose" }, paras(text))]) : null; }
+  function fmtCit(n) { n = Number(n); if (!(n >= 0)) return "—"; if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k"; return String(n); }
+
+  // ---------- math (MathJax, typeset lazily) ----------
+  var mathReady = false, mathQueue = [];
+  window.__atlasMathReady = function () { mathReady = true; var q = mathQueue.slice(); mathQueue = []; q.forEach(typeset); };
+  function typeset(node) {
+    if (!node) return;
+    if (!mathReady || !window.MathJax || typeof window.MathJax.typesetPromise !== "function") { mathQueue.push(node); return; }
+    try { window.MathJax.typesetPromise([node]).catch(function () { /* leave raw TeX visible */ }); } catch (e) { /* leave raw TeX visible */ }
+  }
+  function eqList(eqs) {
+    eqs = arr(eqs).filter(function (q) { return q && str(q.tex).trim(); });
+    if (!eqs.length) return null;
+    return el("div", { class: "eqs" }, eqs.map(function (q) {
+      return el("div", { class: "eq" }, [el("div", { class: "math-block", text: "\\[" + str(q.tex) + "\\]" }), q.explain_zh ? el("p", null, rich(q.explain_zh)) : null]);
+    }));
+  }
+  document.addEventListener("toggle", function (e) { var t = e.target; if (t && t.tagName === "DETAILS" && t.open) typeset(t); }, true);
+
+  // ---------- shared components ----------
+  function makeTabs(views, storageKey) {
+    var tabs = el("div", { class: "tabs", role: "tablist" });
+    var holder = el("div");
+    var panels = {};
+    function show(id) {
+      Array.prototype.forEach.call(tabs.children, function (b) { b.setAttribute("aria-selected", b.getAttribute("data-id") === id ? "true" : "false"); });
+      views.forEach(function (v) { panels[v.id].hidden = v.id !== id; });
+      typeset(panels[id]);
+      if (storageKey) { try { localStorage.setItem(storageKey, id); } catch (e) { /* storage unavailable */ } }
+    }
+    views.forEach(function (v) {
+      tabs.appendChild(el("button", { class: "tab", role: "tab", type: "button", "data-id": v.id, text: v.label, onclick: function () { show(v.id); } }));
+      var p = el("div", { role: "tabpanel" }, [v.node()]);
+      p._activate = function () { show(v.id); };
+      panels[v.id] = p; holder.appendChild(p);
+    });
+    var initial = views[0].id;
+    if (storageKey) { try { var s = localStorage.getItem(storageKey); if (s && panels[s]) initial = s; } catch (e) { /* storage unavailable */ } }
+    show(initial);
+    return el("div", null, [tabs, holder]);
+  }
+  function cChip(id, ghost) { return conceptName[id] ? refChip("concept-" + id, conceptName[id], ghost) : null; }
+  function aChip(id) { return advName[id] ? refChip("adv-" + id, advName[id], true) : null; }
+  function chipRow(label, nodes) { nodes = nodes.filter(Boolean); return nodes.length ? el("div", { class: "chips" }, [el("span", { class: "lbl", text: label })].concat(nodes)) : null; }
+  function resList(items) {
+    var ty = { book: "教材", course: "课程", paper: "论文", tutorial: "教程", code: "代码", video: "视频", blog: "文章" };
+    return el("div", { class: "res" }, arr(items).map(function (r) { return el("div", null, [el("span", { class: "ty", text: ty[r.type] || r.type || "" }), el("span", null, [link(r.title, r.url), r.note_zh ? el("small", { text: r.note_zh }) : null])]); }));
+  }
+  function qaList(items, qk, ak) { return el("div", null, arr(items).map(function (q) { return el("details", { class: "qa" }, [el("summary", { text: q[qk] }), el("p", null, rich(q[ak]))]); })); }
+  var anchorShort = { quark: "Quark", ha: "Ha et al." };
+  function walkId(anchor, sid) { return "walk-" + anchor + "-" + sid; }
+
+  // ---------- page frame: sections, site nav, in-page toc, breadcrumbs, pager ----------
+  var main = document.getElementById("main");
+  var navEl = document.getElementById("site-nav");
+  var tocItems = [];
+  function addSection(id, tocLabel, nodes) {
+    var s = el("section", { id: id }, nodes);
+    main.appendChild(s);
+    if (tocLabel) tocItems.push({ id: id, label: tocLabel });
+    return s;
+  }
+  function addTocItem(id, label) { tocItems.push({ id: id, label: label }); }
+  function pageLink(p, cls) { var a = el("a", { class: cls, text: p.label }); a.setAttribute("href", p.href || p.file); return a; }
+  function finishPage() {
+    var real = PAGES.filter(function (p) { return !p.alias; });
+    var cur = null, curIdx = -1;
+    real.forEach(function (p, i) { if (p.key === SITE.current) { cur = p; curIdx = i; } });
+
+    // Sidebar (desktop) / top bar (mobile): all pages grouped, current page expanded with its own sections.
+    var brand = el("a", { class: "brand", text: SITE.brand || "3D 临场研究图谱" }); brand.setAttribute("href", "index.html");
+    var ol = el("ol");
+    var lastGroup = null, subLinks = {}, curLink = null;
+    PAGES.forEach(function (p) {
+      if (p.group && p.group !== lastGroup) { ol.appendChild(el("li", { class: "grp", text: p.group })); }
+      lastGroup = p.group || lastGroup;
+      var isCur = !p.alias && p.key === SITE.current;
+      var a = pageLink(p, "page" + (isCur ? " cur" : ""));
+      if (isCur) { a.setAttribute("aria-current", "page"); curLink = a; }
+      var li = el("li", null, [a]);
+      if (isCur && tocItems.length > 1) {
+        li.appendChild(el("ol", { class: "sub" }, tocItems.map(function (t) {
+          var s = internalLink(t.id, "", t.label); s.setAttribute("data-id", t.id); subLinks[t.id] = s;
+          return el("li", null, [s]);
+        })));
+      }
+      ol.appendChild(li);
+    });
+    navEl.appendChild(brand);
+    navEl.appendChild(el("div", { class: "ramp", "aria-hidden": "true" }));
+    navEl.appendChild(ol);
+
+    // Top of main: breadcrumbs + (mobile only) this page's sections.
+    var head = el("div", { class: "page-head" });
+    if (cur && cur.key !== "home") {
+      var home = el("a", { text: SITE.brand || "3D 临场研究图谱" }); home.setAttribute("href", "index.html");
+      var groupPages = real.filter(function (p) { return p.group === cur.group; });
+      head.appendChild(el("div", { class: "crumbs" }, [home, el("span", { class: "sep", text: "›" }), el("span", { text: cur.group || "" }), el("span", { class: "sep", text: "›" }), el("b", { text: cur.label }), el("span", { class: "mono", text: "（" + (groupPages.indexOf(cur) + 1) + " / " + groupPages.length + "）" })]));
+    }
+    if (tocItems.length > 1) head.appendChild(el("nav", { class: "toc-mobile", "aria-label": "本页目录" }, [el("div", { class: "chips" }, [el("span", { class: "lbl", text: "本页" })].concat(tocItems.map(function (t) { return internalLink(t.id, "cchip ghost", t.label); })))]));
+    if (!head.querySelector(".crumbs")) head.classList.add("only-mobile");
+    if (head.childNodes.length) main.insertBefore(head, main.firstChild);
+
+    // Bottom of main: previous / next page.
+    if (curIdx >= 0) {
+      var prev = real[curIdx - 1], next = real[curIdx + 1];
+      var pager = el("nav", { class: "pager", "aria-label": "翻页" });
+      if (prev) { var pa = el("a", { class: "prev" }, [el("small", { text: "← 上一页" + (prev.group ? " · " + prev.group : "") }), el("b", { text: prev.label })]); pa.setAttribute("href", prev.file); pager.appendChild(pa); }
+      if (next) { var na = el("a", { class: "next" }, [el("small", { text: "下一页" + (next.group ? " · " + next.group : "") + " →" }), el("b", { text: next.label })]); na.setAttribute("href", next.file); pager.appendChild(na); }
+      main.appendChild(pager);
+    }
+
+    // Keep the current page visible in the horizontal (mobile) bar.
+    if (curLink && navEl.scrollWidth > navEl.clientWidth) navEl.scrollLeft = Math.max(0, curLink.offsetLeft - navEl.clientWidth / 3);
+
+    // Highlight the section being read: the last TOC target whose top has passed 25% of the viewport.
+    if (Object.keys(subLinks).length) {
+      var ticking = false;
+      var highlight = function () {
+        ticking = false;
+        var line = window.innerHeight * 0.25, active = tocItems[0] ? tocItems[0].id : null;
+        tocItems.forEach(function (t) {
+          var n = document.getElementById(t.id);
+          if (n && n.offsetParent !== null && n.getBoundingClientRect().top <= line) active = t.id;
+        });
+        for (var k in subLinks) subLinks[k].classList.toggle("on", k === active);
+      };
+      window.addEventListener("scroll", function () { if (!ticking) { ticking = true; window.requestAnimationFrame(highlight); } }, { passive: true });
+      window.addEventListener("resize", highlight);
+      highlight();
+    }
+    var h = window.location.hash ? window.location.hash.slice(1) : "";
+    if (h && /^[A-Za-z0-9._~-]+$/.test(h)) {
+      var userMoved = false;
+      var stop = function () { userMoved = true; };
+      ["wheel", "touchstart", "keydown", "mousedown"].forEach(function (ev) { window.addEventListener(ev, stop, { once: true, passive: true }); });
+      var settle = function () { if (!userMoved) align(h); };
+      goTo(h, true);
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { window.requestAnimationFrame(settle); });
+      window.addEventListener("load", function () { window.requestAnimationFrame(settle); });
+      [400, 1200, 2500].forEach(function (ms) { setTimeout(settle, ms); });
+    }
+  }
+
+  // ================= page: 概览（首页） =================
+  var H = DATA.home || {};
+  var counts = H.counts || {};
+  function pageAnchor(file, cls, kids) { var a = el("a", { class: cls }, kids); a.setAttribute("href", file); return a; }
+
+  addSection("top", "概览", [
+    el("div", { class: "hero" }, [
+      el("div", { class: "eyebrow", text: "Field survey & study guide · " + (meta.date || "") + " · 3D telepresence / real-time 3D vision" }),
+      el("h1", { text: "3D 临场研究图谱" }),
+      el("p", { class: "sub", text: meta.subtitle || "" }),
+      el("div", { class: "anchors-line" }, [
+        el("span", { class: "chip accent", text: "锚点 A · Quark (SIGGRAPH Asia 2024)" }),
+        el("span", { class: "chip accent", text: "锚点 B · Ha et al. (CVPR 2025)" })
+      ]),
+      el("div", { class: "ramp", "aria-hidden": "true" }),
+      el("div", { class: "stats" }, [
+        el("div", { class: "stat" }, [el("b", { text: String(counts.concepts || 0) }), el("span", { text: "基础概念" })]),
+        el("div", { class: "stat" }, [el("b", { text: String(counts.advanced || 0) }), el("span", { text: "进阶专题" })]),
+        el("div", { class: "stat" }, [el("b", { text: String(counts.classics || 0) }), el("span", { text: "2026 年前高影响论文" })]),
+        el("div", { class: "stat" }, [el("b", { text: String(counts.papers || 0) }), el("span", { text: "领域论文 / 产品 / 标准" })]),
+        el("div", { class: "stat" }, [el("b", { text: String(counts.ideas || 0) }), el("span", { text: "经查新评审的研究方向" })])
+      ]),
+      el("div", { class: "starts" }, [
+        pageAnchor("roadmap.html", "start", [el("i", { text: "零基础" }), el("b", { text: "从学习路线开始" }), el("span", { text: "分阶段的概念、论文、课程和动手项目" })]),
+        pageAnchor("guided.html", "start", [el("i", { text: "想读懂两篇论文" }), el("b", { text: "精读导读" }), el("span", { text: "逐步拆解 Quark 与 Ha et al.，每一步链接到所需的基础概念" })]),
+        pageAnchor("ideas.html", "start", [el("i", { text: "找研究方向" }), el("b", { text: "研究机会" }), el("span", { text: "18 个经对抗查新与模拟评审的方向" })])
+      ])
+    ])
+  ]);
+  if (H.executive_summary_zh) addSection("summary", "执行摘要", [secHead("Executive summary", "执行摘要"), el("div", { class: "prose" }, paras(H.executive_summary_zh))]);
+
+  // Site map: every page, grouped by part (the part introductions that used to head each part live here).
+  (function () {
+    var parts = [
+      { group: "入门学习", eyebrow: "Part I · Learn", lede: meta.learn_lede || "" },
+      { group: "领域调研", eyebrow: "Part II · Survey", lede: meta.survey_lede || "" },
+      { group: "研究", eyebrow: "Part III · Research", lede: "" }
+    ];
+    var desc = H.pageDesc || {};
+    addSection("sitemap", "内容导航", [
+      secHead("Site map", "内容导航", "全站按“入门学习 / 领域调研 / 研究”三部分组织。左侧（手机上为顶部）导航栏可随时切换页面，每页底部有上一页 / 下一页。"),
+      el("div", { class: "sitemap" }, parts.map(function (pt) {
+        var pages = arr(SITE.pages).filter(function (p) { return p.group === pt.group; });
+        return el("div", { class: "grp-card" }, [
+          el("div", { class: "eyebrow", text: pt.eyebrow }),
+          el("h3", { class: "sub", text: pt.group }),
+          pt.lede ? el("p", { text: pt.lede }) : null,
+          el("div", { class: "pages" }, pages.map(function (p) {
+            return pageAnchor(p.href || p.file, "", [el("i", { text: p.alias ? "本页下方" : p.file }), el("b", { text: p.label }), el("span", { text: desc[p.key] || "" })]);
+          }))
+        ]);
+      }))
+    ]);
+  })();
+
+  addSection("method", "方法与说明", [secHead("Method & caveats", "调研方法与使用说明"), el("div", { class: "prose" }, paras(meta.method_zh || ""))]);
+
+  finishPage();
+})();
+</script>
+</body>
+</html>
