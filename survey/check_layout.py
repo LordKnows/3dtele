@@ -24,6 +24,7 @@ DEEP_LINKS = ["foundations.html#concept-g-pinhole", "guided.html#walk-ha-h3", "c
               "basics/classics/t-ibr-geometry.html#classic-1", "basics/glossary.html#term-homogeneous-coordinates",
               "works/field-map.html#paradigms", "overview/how-to-use.html#method"]
 # The first seven are old urls: they go through the redirect pages to the new pages.
+NOTE_PAGES = ["basics/foundations/g-epipolar.html", "works/walkthrough/quark.html", "basics/classics/t-ibr-geometry.html"]
 
 HARNESS = """<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0"><pre id="out">running</pre>
 <script>
@@ -58,6 +59,25 @@ f.onload = function () {
         }
         document.getElementById("out").textContent = JSON.stringify(res);
       }, 800);
+    } else if (job.kind === "notes") {
+      // Phones: side / margin notes are folded behind a toggle that opens them.
+      var sn = d.querySelector(".sidenote, .marginnote"), win = f.contentWindow;
+      var lab = sn ? sn.parentElement.querySelector("label.margin-toggle") : null;
+      res.folded = sn ? win.getComputedStyle(sn).display === "none" : null;
+      res.toggle = lab ? win.getComputedStyle(lab).display !== "none" : null;
+      if (lab) lab.click();
+      res.opens = sn ? win.getComputedStyle(sn).display !== "none" : null;
+      document.getElementById("out").textContent = JSON.stringify(res);
+    } else if (job.kind === "menu") {
+      // Dropdowns work from the keyboard: open, arrow into the list, Escape closes and returns focus.
+      var btn = d.querySelector(".menu-btn"), drop = btn && btn.parentElement.querySelector(".drop"), w2 = f.contentWindow;
+      btn.focus(); btn.click();
+      res.opens = btn.getAttribute("aria-expanded") === "true" && w2.getComputedStyle(drop).display !== "none";
+      btn.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+      res.arrow = d.activeElement === drop.querySelector("a");
+      d.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      res.escape = btn.getAttribute("aria-expanded") === "false" && d.activeElement === btn && w2.getComputedStyle(drop).display === "none";
+      document.getElementById("out").textContent = JSON.stringify(res);
     } else {
       var id = job.src.split("#")[1], t = d.getElementById(id), bar = d.querySelector("nav.toc");
       res.top = t ? Math.round(t.getBoundingClientRect().top) : null;
@@ -101,6 +121,8 @@ def main() -> int:
     pages = sorted(p for p in SITE.rglob("*.html") if not p.name.startswith("."))
     jobs = [{"kind": "overflow", "w": w, "src": p.relative_to(SITE).as_posix()} for w in WIDTHS for p in pages]
     jobs += [{"kind": "jump", "w": w, "src": l} for w in WIDTHS for l in DEEP_LINKS]
+    jobs += [{"kind": "notes", "w": 390, "src": s} for s in NOTE_PAGES]
+    jobs += [{"kind": "menu", "w": 1400, "src": s} for s in ("index.html", "basics/foundations/g-epipolar.html")]
     with ThreadPoolExecutor(max_workers=4) as ex:
         results = list(ex.map(measure, jobs))
     bad = 0
@@ -109,6 +131,11 @@ def main() -> int:
         if "error" in r:
             bad += 1
             print(f"FAIL {j['kind']:8s} {j['w']:4d}px {j['src']:36s} {r['error']}")
+        elif j["kind"] in ("notes", "menu"):
+            keys = ("folded", "toggle", "opens") if j["kind"] == "notes" else ("opens", "arrow", "escape")
+            ok = all(r.get(k) is True for k in keys)
+            bad += not ok
+            print(f"{'ok  ' if ok else 'FAIL'} {j['kind']:8s} {j['w']:4d}px {j['src']:36s} " + " ".join(f"{k}={r.get(k)}" for k in keys))
         elif j["kind"] == "overflow":
             ok = r["scrollWidth"] <= r["clientWidth"] + 1
             bad += not ok

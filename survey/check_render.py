@@ -44,12 +44,16 @@ def run_chrome(extra_args, wait_s):
 def check(page: Path) -> bool:
     dom, err = run_chrome(["--timeout=20000", "--dump-dom", page.as_uri()], 40)
     errors = [l for l in err.splitlines() if "CONSOLE" in l and "chrome-extension" not in l]
+    # A section with nothing but its heading is an empty block.
+    empty = [m.group(1) for m in re.finditer(r'<section(?: id="([^"]*)")?[^>]*>\s*(?:<h2[^>]*>(?:(?!</h2>).)*</h2>\s*)?</section>', dom, re.S)]
     counts = {k: len(re.findall(v, dom)) for k, v in COUNTS.items()}
     shown = ", ".join(f"{k}={v}" for k, v in counts.items() if v)
     print(f"{page.relative_to(SITE).as_posix():36s} dom={len(dom) // 1024}KB  {shown}")
     for e in errors[:10]:
         print("   console:", e[:300])
-    return not errors and len(dom) > 1000
+    if empty:
+        print("   empty sections:", empty[:10])
+    return not errors and not empty and len(dom) > 1000
 
 
 def screenshot(spec: str):

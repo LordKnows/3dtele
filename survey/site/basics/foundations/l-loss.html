@@ -199,7 +199,7 @@ label.margin-toggle:not(.sidenote-number) { display: none; }
 .refs li > :not(.kind):not(.yr) { grid-column: 2; }
 .refs .kind, .refs .yr { grid-column: 1; font-family: var(--note); font-size: .86rem; color: var(--muted); padding-top: .12rem; }
 .refs .yr { font-family: "et-book-osf", var(--serif); font-size: .95rem; padding-top: .05rem; }
-.refs .en { font-family: "et-book", var(--serif); font-style: italic; color: var(--muted); }
+.refs .en { font-family: "et-book", var(--serif); font-style: italic; color: var(--muted); font-size: .92rem; line-height: 1.5; }
 .refs .gloss { font-family: var(--note); font-size: .88rem; color: var(--ink-2); margin-top: .1rem; }
 .art .refs li + li { margin-top: .75rem; }
 .art .papers li + li { margin-top: .35rem; }
@@ -238,7 +238,7 @@ table.booktabs td { padding: .45rem .9rem .45rem 0; vertical-align: top; border-
 table.booktabs tbody tr:first-child td { border-top: 0; }
 table.rank td { white-space: nowrap; font-variant-numeric: tabular-nums; }
 table.rank td:nth-child(2) { white-space: normal; }
-table.kv { border-collapse: collapse; margin: .6rem 0; font-size: .95rem; }
+.art table.kv { border-collapse: collapse; margin: .6rem 0; font-size: .95rem; width: auto; }
 table.kv th { text-align: left; font-weight: 400; color: var(--muted); padding: .25rem 1.2rem .25rem 0; vertical-align: top; min-width: 5em; max-width: 12em; font-family: var(--note); }
 table.kv td { padding: .25rem 0; vertical-align: top; }
 
@@ -768,7 +768,7 @@ figcaption svg { vertical-align: -1px; }
       further.push(el("h3", { text: "学习资源" }));
       further.push(el("ul", { class: "refs" }, arr(c.resources).map(function (r) {
         return el("li", null, [el("span", { class: "kind", text: ty[r.type] || r.type || "" }),
-          el("div", null, [link(r.title, r.url), str(r.note_zh).trim() ? el("div", { class: "gloss", text: r.note_zh }) : null])]);
+          el("div", null, [link(r.title, r.url), str(r.note_zh).trim() ? el("div", { class: "gloss" }, rich(r.note_zh)) : null])]);
       })));
     }
     var adv = arr(DATA.adv).filter(hasX);

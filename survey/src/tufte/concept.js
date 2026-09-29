@@ -62,7 +62,7 @@
       further.push(el("h3", { text: "学习资源" }));
       further.push(el("ul", { class: "refs" }, arr(c.resources).map(function (r) {
         return el("li", null, [el("span", { class: "kind", text: ty[r.type] || r.type || "" }),
-          el("div", null, [link(r.title, r.url), str(r.note_zh).trim() ? el("div", { class: "gloss", text: r.note_zh }) : null])]);
+          el("div", null, [link(r.title, r.url), str(r.note_zh).trim() ? el("div", { class: "gloss" }, rich(r.note_zh)) : null])]);
       })));
     }
     var adv = arr(DATA.adv).filter(hasX);

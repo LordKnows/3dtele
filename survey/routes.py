@@ -328,6 +328,9 @@ def links(keys, xref):
 
 
 def page(pid, title, body, sub="", meta=None, epigraph="", prereqs=None, lede="", mtoc=False):
+    # An epigraph is a line or two; a longer summary reads better as the opening paragraph.
+    if len(epigraph or "") > 160:
+        epigraph, lede = "", (epigraph + ("\n\n" + lede if lede else ""))
     return {"id": pid, "head": {"title": title, "sub": sub, "meta": meta or [], "epigraph": epigraph,
                                 "prereqs": [{"k": k} for k in prereqs or []], "lede": lede},
             "body": clean(body), "toc": mtoc}
@@ -421,7 +424,7 @@ def advanced_routes(ctx, xref):
 def classic_entry(i, p, xref, themes):
     concept_links = links([f"concept-{c}" for c in p.get("concept_ids", [])] + [f"adv-{a}" for a in p.get("adv_ids", [])], xref)
     info = [str(p.get("year") or ""), p.get("authors", ""), p.get("venue", ""),
-            f"引用 {fmt_cit(p.get('citations'))}" + (f"（{p['citations_source']}）" if p.get("citations_source") else ""),
+            (f"{p.get('citations_source') or ''} 引用 {p['citations']}".strip() if isinstance(p.get("citations"), int) and p["citations"] >= 0 else ""),
             f"难度：{p['difficulty']}" if p.get("difficulty") else "", "必读" if p.get("must_read") else ""]
     return [H3(p["title"], id=f"classic-{i}", url=p.get("url", ""), sn=note("与重点论文的联系", p.get("anchor_link_zh"))),
             {"b": "note", "t": " · ".join(v for v in info if v)},
@@ -569,7 +572,8 @@ def papers_routes(ctx, xref):
     out.append(route("works/papers/compare.html", "works", "works/papers/index.html", xref["anchor-cmp"]["t"],
                      page("anchor-cmp", xref["anchor-cmp"]["t"], body, sub="Quark vs. Ha et al."), crumbs, xref["anchor-cmp"]["s"]))
     out.append(route("works/papers/summary.html", "works", "works/papers/index.html", "调研摘要",
-                     page("summary", "调研摘要", [SEC(None, "text"), P(synth.get("executive_summary_zh"))], sub="Survey summary"),
+                     page("summary", "调研摘要", [SEC(None, "text"), P(synth.get("executive_summary_zh"))], sub="Survey summary",
+                          lede=ctx["meta"].get("subtitle", "")),
                      crumbs, xref["summary"]["s"]))
     db = route("works/papers/database.html", "works", "works/papers/index.html", "论文库",
                page("papers", "论文库", [{"b": "slot", "name": "database"}], sub="Paper database", meta=[f"{len(ctx['papers'])} 条"],
@@ -661,7 +665,7 @@ def fieldmap_route(ctx, xref):
             m = max(0, min(5, round(float(L.get("maturity") or 0))))
         except ValueError:
             m = 0
-        body += [H3(L.get("layer_zh"), en=L.get("layer_en", ""), tag=f"成熟度 {'●' * m}{'○' * (5 - m)} {m}/5"),
+        body += [H3(L.get("layer_zh"), en=L.get("layer_en", ""), tag=f"{'●' * m}{'○' * (5 - m)} 成熟度 {m} / 5"),
                  P("、".join(L.get("components_zh", [])), label="组成"), P(L.get("state_of_art_zh")), P(L.get("bottleneck_zh"), label="瓶颈")]
     body += [SEC("表示与渲染范式对比", "paradigms")]
     for p in synth.get("paradigms", []):
@@ -762,7 +766,9 @@ def trends_route(ctx, xref):
 
 def overview_routes(ctx, xref, legacy_home):
     meta, desc = ctx["meta"], ctx["page_desc"]
-    groups = [{"h": m["label"], "items": key_items([SECTION_KEY[u] for _, u in m["items"]], xref)} for m in NAV]
+    part_lede = {"basics": meta.get("learn_lede", ""), "works": meta.get("survey_lede", "")}
+    groups = [{"h": m["label"], "lede": part_lede.get(m["key"], ""), "items": key_items([SECTION_KEY[u] for _, u in m["items"]], xref)}
+              for m in NAV]
     home = route("index.html", "overview", "index.html", BRAND,
                  page("top", BRAND, [SEC(None, "intro"), P("（本页的领域导览正在撰写。）"), SEC("本站内容", "contents"), TOC(groups)],
                       sub="3D telepresence: a field guide"),

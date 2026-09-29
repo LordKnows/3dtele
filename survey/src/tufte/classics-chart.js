@@ -72,6 +72,6 @@
     }
     return el("figure", { class: "fullwidth chart-fig" }, [
       el("div", { class: "lanes-wrap" }, [svg, tip]),
-      el("figcaption", null, [lgDot(false), " 必读　", lgDot(true), " 其他　点的大小与引用数的对数成正比；悬停看详情，点击跳到条目。"])
+      el("figcaption", null, [lgDot(false), " 必读　", lgDot(true), " 其他　点的大小 ∝ log(引用数)；悬停看详情，点击跳到条目"])
     ]);
   };
