@@ -10,7 +10,8 @@ present when its normalized form occurs in the normalized text of some new page.
 colons, dashes, middle dots, parentheses and TeX, lowercases Latin text, and (for the old text) writes concept /
 topic ids the way the new pages show them (as names). Side and margin notes are compared as their own text so
 that a note floated into a paragraph does not split it. Fragments that were navigation or controls of the old
-pages are whitelisted below, each with the reason.
+pages are whitelisted below, each with the reason. The old text goes through the same wording rules as the build
+(wording.py), and the check fails if "锚点" is left anywhere on a page outside its technical uses.
 """
 import os
 import re
@@ -23,6 +24,7 @@ from concurrent.futures import ThreadPoolExecutor
 from html.parser import HTMLParser
 from pathlib import Path
 
+import wording
 from chrome import chrome_cmd
 
 HERE = Path(__file__).resolve().parent
@@ -64,6 +66,12 @@ WHITELIST = [
         "领域论文 / 产品 / 标准", "2026 年前高影响论文", "经查新评审的研究方向", "基础概念", "零基础", "从学习路线开始",
         "分阶段的概念、论文、课程和动手项目", "想读懂两篇论文", "逐步拆解 Quark 与 Ha et al.，每一步链接到所需的基础概念",
         "找研究方向", "18 个经对抗查新与模拟评审的方向", "锚点 A · Quark (SIGGRAPH Asia 2024)", "锚点 B · Ha et al. (CVPR 2025)"]),
+    ("old ledes and page descriptions rewritten for the new structure in P3 (new text: data/site/overview.json)",
+     r"^(按 6 个主题收录 2025 年及以前发表的高影响论文。|8 个模块按学习顺序排列。每个概念都有|把两篇论文按流水线拆成若干步。|"
+     r"这些方向来自 5 个独立视角|面向刚进入 3D 视觉 / 临场方向的研究生|以两篇锚点论文为坐标原点)"
+     r"|^把 Quark（\d+ 步）和 Ha et al\.（\d+ 步）逐步拆开，每一步链接到所需的基础概念。$"
+     r"|^8 个模块、40 个概念：直觉、公式、例子、易错点，以及在两篇锚点论文中的位置。$"
+     r"|^8 个阶段：每阶段的概念、论文、课程、动手项目和检查题，最后复现两篇锚点论文。$"),
     ("old page descriptions and ledes about the old page structure; rewritten for the new pages (P3 reviews them)", [
         "全站按“入门学习 / 领域调研 / 研究”三部分组织。左侧（手机上为顶部）导航栏可随时切换页面，每页底部有上一页 / 下一页。",
         "全站概览、执行摘要、内容导航与调研方法。", "调研流程、核查方式与使用注意事项（位于概览页底部）。",
@@ -192,18 +200,19 @@ def main() -> int:
 
     with ThreadPoolExecutor(max_workers=6) as ex:
         doms = list(ex.map(lambda p: (p, dump(p)), site_pages()))
-    corpus = []
-    for _, html in doms:
+    corpus, wording_left = [], []
+    for page, html in doms:
         t = TextNodes(split_notes=True)
         t.feed(html)
         corpus += [normalize(" ".join(t.out)), normalize(" ".join(t.notes))]
+        wording_left += [(page.relative_to(SITE).as_posix(), c) for c in wording.leftovers("".join(t.out + t.notes))]
     corpus = "\x00".join(corpus)
 
     missing, allowed, total = defaultdict(Counter), defaultdict(Counter), 0
     for f in (sorted(src.glob("*.html")) if src.is_dir() else [src]):
         for node, n in texts(f.read_text(encoding="utf-8", errors="replace")).items():
             for frag in fragments(node):
-                key = normalize(with_names(frag, names))
+                key = normalize(with_names(wording.apply(frag), names))
                 if len(key) < 2:
                     continue
                 total += n
@@ -225,7 +234,11 @@ def main() -> int:
             print(f"\n{page}: whitelisted")
             for k, v in allowed[page].items():
                 print(f"  = {v}x {k[:120]}")
-    return 1 if n_missing else 0
+    # Wording: "锚点" may only remain where it is a technical term (wording.TECHNICAL).
+    print(f"\nwording: {len(wording_left)} non-technical 锚点 left on pages")
+    for page, c in wording_left[:40]:
+        print(f"  ! {page}: …{c}…")
+    return 1 if n_missing or wording_left else 0
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import routes
+import wording
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -366,6 +367,8 @@ def main() -> int:
     if stats:
         meta["method_zh"] = meta["method_zh"] + "\n\n" + meta.get("learn_method_zh", "").format(**stats)
 
+    # Display-layer wording (docs/redesign-tufte.md 5.1); the data files keep their original text.
+    survey, areas, papers, ideas, learn, meta = (wording.apply_all(x) for x in (survey, areas, papers, ideas, learn, meta))
     mods = learn.get("modules", [])
     counts = {"concepts": sum(len(m["concepts"]) for m in mods), "advanced": len(learn.get("advanced", [])),
               "classics": len(learn.get("classics", [])), "papers": len(papers), "ideas": len(ideas),
@@ -373,28 +376,20 @@ def main() -> int:
               "stages": len((learn.get("roadmap") or {}).get("stages", [])),
               "steps": {k: len(g.get("walkthrough", [])) for k, g in (learn.get("guided") or {}).items()}}
     synth = survey.get("synth") or {}
-    page_desc = {
-        "top": "3D 临场领域导览：要解决的问题、技术栈、进展与难点，以及从哪里开始学。",
-        "methodology": "领域重要技术总览：每项关键技术是什么、解决什么问题、主要方法与局限。",
-        "howto": "本站结构、推荐阅读顺序、页面标记的含义，以及调研方法与核查说明。",
-        "roadmap": f"{counts['stages']} 个阶段：每阶段的概念、论文、课程、动手项目和检查题，最后复现两篇锚点论文。",
-        "foundations": f"{len(mods)} 个模块、{counts['concepts']} 个概念：直觉、公式、例子、易错点，以及在两篇锚点论文中的位置。",
-        "guided": f"把 Quark（{counts['steps'].get('quark', 0)} 步）和 Ha et al.（{counts['steps'].get('ha', 0)} 步）逐步拆开，每一步链接到所需的基础概念。",
-        "advanced": f"{counts['advanced']} 个进阶专题：核心思想、演进时间线和按优先级排序的奠基论文。",
-        "classics": f"{counts['classics']} 篇 2026 年前的高影响论文（时间分布图 + 按主题整理），以及前沿阅读清单。",
-        "glossary": f"{counts['glossary']} 条中英术语，可搜索，并链接到基础概念。",
-        "anchors": "两篇锚点论文的研究视角精读：精确数字、设计选择、局限与谱系，以及两者的对比与互补；调研摘要与论文库。",
-        "map": f"端到端技术栈全景（{len(synth.get('field_map', []))} 层）与表示、渲染范式对比。",
-        "areas": f"{counts['areas']} 个子方向的综述：演进脉络、子主题、时间线、趋势与开放问题。",
-        "ideas": f"{counts['ideas']} 个经对抗查新与模拟评审的研究方向。",
-        "trends": "跨方向趋势、重大挑战与未来 1–3 年判断。",
-    }
+    overview = load_json(DATA / "site" / "overview.json")
+    fields = {"stages": counts["stages"], "modules": len(mods), "concepts": counts["concepts"], "advanced": counts["advanced"],
+              "classics": counts["classics"], "glossary": counts["glossary"], "papers": counts["papers"], "areas": counts["areas"],
+              "ideas": counts["ideas"], "layers": len(synth.get("field_map", [])), "steps_quark": counts["steps"].get("quark", 0),
+              "steps_ha": counts["steps"].get("ha", 0),
+              "techniques": sum(len(g["items"]) for g in overview["methodology"]["groups"])}
+    page_desc = {k: v.format(**fields) for k, v in overview["page_desc"].items()}
+    page_desc = wording.apply_all(page_desc)
     section_title = {"top": routes.BRAND, "methodology": "领域重要技术总览", "howto": "如何使用本站", "roadmap": "学习路线",
                      "foundations": "基础知识", "advanced": "进阶专题", "classics": "经典论文", "glossary": "术语表",
                      "anchors": "重点论文与论文库", "guided": "精读导读", "map": "领域全景", "areas": "子方向",
                      "ideas": "研究方向", "trends": "趋势与挑战"}
     minutes = {c["id"]: routes.read_minutes(c) for m in mods for c in m["concepts"]}
-    ctx = {"learn": learn, "survey": survey, "areas": areas, "papers": papers, "ideas": ideas, "meta": meta,
+    ctx = {"learn": learn, "survey": survey, "areas": areas, "papers": papers, "ideas": ideas, "meta": meta, "overview": overview,
            "counts": counts, "page_desc": page_desc, "section_title": section_title, "minutes": minutes}
     xref = routes.xref_table(ctx)
     legacy = routes.legacy_map(xref)

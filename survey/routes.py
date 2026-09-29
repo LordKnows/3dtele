@@ -365,7 +365,7 @@ def foundations_routes(ctx, xref):
               for m in mods for x in [xref[f"module-{m['id']}"]]]
     index = route("basics/foundations/index.html", "basics", "basics/foundations/index.html", "基础知识",
                   page("foundations", "基础知识", [TOC(groups)], sub="Foundations",
-                       meta=[f"{len(mods)} 个模块 · {sum(len(m['concepts']) for m in mods)} 个概念"], lede=ctx["meta"].get("foundations_lede", "")),
+                       meta=[f"{len(mods)} 个模块 · {sum(len(m['concepts']) for m in mods)} 个概念"], lede=ctx["overview"]["ledes"].get("foundations") or ctx["meta"].get("foundations_lede", "")),
                   [["Basics", ""], ["Foundations", ""]], ctx["page_desc"]["foundations"])
     mod_routes = []
     for m in mods:
@@ -456,7 +456,7 @@ def classics_routes(ctx, xref):
                                               for n, it in enumerate(s.get("items", []), 1)])]
     index = route("basics/classics/index.html", "basics", "basics/classics/index.html", "经典论文",
                   page("classics", "经典论文", body, sub="Classics", meta=[f"{len(classics)} 篇 · {len(themes)} 个主题"],
-                       lede=ctx["meta"].get("classics_lede", "")),
+                       lede=ctx["overview"]["ledes"].get("classics") or ctx["meta"].get("classics_lede", "")),
                   [["Basics", ""], ["Classics", ""]], ctx["page_desc"]["classics"], scripts=["classics-chart.js"])
     index["extra"] = {"chart": chart_data(classics, themes, xref)}
     out = []
@@ -622,7 +622,7 @@ def walkthrough_routes(ctx, xref):
     groups = [{"h": xref[f"guide-{a}"]["t"], "k": f"guide-{a}",
                "items": key_items([f"guide-{a}"] + [f"wpart-{a}-{s}" for s, _, _ in WALK_PARTS], xref)} for a in ("quark", "ha") if a in guided]
     index = route("works/walkthrough/index.html", "works", "works/walkthrough/index.html", "精读导读",
-                  page("guided", "精读导读", [TOC(groups)], sub="Walkthrough", lede=ctx["meta"].get("guided_lede", "")),
+                  page("guided", "精读导读", [TOC(groups)], sub="Walkthrough", lede=ctx["overview"]["ledes"].get("guided") or ctx["meta"].get("guided_lede", "")),
                   [["Works", ""], ["Walkthrough", ""]], ctx["page_desc"]["guided"])
     out = [index]
     anchors = ctx["survey"].get("anchors") or {}
@@ -714,7 +714,7 @@ def ideas_routes(ctx, xref):
                      str(s.get("feasibility", "")), str(s.get("telepresence_fit", ""))])
     index = route("future/index.html", "future", "future/index.html", "研究方向",
                   page("ideas", "研究方向", [SEC("排行", "ranking"), TABLE(["#", "方向", "建议", "查新", "综合", "新颖", "意义", "可行", "临场契合"], rows, wide=True, cls="rank")],
-                       sub="Directions", meta=[f"{len(ideas)} 个方向"], lede=ctx["meta"].get("ideas_lede", "")),
+                       sub="Directions", meta=[f"{len(ideas)} 个方向"], lede=ctx["overview"]["ledes"].get("ideas") or ctx["meta"].get("ideas_lede", "")),
                   [["Future", ""], ["Directions", ""]], ctx["page_desc"]["ideas"])
     out = []
     for rank, it in enumerate(ideas, 1):
@@ -765,23 +765,46 @@ def trends_route(ctx, xref):
 
 
 def overview_routes(ctx, xref, legacy_home):
-    meta, desc = ctx["meta"], ctx["page_desc"]
-    part_lede = {"basics": meta.get("learn_lede", ""), "works": meta.get("survey_lede", "")}
-    groups = [{"h": m["label"], "lede": part_lede.get(m["key"], ""), "items": key_items([SECTION_KEY[u] for _, u in m["items"]], xref)}
-              for m in NAV]
+    """Introduction, Methodology and How to use: text written for the redesign (data/site/overview.json)."""
+    meta, desc, ov = ctx["meta"], ctx["page_desc"], ctx["overview"]
+    intro, method, howto = ov["intro"], ov["methodology"], ov["howto"]
+
+    body = []
+    for sec in intro["sections"]:
+        body += [SEC(sec["h"], sec["id"]), P(sec.get("t")),
+                 UL([{"label": a, "t": b} for a, b in sec.get("items", [])], ordered=True), P(sec.get("after"))]
+        if sec.get("paths"):
+            body.append(REFS([{"left": who, "k": k, "gloss": why} for who, k, why in sec["paths"]]))
+        if sec.get("links"):
+            body.append(TOC([{"items": key_items(sec["links"], xref)}]))
     home = route("index.html", "overview", "index.html", BRAND,
-                 page("top", BRAND, [SEC(None, "intro"), P("（本页的领域导览正在撰写。）"), SEC("本站内容", "contents"), TOC(groups)],
-                      sub="3D telepresence: a field guide"),
+                 page("top", BRAND, body, sub="3D telepresence: a field guide", epigraph=intro["epigraph"]),
                  [["Overview", ""], ["Introduction", ""]], desc["top"], head_extra=legacy_home)
     home["title"] = ""
-    method = route("overview/methodology.html", "overview", "overview/methodology.html", "领域重要技术总览",
-                   page("methodology", "领域重要技术总览", [SEC(None, "intro"), P("（本页正在撰写。）")], sub="Methodology"),
-                   [["Overview", ""], ["Methodology", ""]], desc["methodology"])
-    howto = route("overview/how-to-use.html", "overview", "overview/how-to-use.html", "如何使用本站",
-                  page("howto", "如何使用本站", [SEC("站点结构", "sitemap"), TOC(groups),
-                                                SEC("关于本站：调研方法与核查说明", "method"), P(meta.get("method_zh"))], sub="How to use"),
-                  [["Overview", ""], ["How to use", ""]], desc["howto"])
-    return [home, method, howto]
+
+    groups = method["groups"]
+    body = [SEC(None, "lede"), {"b": "mtoc", "items": [{"u": f"#{g['id']}", "t": f"{i}. {g['h']}"} for i, g in enumerate(groups, 1)]},
+            P(method["lede"])]
+    for i, g in enumerate(groups, 1):
+        body.append(SEC(f"{i}. {g['h']}", g["id"]))
+        for it in g["items"]:
+            related = links(it["links"], xref)
+            body += [H3(it["name"], en=it.get("en", "")), P(it["t"], mn=note("相关", links=related) if related else None)]
+    n = sum(len(g["items"]) for g in groups)
+    methodology = route("overview/methodology.html", "overview", "overview/methodology.html", "领域重要技术总览",
+                        page("methodology", "领域重要技术总览", body, sub="Methodology", meta=[f"{len(groups)} 组 · {n} 项技术"], mtoc=True),
+                        [["Overview", ""], ["Methodology", ""]], desc["methodology"])
+
+    ledes = howto["group_ledes"]
+    groups = [{"h": m["label"], "lede": ledes.get(m["key"], ""), "items": key_items([SECTION_KEY[u] for _, u in m["items"]], xref)} for m in NAV]
+    body = [SEC(None, "intro"), P(howto["intro"]),
+            SEC("站点结构", "sitemap"), TOC(groups),
+            SEC("推荐阅读顺序", "order"), REFS([{"left": who, "k": k, "gloss": how} for who, k, how in howto["order"]]),
+            SEC("页面上的标记", "markers"), UL([{"label": a, "t": b} for a, b in howto["markers"]]),
+            SEC("关于本站：调研方法与核查说明", "method"), P(meta.get("method_zh"))]
+    howto_r = route("overview/how-to-use.html", "overview", "overview/how-to-use.html", "如何使用本站",
+                    page("howto", "如何使用本站", body, sub="How to use"), [["Overview", ""], ["How to use", ""]], desc["howto"])
+    return [home, methodology, howto_r]
 
 
 def site_routes(ctx, xref, legacy_home):
