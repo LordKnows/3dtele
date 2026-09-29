@@ -3,7 +3,7 @@
 - 日期：2026-09-29（第 2 版：用户已回答全部待确认问题）
 - 分支：`worktree-tufte-redesign`，基于 `origin/main` d78071e；worktree 路径 `.claude/worktrees/tufte-redesign`
 - 范围：`survey/`（构建脚本、页面渲染、样式、检查脚本）；线上站点 https://3dv.zyhu.dev
-- 状态：**选型和计划已全部确认，还没有开始改站点代码**。下一步从 P0 开始（见第 8 节）。
+- 状态：**P0 样张已完成，等用户确认版式、字体和悬停预览**（见第 10 节）。确认后进入 P1。
 - 执行方：另一个 Claude Code session 会按本文档执行。**请先读第 9 节“给执行 session 的说明”。**
 
 ---
@@ -372,3 +372,27 @@ python3 survey/check_layout.py
 - Quarto 文章版式 — https://quarto.org/docs/authoring/article-layout.html
 - 霞鹜文楷 — https://github.com/lxgw/LxgwWenKai
 - 思源宋体 / Noto Serif SC — https://fonts.google.com/noto/specimen/Noto+Serif+SC
+
+---
+
+## 10. 执行记录
+
+### P0 样张（2026-09-29）
+
+- 样张：`survey/site/basics/foundations/g-epipolar.html`，由 `build.py` 里的 `concept_routes()` 生成（`P0_CONCEPTS` 目前只有 `g-epipolar`；P1 起换成完整路由表）。
+- 新增源文件：`survey/src/tufte/`（`shell.html`、`tufte.css`、`frame.js`、`concept.js`）。`core.js` 里与页面框架无关的函数（`el`、`safeUrl`、`typeset`、`eqList` 等）移到 `survey/src/lib.js`，新旧页面共用；旧 11 页与基线逐字一致。
+- 构建时生成 **id → {网址, 标题, 英文名, 模块, 简介}** 表（`xref_table()`），每页只嵌入用到的条目；站内链接按页面深度生成相对路径。
+- ET Book 自托管在 `survey/site/fonts/et-book/`（附 MIT 许可证）；只用 roman、italic、bold、roman 旧式数字四个文件。
+- 检查脚本读 `CHROME_BIN`；`check_content.py --save survey/.baseline` 生成基线，`check_content.py survey/.baseline` 比对。`check_render.py`、`check_layout.py` 已改为递归扫描。
+
+**P0 里做的、需要用户确认的决定**
+
+- 正文里的概念 id（如“见 g-pinhole”）显示为概念短名（“见针孔相机模型”），id 保留在链接数据里。P2 的内容完整检查要按“id → 短名”规则比对。
+- 学习资源的说明放在条目下方，不放旁注：条目只有一行、说明有三四行，放旁注会一路往下错位。编号旁注目前用于“论文位置”。
+- 标题里的西文用 ET Book 粗体（衬线数字），不用半粗旧式数字：旧式数字在“3D”这类词里会下沉。
+- 正文左对齐（不两端对齐）：中文里夹长英文词时，两端对齐会拉出很大的字距。
+
+**Cloud 环境的限制**
+
+- 出口策略拦截 `cdn.jsdelivr.net`，headless Chrome 也加载不了 Google Fonts，所以 cloud 里的截图没有思源宋体、霞鹜文楷和 MathJax 公式（显示为系统字体和原始 TeX）。要看真实字体和公式，需要在本机打开，或推送分支用 Cloudflare 预览。
+- 首屏字体体积（估算）：本页边注、题记用到的霞鹜文楷分片 14 个，约 720 KB；思源宋体的分片数需要在真实浏览器里测。

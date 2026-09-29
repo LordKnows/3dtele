@@ -363,6 +363,131 @@ def write_artifact_entry(index_html: str):
     out.write_text(body, encoding="utf-8")
 
 
+# ---------- redesigned site (Tufte layout): nav, cross-reference table, routes ----------
+# P0 renders one sample article; the route table grows to the whole site in P1/P2 (docs/redesign-tufte.md).
+TUFTE = SRC / "tufte"
+NAV = [
+    {"key": "overview", "label": "Overview", "items": [
+        ["Introduction", "index.html"], ["Methodology", "overview/methodology.html"], ["How to use", "overview/how-to-use.html"]]},
+    {"key": "basics", "label": "Basics", "items": [
+        ["Routes", "basics/routes/index.html"], ["Foundations", "basics/foundations/index.html"],
+        ["Advanced topics", "basics/advanced/index.html"], ["Classics", "basics/classics/index.html"], ["Glossary", "basics/glossary.html"]]},
+    {"key": "works", "label": "Works", "items": [
+        ["Papers", "works/papers/index.html"], ["Walkthrough", "works/walkthrough/index.html"],
+        ["Field map", "works/field-map.html"], ["Sub areas", "works/areas/index.html"]]},
+    {"key": "future", "label": "Future", "items": [["Directions", "future/index.html"], ["Trends & Challenges", "future/trends.html"]]},
+]
+P0_CONCEPTS = {"g-epipolar"}
+ID_TOKEN = re.compile(r"(a-[a-z0-9]+(?:-[a-z0-9]+)*|[fgdrilnv]-[a-z0-9]+)")
+ANCHOR_SHORT = {"quark": "Quark", "ha": "Ha et al."}
+
+
+def first_sentence(text, limit: int) -> str:
+    """One-line summary for link previews: the first sentence, cut to about `limit` characters."""
+    t = re.sub(r"\s+", " ", str(text or "")).strip()
+    m = re.search(r"[。！？]", t)
+    if m:
+        t = t[:m.end()]
+    return t if len(t) <= limit else t[:limit - 1].rstrip("，、；：,;: ") + "…"
+
+
+def all_strings(x):
+    if isinstance(x, str):
+        yield x
+    elif isinstance(x, dict):
+        for v in x.values():
+            yield from all_strings(v)
+    elif isinstance(x, list):
+        for v in x:
+            yield from all_strings(v)
+
+
+def read_minutes(obj) -> int:
+    """Reading time at about 500 characters (Chinese characters plus Latin words) per minute."""
+    s = " ".join(all_strings(obj))
+    return max(1, round((len(re.findall(r"[㐀-鿿]", s)) + len(re.findall(r"[A-Za-z0-9]+", s))) / 500))
+
+
+def xref_table(learn) -> dict:
+    """Element id -> {u: url from the site root, t: title, e: English name, m: where it lives, s: one-line summary,
+    n: short label for inline links}. Pages link by element id; hover previews read the same entries."""
+    x = {}
+    for m in learn.get("modules", []):
+        where = f"Foundations · {m['id']} {m['title_zh']}"
+        x[f"module-{m['id']}"] = {"u": f"basics/foundations/{m['id'].lower()}.html", "t": f"{m['id']} · {m['title_zh']}",
+                                  "e": m["title_en"], "m": "Foundations", "s": first_sentence(m.get("goal_zh"), 80)}
+        for c in m["concepts"]:
+            x[f"concept-{c['id']}"] = {"u": f"basics/foundations/{c['id']}.html", "t": c["name_zh"], "e": c.get("name_en", ""),
+                                       "m": where, "s": first_sentence(c.get("tldr_zh"), 120), "n": c["name_zh"].split("：")[0]}
+    for t in learn.get("advanced", []):
+        x[f"adv-{t['id']}"] = {"u": f"basics/advanced/{t['id']}.html", "t": t["title_zh"], "e": t.get("title_en", ""),
+                               "m": "Advanced topics", "s": first_sentence(t.get("overview_zh"), 80)}
+    for i, p in enumerate(learn.get("classics", [])):
+        page = f"basics/classics/{p['theme']}.html" if p.get("theme") else "basics/classics/index.html"
+        x[f"classic-{i}"] = {"u": f"{page}#classic-{i}", "t": p["title"], "e": "", "m": f"Classics · {p['year']}",
+                             "s": first_sentence(p.get("influence_zh"), 80)}
+    for anchor, g in (learn.get("guided") or {}).items():
+        for s in g.get("walkthrough", []):
+            x[f"walk-{anchor}-{s['id']}"] = {"u": f"works/walkthrough/{anchor}.html#walk-{anchor}-{s['id']}", "t": s.get("title_zh", ""),
+                                            "e": "", "m": f"Walkthrough · {ANCHOR_SHORT.get(anchor, anchor)} · {s['id'].upper()}",
+                                            "s": first_sentence(s.get("what_zh"), 80), "n": s["id"].upper()}
+    return x
+
+
+def ids_in(obj, xref) -> set:
+    """Keys of the concepts / advanced topics whose ids appear in the text (rendered as inline links)."""
+    out = set()
+    for s in all_strings(obj):
+        for tok in ID_TOKEN.findall(s):
+            for key in (f"concept-{tok}", f"adv-{tok}"):
+                if key in xref:
+                    out.add(key)
+    return out
+
+
+def concept_routes(learn, rev, xref) -> list:
+    order = [(m, c) for m in learn.get("modules", []) for c in m["concepts"]]
+    routes = []
+    for i, (m, c) in enumerate(order):
+        if c["id"] not in P0_CONCEPTS:
+            continue
+        prev = f"concept-{order[i - 1][1]['id']}" if i > 0 else None
+        nxt = f"concept-{order[i + 1][1]['id']}" if i + 1 < len(order) else None
+        walk = [f"walk-{w['anchor']}-{w['id']}" for w in rev["walkBy"].get(c["id"], [])]
+        classics = [f"classic-{x['i']}" for x in rev["classicBy"].get(c["id"], [])]
+        adv = [f"adv-{a}" for a in rev["advBy"].get(c["id"], [])]
+        refs = ({f"concept-{p}" for p in c.get("prereqs", [])} | ids_in(c, xref) | {f"module-{m['id']}"}
+                | set(walk) | set(classics) | set(adv) | {k for k in (prev, nxt) if k})
+        routes.append({
+            "path": f"basics/foundations/{c['id']}.html", "template": "concept", "nav": "basics",
+            "navItem": "basics/foundations/index.html", "title": c["name_zh"], "description": first_sentence(c.get("tldr_zh"), 120),
+            "crumbs": [["Basics", ""], ["Foundations", "basics/foundations/index.html"],
+                       [f"{m['id']} {m['title_zh']}", xref[f"module-{m['id']}"]["u"]]],
+            "data": {"concept": c, "module": f"module-{m['id']}", "walk": walk, "classics": classics, "adv": adv,
+                     "prev": prev, "next": nxt, "readMin": read_minutes(c)},
+            "refs": refs,
+        })
+    return routes
+
+
+def render_article(route, shell, css, lib, frame, meta, xref) -> str:
+    root = "../" * route["path"].count("/")
+    data = {"site": {"brand": BRAND, "root": root, "path": route["path"], "nav": NAV, "navCur": route["nav"],
+                     "navItem": route["navItem"], "crumbs": route["crumbs"], "date": meta.get("date", "")},
+            "xref": {k: xref[k] for k in sorted(route["refs"]) if k in xref}}
+    missing = sorted(k for k in route["refs"] if k not in xref)
+    if missing:
+        print(f"{route['path']}: no link target for {missing}", file=sys.stderr)
+    data.update(route["data"])
+    blob = json.dumps(data, ensure_ascii=False).replace("</", "<\\/").replace("<!--", "<\\u0021--")
+    script = "\n".join([lib, frame, (TUFTE / f"{route['template']}.js").read_text(encoding="utf-8"), "  finishPage();"])
+    out = shell
+    for k, v in (("{{TITLE}}", html.escape(f"{route['title']} · {BRAND}")), ("{{DESCRIPTION}}", html.escape(route["description"], quote=True)),
+                 ("{{STYLE}}", css.replace("{{ROOT}}", root)), ("{{SCRIPT}}", script), ("{{DATA}}", blob)):
+        out = out.replace(k, v, 1)
+    return out
+
+
 def main() -> int:
     survey, areas, papers = build_survey()
     ideas = build_ideas()
@@ -401,7 +526,8 @@ def main() -> int:
 
     shell = (SRC / "shell.html").read_text(encoding="utf-8")
     css = (SRC / "styles.css").read_text(encoding="utf-8")
-    core = (SRC / "core.js").read_text(encoding="utf-8")
+    lib = (SRC / "lib.js").read_text(encoding="utf-8")
+    core = lib + "\n" + (SRC / "core.js").read_text(encoding="utf-8")
     SITE_DIR.mkdir(exist_ok=True)
     total = 0
     for page in PAGES:
@@ -415,6 +541,15 @@ def main() -> int:
         size = out.stat().st_size
         total += size
         print(f"{page['file']:18s} {size / 1024:8.0f} KB")
+
+    xref = xref_table(learn)
+    t_shell, t_css, t_frame = ((TUFTE / f).read_text(encoding="utf-8") for f in ("shell.html", "tufte.css", "frame.js"))
+    for route in concept_routes(learn, ctx["rev"], xref):
+        out = SITE_DIR / route["path"]
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(render_article(route, t_shell, t_css, lib, t_frame, meta, xref), encoding="utf-8")
+        json.loads(re.search(r'id="data">(.*?)</script>', out.read_text(encoding="utf-8"), re.S).group(1))
+        print(f"{route['path']:18s} {out.stat().st_size / 1024:8.0f} KB")
     write_legacy_redirect(section_page)
     write_artifact_entry((SITE_DIR / "index.html").read_text(encoding="utf-8"))
     print(f"site/: {len(PAGES)} pages, {total / 1024 / 1024:.1f} MB total; stats={stats}")

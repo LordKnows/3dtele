@@ -1,9 +1,9 @@
 """Render every page of site/ in headless Chrome and report console errors plus a DOM summary.
 
 Usage:
-  python3 check_render.py                      # all pages
-  python3 check_render.py guided classics      # only these pages (file stem)
-  python3 check_render.py --shot guided:1400x1600[:light]   # also screenshot a page (mobile: 390x844)
+  python3 check_render.py                      # all pages, including subdirectories
+  python3 check_render.py guided basics/foundations/g-epipolar   # only these pages (path without .html)
+  python3 check_render.py --shot guided:1400x1600[:light|:dark]   # also screenshot a page (into $SHOT_DIR, default survey/)
 """
 import os
 import re
@@ -21,6 +21,7 @@ COUNTS = {
     "adv": r'class="card-d"', "diagrams": r'class="diagram"', "lane dots": r'<g class="m"', "mjx": r"<mjx-container",
     "chips": r'class="cchip', "idrefs": r'class="idref"', "stages": r'class="stage"', "glossary rows": r'<td class="en">',
     "db rows": r'<td class="y">', "ideas": r'class="idea"', "areas": r'class="area"', "nav pages": r'class="page', "pager": r'class="pager"',
+    "sidenotes": r'class="sidenote"', "marginnotes": r'class="marginnote"', "xrefs": r"data-xref=", "raw tex": r'class="math-block">\\\[',
 }
 
 
@@ -45,7 +46,7 @@ def check(page: Path) -> bool:
     errors = [l for l in err.splitlines() if "CONSOLE" in l and "chrome-extension" not in l]
     counts = {k: len(re.findall(v, dom)) for k, v in COUNTS.items()}
     shown = ", ".join(f"{k}={v}" for k, v in counts.items() if v)
-    print(f"{page.name:18s} dom={len(dom) // 1024}KB  {shown}")
+    print(f"{page.relative_to(SITE).as_posix():36s} dom={len(dom) // 1024}KB  {shown}")
     for e in errors[:10]:
         print("   console:", e[:300])
     return not errors and len(dom) > 1000
@@ -56,10 +57,11 @@ def screenshot(spec: str):
     stem, size = parts[0], (parts[1] if len(parts) > 1 else "1400x1600")
     scheme = parts[2] if len(parts) > 2 else ""
     w, _, h = size.partition("x")
-    shot = SITE.parent / f"shot-{stem}-{w}{'-' + scheme if scheme else ''}.png"
+    out_dir = Path(os.environ.get("SHOT_DIR") or SITE.parent)
+    shot = out_dir / f"shot-{stem.replace('/', '_')}-{w}{'-' + scheme if scheme else ''}.png"
     flags = [f"--window-size={w},{h}", "--hide-scrollbars", "--virtual-time-budget=15000", f"--screenshot={shot}"]
-    if scheme == "light":
-        flags.append("--blink-settings=preferredColorScheme=1")
+    if scheme in ("light", "dark"):
+        flags.append(f"--blink-settings=preferredColorScheme={1 if scheme == 'light' else 0}")
     run_chrome(flags + [(SITE / f"{stem}.html").as_uri()], 60)
     print("screenshot", shot, shot.exists())
 
@@ -68,7 +70,7 @@ def main() -> int:
     args = sys.argv[1:]
     shots = [args[i + 1] for i, a in enumerate(args) if a == "--shot" and i + 1 < len(args)]
     stems = [a for i, a in enumerate(args) if a != "--shot" and (i == 0 or args[i - 1] != "--shot")]
-    pages = [SITE / f"{s}.html" for s in stems] if stems else sorted(SITE.glob("*.html"))
+    pages = [SITE / f"{s}.html" for s in stems] if stems else sorted(p for p in SITE.rglob("*.html") if not p.name.startswith("."))
     ok = all([check(p) for p in pages])
     for s in shots:
         screenshot(s)

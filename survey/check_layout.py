@@ -19,7 +19,8 @@ from chrome import chrome_cmd
 SITE = Path(__file__).resolve().parent / "site"
 WIDTHS = [390, 1400]
 DEEP_LINKS = ["foundations.html#concept-g-pinhole", "guided.html#walk-ha-h3", "classics.html#classic-40",
-              "roadmap.html#stage-2", "areas.html#area-avatars", "advanced.html#adv-a-geo-fm", "ideas.html#idea-C02"]
+              "roadmap.html#stage-2", "areas.html#area-avatars", "advanced.html#adv-a-geo-fm", "ideas.html#idea-C02",
+              "basics/foundations/g-epipolar.html#cases"]
 
 HARNESS = """<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0"><pre id="out">running</pre>
 <script>
@@ -57,7 +58,7 @@ f.onload = function () {
     } else {
       var id = job.src.split("#")[1], t = d.getElementById(id), bar = d.querySelector(".toc");
       res.top = t ? Math.round(t.getBoundingClientRect().top) : null;
-      res.open = t ? !!t.open : null;
+      res.open = t && t.tagName === "DETAILS" ? t.open : null;
       res.barBottom = job.w < 1001 && bar ? Math.round(bar.getBoundingClientRect().bottom) : 0;
       document.getElementById("out").textContent = JSON.stringify(res);
     }
@@ -94,7 +95,8 @@ def measure(job):
 
 
 def main() -> int:
-    jobs = [{"kind": "overflow", "w": w, "src": p.name} for w in WIDTHS for p in sorted(SITE.glob("*.html"))]
+    pages = sorted(p for p in SITE.rglob("*.html") if not p.name.startswith("."))
+    jobs = [{"kind": "overflow", "w": w, "src": p.relative_to(SITE).as_posix()} for w in WIDTHS for p in pages]
     jobs += [{"kind": "jump", "w": w, "src": l} for w in WIDTHS for l in DEEP_LINKS]
     with ThreadPoolExecutor(max_workers=4) as ex:
         results = list(ex.map(measure, jobs))

@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>对极几何、三角化与单应 · 3D 临场研究图谱</title>
+<meta name="description" content="两台相机看同一个点时，该点在第二张图中只可能出现在一条极线上（x&#x27;ᵀF x = 0）；有了对应点就能三角化出 3D 位置；空间中的一个平面在两张图之间诱导的映射是一个 3×3 单应。">
+<meta name="color-scheme" content="light dark">
+<script>
+  // Apply a saved light/dark choice before first paint; without one the page follows the system setting.
+  try { var t = localStorage.getItem("atlas-theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) { /* storage unavailable */ }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Serif+SC:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/lxgwwenkai-regular.css">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]] },
+    options: { skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code", "input", "select", "button"] },
+    svg: { fontCache: "global" },
+    startup: {
+      typeset: false,
+      ready: function () {
+        window.MathJax.startup.defaultReady();
+        if (typeof window.__atlasMathReady === "function") window.__atlasMathReady();
+      }
+    }
+  };
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js"></script>
+<style>
+/* Tufte-style layout for Chinese long-form pages, after tufte-css (MIT, (c) 2014 Dave Liepmann; see LICENSE-tufte-css).
+   ET Book: MIT, (c) 2015 Dmitry Krasny, Bonnie Scranton, Edward Tufte (fonts/et-book/LICENSE).
+   ../../ is the page's path to the site root. */
+
+/* ---------- fonts: ET Book for Latin (self-hosted), Noto Serif SC for Chinese text, LXGW WenKai for notes ---------- */
+/* ET Book leaves curly quotes, dashes and ellipses to the Chinese font so they keep full width in Chinese prose,
+   and single guillemets (› ‹), which it lacks. */
+@font-face { font-family: "et-book"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-roman-line-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book"; font-weight: 400; font-style: italic; font-display: swap;
+  src: url("../../fonts/et-book/et-book-display-italic-old-style-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book"; font-weight: 700; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-bold-line-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+/* Notes pair Latin italic with upright Kai (the "italic ↔ 楷体" rule): the italic cut is registered as an upright
+   family so the browser never slants the Chinese glyphs. */
+@font-face { font-family: "et-book-note"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-display-italic-old-style-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book-osf"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-roman-old-style-figures.woff") format("woff"); }
+
+:root {
+  --bg: #fffff8;
+  --ink: #111111;
+  --ink-2: #3c3c36;
+  --muted: #74746a;
+  --rule: #d8d6c8;
+  --rule-2: #b9b6a4;
+  --accent: #a8322d;
+  --serif: "et-book", "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", Palatino, Georgia, serif;
+  --note: "et-book-note", "LXGW WenKai", "Kaiti SC", "STKaiti", "KaiTi", "et-book", serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --side: clamp(12rem, 21vw, 17rem);
+  --gap: 2.75rem;
+  --main: calc(100% - var(--side) - var(--gap));
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161614; --ink: #e2e0d6; --ink-2: #c3c1b6; --muted: #979589; --rule: #34332e; --rule-2: #4d4b44; --accent: #e8836f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161614; --ink: #e2e0d6; --ink-2: #c3c1b6; --muted: #979589; --rule: #34332e; --rule-2: #4d4b44; --accent: #e8836f;
+  color-scheme: dark;
+}
+
+/* ---------- base ---------- */
+* { box-sizing: border-box; }
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--serif); font-size: 1.15625rem; line-height: 1.85;
+  font-kerning: normal; font-variant-numeric: lining-nums;
+  /* Space between Chinese and Latin text where the source has none; squeeze adjacent CJK punctuation
+     (text-spacing-trim applies the fonts' halt / chws features). Browsers without them keep the source spacing. */
+  text-autospace: normal; text-spacing-trim: normal;
+  overflow-wrap: break-word;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+[hidden] { display: none !important; }
+a { color: inherit; text-decoration-line: underline; text-decoration-thickness: 1px; text-underline-offset: .18em; text-decoration-color: var(--rule-2); }
+a:hover { color: var(--accent); text-decoration-color: currentColor; }
+a:focus-visible, button:focus-visible, summary:focus-visible, label:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.skip { position: absolute; left: -999px; top: 0; }
+.skip:focus { left: 1rem; top: .5rem; background: var(--bg); padding: .2rem .5rem; z-index: 60; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+p { margin: 0; }
+p + p { margin-top: .9em; }
+
+/* ---------- top bar ---------- */
+.topbar { border-bottom: 1px solid var(--rule); }
+.bar-in { max-width: 67rem; margin: 0 auto; padding: 0 1.5rem; display: flex; align-items: center; gap: 2.2rem; min-height: 3.1rem; }
+.brand { font-size: 1rem; text-decoration: none; letter-spacing: .02em; white-space: nowrap; }
+.site-nav { flex: 1; }
+.menus { list-style: none; margin: 0; padding: 0; display: flex; gap: 1.6rem; }
+.menu { position: relative; }
+.menu-btn, .theme-btn, .burger {
+  font-family: "et-book", var(--serif); font-variant-caps: all-small-caps; letter-spacing: .08em; font-size: 1.12rem;
+  color: var(--ink-2); line-height: 3.1rem;
+}
+.menu-btn:hover, .theme-btn:hover, .burger:hover, .menu.open > .menu-btn { color: var(--accent); }
+.menu.cur > .menu-btn { color: var(--ink); box-shadow: inset 0 -1px 0 var(--ink); }
+.drop {
+  display: none; position: absolute; left: -1rem; top: 100%; z-index: 40; min-width: 13rem;
+  list-style: none; margin: 0; padding: .45rem 0; background: var(--bg); border: 1px solid var(--rule);
+}
+.menu.open > .drop { display: block; }
+.drop a { display: block; padding: .15rem 1rem; text-decoration: none; font-size: 1.02rem; color: var(--ink-2); white-space: nowrap; }
+.drop a:hover, .drop a:focus-visible { color: var(--accent); }
+.drop a.cur { color: var(--ink); }
+.drop a.cur::before { content: "›"; position: absolute; margin-left: -.7rem; color: var(--accent); }
+.theme-btn { margin-left: auto; }
+.burger { display: none; }
+
+/* ---------- article column + margin ---------- */
+main { display: block; }
+.art { max-width: 67rem; margin: 0 auto; padding: 2.6rem 1.5rem 3rem; counter-reset: sidenote-counter; }
+.art > *, .art section > * { width: var(--main); }
+.art > section { width: 100%; }
+.art .fullwidth { width: 100%; }
+section { padding-top: .6rem; }
+
+.crumbs { font-size: .86rem; color: var(--muted); letter-spacing: .01em; }
+.crumbs a { color: var(--muted); text-decoration: none; }
+.crumbs a:hover { color: var(--accent); }
+.crumbs .sep { margin: 0 .45em; color: var(--rule-2); }
+h1, h2, h3 { font-family: var(--serif); color: var(--ink); text-wrap: balance; }
+h1 { font-size: 2.3rem; font-weight: 400; line-height: 1.3; margin: .9rem 0 0; letter-spacing: .01em; }
+.subtitle { font-family: "et-book", var(--note); font-style: italic; font-size: 1.45rem; line-height: 1.3; color: var(--ink-2); margin-top: .35rem; }
+.meta { font-size: .92rem; color: var(--muted); margin-top: 1.1rem; }
+.meta a { color: var(--muted); }
+h2 { font-size: 1.42rem; font-weight: 600; line-height: 1.4; margin: 2.6rem 0 .9rem; }
+h3 { font-size: 1.12rem; font-weight: 600; line-height: 1.5; margin: 1.8rem 0 .5rem; }
+h3 .used { font-family: var(--note); font-weight: 400; font-size: .86rem; color: var(--muted); margin-left: .6em; }
+
+.epigraph { margin: 2.2rem 0 .6rem; }
+.epigraph blockquote { margin: 0; padding: 0 0 0 1.6rem; border-left: 1px solid var(--rule-2); }
+.epigraph p { font-family: var(--note); font-size: 1.12rem; line-height: 1.85; color: var(--ink-2); }
+
+.art ol, .art ul { margin: .6rem 0 0; padding-left: 1.6em; }
+.art li + li { margin-top: .45rem; }
+li::marker { font-family: "et-book-osf", var(--serif); color: var(--muted); }
+
+/* Equations: display math in the text column, scrolling sideways on narrow screens. */
+.eqs { display: block; }
+.eq + .eq { margin-top: 1.6rem; }
+.math-block { overflow-x: auto; overflow-y: hidden; margin: .4rem 0 .6rem; padding: .2rem 0; font-size: 1rem; }
+.math-block mjx-container { margin: 0 !important; }
+
+/* ---------- side notes & margin notes (floated into the right margin) ---------- */
+.sidenote, .marginnote {
+  float: right; clear: right; position: relative;
+  width: var(--side); margin-right: calc(-1 * (var(--side) + var(--gap))); margin-top: .3rem; margin-bottom: .6rem;
+  font-family: var(--note); font-size: .88rem; line-height: 1.6; color: var(--ink-2); text-align: left;
+  font-style: normal; font-weight: 400; letter-spacing: 0;
+}
+h3 .sidenote { margin-top: .2rem; }
+.sidenote-number { counter-increment: sidenote-counter; }
+.sidenote-number::after, .sidenote::before { font-family: "et-book-osf", var(--serif); position: relative; vertical-align: baseline; }
+.sidenote-number::after { content: counter(sidenote-counter); font-size: .75rem; top: -.55em; left: .08em; color: var(--ink-2); }
+.sidenote::before { content: counter(sidenote-counter) " "; font-size: .8rem; top: -.4em; }
+.note-label { font-family: var(--serif); font-weight: 600; font-size: .82rem; color: var(--muted); margin-right: .5em; }
+.marginnote .note-label { display: block; margin: 0 0 .1rem; }
+input.margin-toggle { display: none; }
+label.sidenote-number { display: inline; cursor: default; }
+label.margin-toggle:not(.sidenote-number) { display: none; }
+
+/* ---------- quiz, further reading, series ---------- */
+.quiz details { margin-top: .3rem; }
+.quiz summary { font-family: var(--note); font-size: .92rem; color: var(--muted); cursor: pointer; list-style: none; display: inline-block; }
+.quiz summary::-webkit-details-marker { display: none; }
+.quiz summary::before { content: "+ "; font-family: "et-book", var(--serif); }
+.quiz details[open] summary::before { content: "− "; }
+.quiz summary:hover { color: var(--accent); }
+.quiz details > p { margin-top: .3rem; padding-left: 1rem; border-left: 1px solid var(--rule); color: var(--ink-2); }
+
+/* Reference lists: a narrow label column (kind / year) and a hanging text column. */
+.art ul.refs { list-style: none; padding-left: 0; }
+.refs li { display: grid; grid-template-columns: 2.8rem minmax(0, 1fr); column-gap: .5rem; line-height: 1.6; }
+.refs li > :not(.kind):not(.yr) { grid-column: 2; }
+.refs .kind, .refs .yr { grid-column: 1; font-family: var(--note); font-size: .86rem; color: var(--muted); padding-top: .12rem; }
+.refs .yr { font-family: "et-book-osf", var(--serif); font-size: .95rem; padding-top: .05rem; }
+.refs .en { font-family: "et-book", var(--serif); font-style: italic; color: var(--muted); }
+.refs .gloss { font-family: var(--note); font-size: .88rem; color: var(--ink-2); margin-top: .1rem; }
+.art .refs li + li { margin-top: .75rem; }
+.art .papers li + li { margin-top: .35rem; }
+
+.series { display: grid; grid-template-columns: 1fr auto 1fr; gap: 1rem; align-items: end; margin-top: 3.2rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: .98rem; }
+.series small { display: block; font-family: var(--note); font-size: .8rem; color: var(--muted); }
+.series .up { text-align: center; font-size: .88rem; }
+.series .up a { color: var(--muted); }
+.series .next { text-align: right; }
+
+.site-foot { max-width: 67rem; margin: 0 auto; padding: 1.2rem 1.5rem 2.5rem; font-size: .82rem; color: var(--muted); }
+.site-foot a { color: var(--muted); text-decoration: none; }
+
+/* ---------- hover preview ---------- */
+.xtip {
+  position: absolute; z-index: 50; max-width: min(22rem, calc(100vw - 16px)); padding: .55rem .8rem .6rem;
+  background: var(--bg); border: 1px solid var(--rule-2); color: var(--ink);
+  font-family: var(--note); font-size: .88rem; line-height: 1.6; pointer-events: none;
+}
+.xt-m { font-size: .76rem; color: var(--muted); }
+.xt-t { font-family: var(--serif); font-weight: 600; font-size: .95rem; line-height: 1.45; margin-top: .1rem; }
+.xt-e { font-family: "et-book", var(--serif); font-style: italic; color: var(--ink-2); line-height: 1.4; }
+.xt-s { margin-top: .35rem; color: var(--ink-2); }
+
+/* ---------- narrow screens: one column; notes fold behind their number or ⊕ ---------- */
+@media (max-width: 760px) {
+  body { font-size: 1.0625rem; line-height: 1.8; }
+  .bar-in { gap: 1rem; padding: 0 1rem; flex-wrap: wrap; }
+  .site-nav { order: 5; flex-basis: 100%; display: none; }
+  .topbar.nav-open .site-nav { display: block; }
+  .menus { flex-direction: column; gap: 0; padding-bottom: .6rem; }
+  .menu-btn { line-height: 2.4rem; width: 100%; text-align: left; }
+  .menu-btn::after { content: " +"; }
+  .menu.open > .menu-btn::after { content: " −"; }
+  .menu.cur > .menu-btn { box-shadow: none; }
+  .drop { position: static; border: 0; padding: 0 0 .4rem .9rem; min-width: 0; }
+  .drop a { padding: .2rem 0; white-space: normal; }
+  .burger { display: inline; }
+  .theme-btn { margin-left: auto; }
+  .art { padding: 1.6rem 1rem 2.4rem; }
+  .art > *, .art section > * { width: 100%; }
+  h1 { font-size: 1.85rem; }
+  .subtitle { font-size: 1.22rem; }
+  .epigraph blockquote { padding-left: 1rem; }
+  .epigraph p { font-size: 1.05rem; }
+  label.margin-toggle:not(.sidenote-number) { display: inline; cursor: pointer; color: var(--muted); font-family: "et-book", var(--serif); padding: 0 .15em; }
+  label.sidenote-number { cursor: pointer; }
+  .sidenote, .marginnote { display: none; }
+  .margin-toggle:checked + .sidenote, .margin-toggle:checked + .marginnote {
+    display: block; float: left; clear: both; width: 100%; margin: .6rem 0; padding-left: .8rem; border-left: 1px solid var(--rule-2);
+  }
+  .series { grid-template-columns: 1fr 1fr; }
+  .series .up { display: none; }
+}
+@media print {
+  .topbar, .site-foot, .series { display: none; }
+}
+
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<header class="topbar" id="topbar"></header>
+<main id="main"><article class="art"></article></main>
+<footer class="site-foot" id="site-foot"></footer>
+<script type="application/json" id="data">{"site": {"brand": "3D 临场研究图谱", "root": "../../", "path": "basics/foundations/g-epipolar.html", "nav": [{"key": "overview", "label": "Overview", "items": [["Introduction", "index.html"], ["Methodology", "overview/methodology.html"], ["How to use", "overview/how-to-use.html"]]}, {"key": "basics", "label": "Basics", "items": [["Routes", "basics/routes/index.html"], ["Foundations", "basics/foundations/index.html"], ["Advanced topics", "basics/advanced/index.html"], ["Classics", "basics/classics/index.html"], ["Glossary", "basics/glossary.html"]]}, {"key": "works", "label": "Works", "items": [["Papers", "works/papers/index.html"], ["Walkthrough", "works/walkthrough/index.html"], ["Field map", "works/field-map.html"], ["Sub areas", "works/areas/index.html"]]}, {"key": "future", "label": "Future", "items": [["Directions", "future/index.html"], ["Trends & Challenges", "future/trends.html"]]}], "navCur": "basics", "navItem": "basics/foundations/index.html", "crumbs": [["Basics", ""], ["Foundations", "basics/foundations/index.html"], ["M2 相机与多视几何", "basics/foundations/m2.html"]], "date": "2026-09-28"}, "xref": {"adv-a-ff-3dgs": {"u": "basics/advanced/a-ff-3dgs.html", "t": "前馈 3DGS 与大重建模型", "e": "Feed-forward 3DGS & large reconstruction models", "m": "Advanced topics", "s": "3DGS（见 n-3dgs）渲染极快，但每个场景都要从 SfM 点出发优化几分钟到几十分钟，没法用在每帧都在变的临场通话中。"}, "adv-a-generalizable-ibr": {"u": "basics/advanced/a-generalizable-ibr.html", "t": "可泛化 NeRF 与学习式 IBR", "e": "Generalizable NeRF & learned IBR", "m": "Advanced topics", "s": "逐场景的 NeRF 需要几十上百张图和数小时的优化；传统 IBR（如 ULR，见 i-blending）速度快，但依赖稠密的视角或准确的代理几何。"}, "adv-a-layered-nvs": {"u": "basics/advanced/a-layered-nvs.html", "t": "学习式分层表示：从 Stereo Magnification 到 Quark", "e": "Learned layered representations: Stereo Magnification to Quark", "m": "Advanced topics", "s": "分层表示针对这样一个问题：只有少量已标定图像时，怎样得到一个实时可渲染的三维中间表示，同时还要处理好遮挡边界、半透明和被遮挡内容。"}, "adv-a-learned-mvs": {"u": "basics/advanced/a-learned-mvs.html", "t": "学习式多视角立体与代价体", "e": "Learned MVS & cost volumes", "m": "Advanced topics", "s": "多视角立体（MVS）的任务是：已知 N 张图像的内外参（通常来自 SfM/COLMAP，见 g-sfm），为某个参考视角估计稠密深度图，再把多张深度图融合成点…"}, "adv-a-learned-stereo": {"u": "basics/advanced/a-learned-stereo.html", "t": "从深度立体匹配到立体基础模型", "e": "Deep stereo to stereo foundation models", "m": "Advanced topics", "s": "双目立体匹配处理的是一对已经做过立体校正（rectification）的左右图像。"}, "classic-0": {"u": "basics/classics/t-ibr-geometry.html#classic-0", "t": "Random Sample Consensus: A Paradigm for Model Fitting with Applications to Image Analysis and Automated Cartography", "e": "", "m": "Classics · 1981", "s": "RANSAC 给出了在大量错误数据中稳健拟合模型的通用范式：反复随机抽取最小样本，拟合一个模型，统计有多少数据支持它，最后保留支持者（共识集）最多的模型。"}, "classic-1": {"u": "basics/classics/t-ibr-geometry.html#classic-1", "t": "A computer algorithm for reconstructing a scene from two projections", "e": "", "m": "Classics · 1981", "s": "这篇只有三页的短文第一次给出了两视角重建的线性算法：用 8 对对应点求出本质矩阵（essential matrix），再从中分解出两台相机之间的相对旋转和平移…"}, "classic-132": {"u": "basics/classics/t-generative-ff.html#classic-132", "t": "pixelSplat: 3D Gaussian Splats from Image Pairs for Scalable Generalizable 3D Reconstruction", "e": "", "m": "Classics · 2024", "s": "它是前馈 3DGS 的开山之作之一：从一对图像直接预测逐像素的 3D Gaussian。"}, "classic-141": {"u": "basics/classics/t-dynamic-human.html#classic-141", "t": "GPS-Gaussian: Generalizable Pixel-wise 3D Gaussian Splatting for Real-time Human Novel View Synthesis", "e": "", "m": "Classics · 2024", "s": "GPS-Gaussian 是最早面向人体、达到实时（2K 分辨率、超过 25 FPS）的前馈（feed-forward）3DGS 新视角合成方法之一。"}, "classic-15": {"u": "basics/classics/t-fusion-capture.html#classic-15", "t": "Image-Based Visual Hulls", "e": "", "m": "Classics · 2000", "s": "它证明了不必先建全局三维模型，也能直接在目标视角的图像空间里求几何并渲染。"}, "classic-18": {"u": "basics/classics/t-ibr-geometry.html#classic-18", "t": "A Taxonomy and Evaluation of Dense Two-Frame Stereo Correspondence Algorithms", "e": "", "m": "Classics · 2002", "s": "这篇论文建立了 Middlebury 立体匹配基准和在线排行榜，并提出至今仍在使用的四步分类法。"}, "classic-21": {"u": "basics/classics/t-ibr-geometry.html#classic-21", "t": "Distinctive Image Features from Scale-Invariant Keypoints", "e": "", "m": "Classics · 2004", "s": "SIFT 提供了对尺度、旋转以及一定程度的视角和光照变化都稳健的局部特征，使“在任意两张照片间自动找对应点”变得可靠。"}, "classic-26": {"u": "basics/classics/t-ibr-geometry.html#classic-26", "t": "Photo Tourism: Exploring Photo Collections in 3D", "e": "", "m": "Classics · 2006", "s": "这篇论文证明，可以从互联网上无序、未标定的游客照片中自动恢复相机位姿和稀疏点云，并在此基础上做三维照片浏览。"}, "classic-37": {"u": "basics/classics/t-deep-geometry.html#classic-37", "t": "Computing the Stereo Matching Cost with a Convolutional Neural Network (MC-CNN)", "e": "", "m": "Classics · 2015", "s": "它是最早登上 KITTI 立体榜首的深度学习方法之一（2014 年 8 月排名第一），证明学出来的匹配代价明显好于 census、SAD 等手工代价，由此开启…"}, "classic-38": {"u": "basics/classics/t-fusion-capture.html#classic-38", "t": "Panoptic Studio: A Massively Multiview System for Social Motion Capture", "e": "", "m": "Classics · 2015", "s": "它把多相机穹顶推到了大规模（480 路 VGA），在无标记条件下重建多达 8 人社交互动中的三维人体骨架运动，并公开了大规模多视角数据集。"}, "classic-4": {"u": "basics/classics/t-ibr-geometry.html#classic-4", "t": "Plenoptic Modeling: An Image-Based Rendering System", "e": "", "m": "Classics · 1995", "s": "这篇论文把 IBR 明确表述为“对全光函数的采样、重建与重采样”，并实现了一个从柱面全景图生成新视角的完整系统。"}, "classic-40": {"u": "basics/classics/t-ibr-geometry.html#classic-40", "t": "Structure-from-Motion Revisited", "e": "", "m": "Classics · 2016", "s": "这是 COLMAP 的 SfM 论文。"}, "classic-44": {"u": "basics/classics/t-neural-rendering.html#classic-44", "t": "DeepStereo: Learning to Predict New Views from the World's Imagery", "e": "", "m": "Classics · 2016", "s": "一般认为这是第一篇用深度网络端到端完成真实场景新视角合成的工作（作者自称“据我们所知是第一篇”）。"}, "classic-48": {"u": "basics/classics/t-deep-geometry.html#classic-48", "t": "Unsupervised Monocular Depth Estimation with Left-Right Consistency (Monodepth)", "e": "", "m": "Classics · 2017", "s": "“用视图合成做自监督”训练单目深度网络的思路，Garg et al.（ECCV 2016）等已有雏形；Monodepth 把它做成了成熟、有效的框架：不需要深…"}, "classic-54": {"u": "basics/classics/t-deep-geometry.html#classic-54", "t": "SuperPoint: Self-Supervised Interest Point Detection and Description", "e": "", "m": "Classics · 2018", "s": "它是最早被广泛采用的自监督深度特征点之一，把检测和描述做在同一个网络里，在许多 SfM、SLAM 和定位流水线中被用作 SIFT/ORB 的替代。"}, "classic-57": {"u": "basics/classics/t-deep-geometry.html#classic-57", "t": "MVSNet: Depth Inference for Unstructured Multi-view Stereo", "e": "", "m": "Classics · 2018", "s": "这是第一个真正实用的端到端学习式多视角立体网络。"}, "classic-60": {"u": "basics/classics/t-neural-rendering.html#classic-60", "t": "Stereo Magnification: Learning View Synthesis using Multiplane Images", "e": "", "m": "Classics · 2018", "s": "这篇论文提出了多平面图像（MPI）：在参考相机前放 D 个按视差等距的正对平面，每个平面是一张 RGBA 图；渲染新视角只需逐平面做单应 warp，再用 ov…"}, "classic-88": {"u": "basics/classics/t-deep-geometry.html#classic-88", "t": "LoFTR: Detector-Free Local Feature Matching with Transformers", "e": "", "m": "Classics · 2021", "s": "它开创了不依赖关键点检测器（detector-free）的半稠密匹配：先用 Transformer 的自注意力和交叉注意力在粗尺度上为所有像素建立匹配，再细化…"}, "classic-9": {"u": "basics/classics/t-ibr-geometry.html#classic-9", "t": "A Space-Sweep Approach to True Multi-Image Matching", "e": "", "m": "Classics · 1996", "s": "这篇论文提出了平面扫描（plane sweep / space sweep）：让一个平面沿深度方向扫过空间，在每个深度上把所有图像的特征反投影到该平面，统计有…"}, "classic-94": {"u": "basics/classics/t-deep-geometry.html#classic-94", "t": "RAFT-Stereo: Multilevel Recurrent Field Transforms for Stereo Matching", "e": "", "m": "Classics · 2021", "s": "它把 RAFT 的迭代更新范式搬到立体匹配上，跨数据集泛化很强：只在 SceneFlow 上训练，就能在 KITTI、Middlebury 和 ETH3D 上…"}, "concept-d-mvs": {"u": "basics/foundations/d-mvs.html", "t": "多视角立体（MVS）与平面扫描", "e": "Multi-view stereo & plane sweep", "m": "Foundations · M3 深度估计与三维重建", "s": "把双目推广到 N 个视角：先假设一组深度（一叠平面），把所有视角 warp 到参考视角或目标视角，看哪个深度上各视角的颜色或特征最一致。", "n": "多视角立体（MVS）与平面扫描"}, "concept-d-sensors": {"u": "basics/foundations/d-sensors.html", "t": "深度传感器与噪声特性", "e": "Depth sensors & noise characteristics", "m": "Foundations · M3 深度估计与三维重建", "s": "主动深度相机（结构光、主动立体、ToF、LiDAR）自带光源，所以在无纹理处也能测出深度，但各有典型误差：三角测量类误差随距离平方增长，ToF 有多路径干扰和相位混叠，所有类型都会在物体边缘产生飞点，而且都怕阳光、深色或高光材质以及彼此之…", "n": "深度传感器与噪声特性"}, "concept-d-stereo": {"u": "basics/foundations/d-stereo.html", "t": "双目立体匹配：从 SGM 到 RAFT-Stereo", "e": "Stereo matching: from SGM to RAFT-Stereo", "m": "Foundations · M3 深度估计与三维重建", "s": "在校正后的左右图同一行上找对应像素得到视差 d，再用 Z=fb/d 换算成深度。", "n": "双目立体匹配"}, "concept-g-depth": {"u": "basics/foundations/g-depth.html", "t": "深度、视差与逆深度采样", "e": "Depth, disparity & inverse-depth sampling", "m": "Foundations · M2 相机与多视几何", "s": "双目中深度与视差成反比（Z = f·b/d），所以固定的像素匹配误差会变成随 Z² 增长的深度误差。", "n": "深度、视差与逆深度采样"}, "concept-g-epipolar": {"u": "basics/foundations/g-epipolar.html", "t": "对极几何、三角化与单应", "e": "Epipolar geometry, triangulation & homography", "m": "Foundations · M2 相机与多视几何", "s": "两台相机看同一个点时，该点在第二张图中只可能出现在一条极线上（x'ᵀF x = 0）；有了对应点就能三角化出 3D 位置；空间中的一个平面在两张图之间诱导的映射是一个 3×3 单应。", "n": "对极几何、三角化与单应"}, "concept-g-pinhole": {"u": "basics/foundations/g-pinhole.html", "t": "针孔相机模型：内参、外参、投影与反投影", "e": "Pinhole camera: intrinsics, extrinsics, projection & unprojection", "m": "Foundations · M2 相机与多视几何", "s": "针孔模型先用外参 [R|t] 把世界点变到相机坐标系，再用内参 K 投到像素；反过来，只有像素时只能确定一条射线，像素加上深度才能唯一确定一个 3D 点。", "n": "针孔相机模型"}, "concept-g-rig": {"u": "basics/foundations/g-rig.html", "t": "多相机阵列：标定、同步与卷帘快门", "e": "Multi-camera rigs: calibration, synchronization & rolling shutter", "m": "Foundations · M2 相机与多视几何", "s": "多相机阵列需要让所有相机在三方面对齐：几何上（内外参）、颜色上（曝光、白平衡、响应曲线）、时间上（同一时刻曝光）。", "n": "多相机阵列"}, "concept-g-sfm": {"u": "basics/foundations/g-sfm.html", "t": "运动恢复结构（SfM）与光束法平差", "e": "Structure-from-Motion & bundle adjustment", "m": "Foundations · M2 相机与多视几何", "s": "SfM 只从一组照片出发，同时求出每台相机的内外参和一组稀疏 3D 点：先做特征匹配和几何验证，再逐步注册相机、三角化新点，并反复用光束法平差（BA）最小化重投影误差。", "n": "运动恢复结构（SfM）与光束法平差"}, "concept-i-layered": {"u": "basics/foundations/i-layered.html", "t": "分层表示：MPI、LDI 与分层深度图（LDM）", "e": "Layered representations: MPI, LDI & layered depth maps", "m": "Foundations · M5 基于图像的渲染（IBR）", "s": "分层表示把场景切成若干张带透明度的图层。", "n": "分层表示"}, "concept-i-psv": {"u": "basics/foundations/i-psv.html", "t": "平面扫描体与学习式视图合成", "e": "Plane-sweep volumes & learned view synthesis", "m": "Foundations · M5 基于图像的渲染（IBR）", "s": "平面扫描体（PSV）的做法是：把每张输入图按一组假设的深度平面重投影到目标相机（或参考相机），堆叠成“深度 × 高 × 宽 × 视角”的张量。", "n": "平面扫描体与学习式视图合成"}, "concept-i-warping": {"u": "basics/foundations/i-warping.html", "t": "基于深度的渲染：前向/后向 warping、空洞与飞点", "e": "Depth-image-based rendering: forward/backward warping, holes & flying pixels", "m": "Foundations · M5 基于图像的渲染（IBR）", "s": "有了逐像素深度，就能把一张图“搬”到新视角。", "n": "基于深度的渲染"}, "concept-r-alpha": {"u": "basics/foundations/r-alpha.html", "t": "Alpha 合成与 over 算子", "e": "Alpha compositing & the over operator", "m": "Foundations · M4 图形学与渲染基础", "s": "alpha 表示一个像素被前景覆盖的比例。", "n": "Alpha 合成与 over 算子"}, "module-M2": {"u": "basics/foundations/m2.html", "t": "M2 · 相机与多视几何", "e": "Cameras & multi-view geometry", "m": "Foundations", "s": "会用内外参在像素、射线、三维点之间来回转换，理解视差-深度关系和相机阵列的标定与同步。"}, "walk-ha-h2": {"u": "works/walkthrough/ha.html#walk-ha-h2", "t": "深度从哪来：RAFT-Stereo（人工选对）或深度传感器", "e": "", "m": "Walkthrough · Ha et al. · H2", "s": "输入：每台相机与一台人工选定的搭档相机组成的双目对（DyNeRF、Spaces），或传感器深度（ScanNet）。", "n": "H2"}, "walk-quark-q2": {"u": "works/walkthrough/quark.html#walk-quark-q2", "t": "输入编码：残差 CNN 特征金字塔 + 射线方向编码 γ", "e": "", "m": "Walkthrough · Quark · Q2", "s": "输入：M 张 RGB 图，相机参数，目标视锥的近/远平面。", "n": "Q2"}, "walk-quark-q4": {"u": "works/walkthrough/quark.html#walk-quark-q4", "t": "学习式初始化：可学习特征广播 + back-projection 到锚定平面", "e": "", "m": "Walkthrough · Quark · Q4", "s": "输入：最低一级特征 I_k 与 γ_k（Quark 为 36×60），各相机参数，锚点深度。", "n": "Q4"}}, "concept": {"id": "g-epipolar", "name_zh": "对极几何、三角化与单应", "name_en": "Epipolar geometry, triangulation & homography", "tldr_zh": "两台相机看同一个点时，该点在第二张图中只可能出现在一条极线上（x'ᵀF x = 0）；有了对应点就能三角化出 3D 位置；空间中的一个平面在两张图之间诱导的映射是一个 3×3 单应。平面扫描、MPI 渲染和立体校正都建立在这三件事上。", "intuition_zh": "左图中的一个像素对应空间中的一条射线（见 g-pinhole）。这条射线上不同深度的点投影到右图，会排成一条直线，这就是极线。所以在右图找对应点时不必全图搜索，只要沿极线做一维搜索；立体匹配、MVS 以及许多学习式 NVS 能高效运行，根本原因就在这里。代数上，这个约束用本质矩阵 E = [t]_× R（归一化坐标下）或基础矩阵 F = K'^{-ᵀ} E K^{-1}（像素坐标下）表示：x'ᵀ F x = 0。\n\n三角化是反过来的问题：已知两条（或更多条）射线，求它们的交点。有噪声时两条射线一般不会严格相交，所以要么用线性最小二乘（DLT：每个视角给出两条线性方程，堆叠后用 SVD 求解），要么最小化重投影误差。两条射线的夹角（三角化角）越小，深度就越不确定；这正是 g-depth 中“深度误差随 Z² 增长”的几何根源。\n\n单应（homography）是平面到平面的射影映射，用一个 3×3 矩阵表示，有 8 个自由度。如果 3D 点都在同一个平面 nᵀX = d 上，两张图之间的对应就不再依赖逐点深度，而是一个整体的 H = K'(R + t nᵀ/d)K^{-1}。平面扫描（plane sweep）在参考视角前方放一组平行平面，对每个平面用对应的单应把其他视角 warp 过来，再比较一致性。MPI 等分层表示的渲染，则是把每个平面的 RGBA 用单应 warp 到新视角，再做 over 合成（r-alpha）。当平面都正对参考相机（n = (0, 0, 1)），两台相机内参相同、之间只有水平平移时，单应退化成整幅图的水平平移，平移量就是视差 f·b/Z。\n\n立体校正（rectification）对两张图各施加一个单应，使极线都变成水平的、并且左右图的同一行互相对应；校正之后，对应点之间只差一个水平视差。RAFT-Stereo 等双目网络只预测水平视差，默认输入已经过校正。", "analogy_zh": "夜里看远处的一束激光：如果光束恰好正对左眼，左眼只看到一个点；右眼从旁边看，看到的是一整条线。目标一定在这条线上的某处，只需沿线寻找，这就是极线约束。单应则像从两个角度拍一张贴在墙上的海报：海报在两张照片里的形状变化，完全由墙面的朝向和两台相机的位置决定，是一次整体的“透视拉伸”。", "equations": [{"tex": "\\mathbf{x}'^{\\top} F\\, \\mathbf{x} = 0,\\qquad E = [t]_{\\times} R,\\qquad F = K'^{-\\top} E\\, K^{-1}", "explain_zh": "极线约束。x = (u, v, 1)ᵀ 和 x' = (u', v', 1)ᵀ 是同一个 3D 点在两张图中的齐次像素坐标。(R, t) 是从相机 1 到相机 2 的相对位姿，即 X_2 = R X_1 + t。[t]_× 是 t 的反对称矩阵，满足 [t]_× a = t × a。E 是本质矩阵，作用在归一化坐标上；F 是基础矩阵，作用在像素坐标上，其中 K 和 K' 分别是两台相机的内参。F x 给出右图中极线 l' 的系数 (a, b, c)，即 a u' + b v' + c = 0。F 的秩为 2，有 7 个自由度，可以用八点法（或七点法）配合 RANSAC 估计。"}, {"tex": "\\mathbf{x}' \\simeq H\\,\\mathbf{x},\\qquad H = K'\\left(R + \\frac{t\\, \\mathbf{n}^{\\top}}{d}\\right)K^{-1}", "explain_zh": "平面诱导单应。在相机 1 的坐标系中把平面写成 nᵀX = d，其中 n 是单位法向，d 是光心到平面的距离。对平面上的点有 X_2 = R X_1 + t = (R + t nᵀ/d) X_1。≃ 表示两边只差一个尺度因子（齐次坐标）。Quark 初始化时“平的” LDM 层和 MPI 的平面都正对参考相机，n = (0, 0, 1)，d 取该层的深度，每层对应一个 H；平面扫描体就是对 D 个 d 值分别用 H_d 把输入图像 warp 过来，再堆叠在一起。Hartley & Zisserman 书中第 13.1 节把平面写成 nᵀX + d = 0，所以那里的公式是 H = K′(R − t nᵀ/d)K^{-1}（减号）；两种写法只差 d 的符号，完全等价。"}, {"tex": "\\begin{bmatrix} u\\, \\mathbf{p}_3^{\\top} - \\mathbf{p}_1^{\\top} \\\\ v\\, \\mathbf{p}_3^{\\top} - \\mathbf{p}_2^{\\top} \\\\ u'\\, \\mathbf{p}'^{\\top}_3 - \\mathbf{p}'^{\\top}_1 \\\\ v'\\, \\mathbf{p}'^{\\top}_3 - \\mathbf{p}'^{\\top}_2 \\end{bmatrix} \\tilde{X} = \\mathbf{0}", "explain_zh": "线性三角化（DLT）。P = K[R|t] 是 3×4 投影矩阵，p_iᵀ 是它的第 i 行；P' 和 p'_iᵀ 对应第二台相机。X̃ 是待求的齐次 3D 点。每个视角由 x × (P X̃) = 0 给出两条独立的线性方程，两个视角共 4 条。对这个 4×4 系数矩阵做 SVD，取最小奇异值对应的右奇异向量作为 X̃，再除以第 4 个分量即得 3D 点。视角更多时，继续往下堆叠行即可。线性解通常还要再做一步最小化重投影误差的非线性优化（即 g-sfm 中的 BA）。"}], "worked_example_zh": "考虑一对已校正的水平双目。两台相机内参相同（f = 1000 px，主点 (960, 540)），相机 2 位于相机 1 右侧 b = 0.1 m 处，即 R = I、t = (−0.1, 0, 0)。\n(1) 本质矩阵：[t]_× = [[0, 0, 0], [0, 0, 0.1], [0, −0.1, 0]]。对归一化坐标 x = (x, y, 1)，有 x'ᵀ E x = 0.1·(y' − y) = 0，即 y' = y：极线就是同一行，这正是“校正”的含义。\n(2) 投影：3D 点 X_1 = (0.2, −0.1, 2.0) 在相机 1 中投到 (1060, 490)。在相机 2 中 X_2 = X_1 + t = (0.1, −0.1, 2.0)，投到 (1010, 490)。两者在同一行 v = 490，视差 d = 1060 − 1010 = 50 px。\n(3) 三角化：Z = f·b/d = 1000·0.1/50 = 2.0 m，X = (u − c_x)·Z/f = 0.2 m，恢复出原来的点。\n(4) 单应：对正对相机、深度 d = 2 m 的平面（n = (0, 0, 1)），H = K(I + t nᵀ/2)K^{-1}。在像素上它等价于整体水平平移 f·t_x/d = −50 px：平面上所有点都向左移 50 px。换成 d = 4 m 的平面，平移量变为 25 px。平面扫描做的就是这件事：对每个候选深度 d，把一张图平移 f·b/d 后与另一张图比较，哪个 d 让某个像素最一致，就取这个 d 作为该像素的深度。\n(5) 分辨率的影响：Quark 的初始 LDM 为 36×64，宽度相当于把 1920 缩小了 30 倍，同一几何对应的视差也缩小 30 倍。若基线为 0.3 m、Z = 2 m，全分辨率下视差为 150 px，在 64 宽的网格上只有 5 px。这可以看作它先在粗分辨率上用 24 层密集地“找表面”、再逐级细化的一个原因（这是几何上的解读，论文没有这样表述）。", "pitfalls_zh": ["E 和 F 混用。E 只适用于归一化坐标（已经乘过 K^{-1}），直接拿像素坐标代入 E 会得到错误的极线。另外，F 只在相差一个尺度的意义下唯一，比较两个 F 之前要先归一化。", "退化情形。纯旋转（t = 0）时对极约束失效，两张图之间只剩一个单应；所有对应点都在同一平面上时，F 也无法唯一确定。基线太小（三角化角小）时，深度对噪声极其敏感。Ha 在附录 A.5 专门用 Spaces 提供“小基线”、用 DyNeRF 提供“大基线”训练数据，可见作者认为基线分布会影响网络学到的融合行为（论文没有做相应消融）。", "单应只对平面（或纯旋转）成立。MPI 和平面扫描用单应做 warp，是靠“很多层加 alpha”去近似非平面场景的。Quark 的最终 LDM 每层都有逐像素深度，已经不是单个单应，而是逐像素 warp（i-warping）；把这种弯曲的层当成单应处理会出错。", "校正会重采样图像并改变内参（得到新的 K，并可能裁剪）。在校正图上估计的视差，要用校正后的 f 和 b 换算成深度，再用校正时施加的旋转变回原相机坐标系。漏掉这一步，深度就与原始位姿对不齐。"], "in_quark": {"used": true, "where": "Sec. 3.2.2 的 Initialization（平的深度层与 back-projection，表 8 中的 Bp）、Sec. 3.2.2 对 Update Block 输出 Δ 的描述（与平面扫描体相似）、Sec. 2.1 对 MPI 类前作的讨论", "how_zh": "Quark 的学习式初始化（Sec. 3.2.2 “Initialization”）假设各深度层是平的，位于预设的等视差 anchor 深度上，然后把编码后的输入特征 back-project 到这些层上（表 8 中记为 Bp）。对于正对目标相机的平面，这一步就是逐平面的单应 warp，结果是一个平面扫描体：在 24 层 × 36×64 的目标网格上，对 8 个输入视角各做一次。此后，每个 Update & Fuse 步都把更新特征按当前（已经弯曲的）层深度反投影回层空间；作者明确写道，这个逐视角的 Δ 与平面扫描体有些相似，同时还带有“渲染结果与观测的差异”这一可见性信息。Sec. 2.1 把 MPI（DeepView、LLFF、NeX 等）列为一类物理表示前作，这类方法完全依靠逐平面单应渲染。另外，同一目标像素在各层深度上的采样点，投到某个输入视角时恰好排在一条极线上。论文说 One-to-many attention 从 M 个视角的 Δ 中“软选择”最相关的信息，隐式地同时利用匹配线索和遮挡；从几何上看，在每个层位置比较各视角特征是否一致，再比较不同层之间一致性的高低，就是沿极线的软匹配（这是对论文表述的几何解读）。不理解单应和极线，就看不出“初始化等于平面扫描”“层数就是沿极线离散搜索的步数”。"}, "in_ha": {"used": true, "where": "Sec. 3 与附录 A.5（RAFT-Stereo 在人工挑选的立体对上估计深度）、Sec. 4 Fig. 5（EPI 视角一致性可视化）、Fig. 9（EPI 断裂作为失败示例）", "how_zh": "Ha et al. 本身不做单应或平面扫描，但它的深度来源依赖对极几何。DyNeRF 和 Spaces 的逐视角深度，是 RAFT-Stereo 在“人工挑选的图像对”上估计的（Sec. 3、附录 A.5）。RAFT-Stereo 只输出水平视差，所以输入的图像对必须先按极线校正，并且要用校正后的焦距和基线把视差换算成深度。论文没有交代这些步骤，但它们是这条深度前端能用的前提。评测时，作者用极平面图（EPI）检查视角一致性（Sec. 4，Fig. 5）：沿一条水平平移的相机路径渲染一系列新视角，固定某一行 y，把各视角的这一行堆叠成 x–v 切片。几何一致时，场景点在切片里是连续的斜线，斜率对应视差（也就对应深度）；跳变或断裂说明视角不一致。Fig. 9 就用 EPI 断裂展示高光区域 TSDF 深度出错的失败情形。"}, "in_field_zh": "主动立体深度相机和双目网络都在校正后的极线上做匹配（d-stereo、d-sensors、a-learned-stereo）。学习式 MVS 用平面扫描构造代价体（d-mvs、a-learned-mvs、i-psv）。分层 NVS 靠单应渲染（i-layered、a-layered-nvs）。可泛化 NVS 常用极线采样或极线注意力：GPNR 沿极线取 patch，pixelSplat 使用极线 Transformer（a-generalizable-ibr、a-ff-3dgs）。在线标定监控可以用对应点到极线的距离（如 Sampson 误差）判断某台相机是否被碰歪（g-rig）。", "resources": [{"title": "Hartley & Zisserman, Multiple View Geometry in Computer Vision 2nd ed., Ch. 9 Epipolar Geometry and the Fundamental Matrix（官方免费样章）", "url": "https://www.robots.ox.ac.uk/~vgg/hzbook/hzbook2/HZepipolar.pdf", "type": "book", "note_zh": "官方免费样章。同书第 11.12 节讲立体校正，第 12 章讲三角化（Structure Computation），第 13.1 节推导平面诱导单应；这几章需要购书阅读。"}, {"title": "Stanford CS231A Course Notes 3: Epipolar Geometry", "url": "https://web.stanford.edu/class/cs231a/course_notes/03-epipolar-geometry.pdf", "type": "course", "note_zh": "14 页讲义：从极线、本质矩阵、基础矩阵讲到八点法和图像校正（用两个单应让两个像平面平行）。"}, {"title": "CMU 16-385 (Spring 2020), Lecture 12: Two-view geometry", "url": "https://www.cs.cmu.edu/~16385/lectures/lecture12.pdf", "type": "course", "note_zh": "覆盖三角化、极线几何、E 与 F、八点法。配套的 Lecture 9 “Image homographies” 讲单应估计：https://www.cs.cmu.edu/~16385/lectures/lecture9.pdf"}, {"title": "Longuet-Higgins, A computer algorithm for reconstructing a scene from two projections (Nature, 1981)", "url": "https://www.nature.com/articles/293133a0", "type": "paper", "note_zh": "本质矩阵与八点法的原始论文，篇幅很短，适合学完 E 之后回头读原文。"}], "self_check": [{"q_zh": "左图像素 x 在右图中的极线怎么求？为什么所有极线都经过同一个点？", "a_zh": "极线为 l' = F x。所有从左相机中心出发的射线，投到右图后都经过左相机中心在右图中的像，即极点 e'；所以所有极线都过 e'。代数上有 F e = 0、Fᵀ e' = 0。"}, {"q_zh": "在 f = 1000 px、b = 0.1 m 的校正双目中，正对相机、深度分别为 1 m 和 4 m 的两个平面，各自诱导什么样的单应？", "a_zh": "两者都是纯水平平移，平移量分别为 f·b/Z = 100 px 和 25 px，方向由 t 的符号决定。"}, {"q_zh": "为什么说 Quark 的学习式初始化在几何上等价于构造一个平面扫描体？", "a_zh": "初始化时，各层都是正对目标相机、位于固定 anchor 深度的平面。把输入特征 back-project 到这些平面上，等价于对每个平面用 H = K_m(R + t nᵀ/d)K_t^{-1}（(R, t) 为目标相机到第 m 个输入相机的相对位姿）把输入视角 warp 到目标网格，再把结果堆叠起来。这正是平面扫描体的定义，只不过被 warp 的是 CNN 特征，而不是像素。"}], "prereqs": ["g-pinhole"]}, "module": "module-M2", "walk": ["walk-quark-q2", "walk-quark-q4", "walk-ha-h2"], "classics": ["classic-0", "classic-1", "classic-4", "classic-9", "classic-15", "classic-18", "classic-21", "classic-26", "classic-37", "classic-38", "classic-40", "classic-44", "classic-48", "classic-54", "classic-57", "classic-60", "classic-88", "classic-94", "classic-132", "classic-141"], "adv": ["adv-a-learned-stereo"], "prev": "concept-g-pinhole", "next": "concept-g-depth", "readMin": 7}</script>
+<script>
+(function () {
+  "use strict";
+  // ================= lib: DOM, text and math helpers shared by every page =================
+  // A page script defines rich(text) (inline cross-links); paras() and eqList() call it.
+  var DATA;
+  try { DATA = JSON.parse(document.getElementById("data").textContent); } catch (e) { DATA = {}; }
+  var meta = DATA.meta || {};
+
+  // ---------- DOM helpers: all text goes through textContent; external links are https-only ----------
+  function safeUrl(u) { if (typeof u !== "string") return null; var s = u.trim(); return /^https:\/\/[^\s"'<>]+$/i.test(s) ? s : null; }
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "class") n.className = v;
+      else if (k === "text") n.textContent = String(v);
+      else if (k === "href") { var u = safeUrl(v); if (u) { n.setAttribute("href", u); n.setAttribute("target", "_blank"); n.setAttribute("rel", "noopener noreferrer"); } }
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c === null || c === undefined || c === false) return; n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return n;
+  }
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function sv(tag, attrs, kids) {
+    var n = document.createElementNS(SVGNS, tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "text") n.textContent = String(v);
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c) n.appendChild(c); });
+    return n;
+  }
+  function arr(x) { return Array.isArray(x) ? x : []; }
+  function str(x) { return typeof x === "string" ? x : (x === null || x === undefined ? "" : String(x)); }
+  function paras(text) { return str(text).split(/\n\s*\n/).map(function (t) { return t.trim(); }).filter(Boolean).map(function (t) { return el("p", null, rich(t)); }); }
+  function link(title, url) { return safeUrl(url) ? el("a", { href: url, text: title }) : el("span", { text: title }); }
+  function ul(items, map) { return el("ul", { class: "plain" }, arr(items).map(function (x) { return el("li", null, [map ? map(x) : str(x)]); })); }
+  function fmtCit(n) { n = Number(n); if (!(n >= 0)) return "—"; if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k"; return String(n); }
+
+  // ---------- math (MathJax, typeset lazily) ----------
+  var mathReady = false, mathQueue = [];
+  function mathUsable() { return !!(window.MathJax && typeof window.MathJax.typesetPromise === "function"); }
+  function flushMath() { mathReady = true; var q = mathQueue.slice(); mathQueue = []; q.forEach(typeset); }
+  window.__atlasMathReady = flushMath;
+  // MathJax may finish loading before this script runs (cached/async), so also poll for it.
+  var mathPoll = setInterval(function () { if (mathUsable()) { clearInterval(mathPoll); flushMath(); } }, 200);
+  setTimeout(function () { clearInterval(mathPoll); }, 30000);
+  function typeset(node) {
+    if (!node) return;
+    if (!mathReady && mathUsable()) mathReady = true;
+    if (!mathReady || !mathUsable()) { mathQueue.push(node); return; }
+    try { window.MathJax.typesetPromise([node]).catch(function () { /* leave raw TeX visible */ }); } catch (e) { /* leave raw TeX visible */ }
+  }
+  function eqList(eqs) {
+    eqs = arr(eqs).filter(function (q) { return q && str(q.tex).trim(); });
+    if (!eqs.length) return null;
+    return el("div", { class: "eqs" }, eqs.map(function (q) {
+      return el("div", { class: "eq" }, [el("div", { class: "math-block", text: "\\[" + str(q.tex) + "\\]" }), q.explain_zh ? el("p", null, rich(q.explain_zh)) : null]);
+    }));
+  }
+  document.addEventListener("toggle", function (e) { var t = e.target; if (t && t.tagName === "DETAILS" && t.open) typeset(t); }, true);
+
+  // ================= frame (Tufte site): links, notes, hover previews, top bar, theme =================
+  var SITE = DATA.site || {};
+  var ROOT = str(SITE.root);
+  var XREF = DATA.xref || {};
+  function hasX(key) { return Object.prototype.hasOwnProperty.call(XREF, key); }
+
+  // ---------- internal links: urls are relative to the site root; pages sit at different depths ----------
+  var SAFE_PATH = /^[A-Za-z0-9][A-Za-z0-9._\/-]*(#[A-Za-z0-9._-]+)?$/;
+  function relHref(u) {
+    u = str(u);
+    if (!SAFE_PATH.test(u)) return null;
+    var cut = u.indexOf("#"), path = cut < 0 ? u : u.slice(0, cut);
+    if (path === SITE.path) return cut < 0 ? "#" : u.slice(cut);
+    return ROOT + u;
+  }
+  function pageLink(u, text, cls) {
+    var h = relHref(u);
+    if (!h) return el("span", { class: cls || null, text: text });
+    var a = el("a", { class: cls || null, text: text });
+    a.setAttribute("href", h);
+    return a;
+  }
+  // A link to a known entry (concept, topic, paper, step...). data-xref drives the hover preview.
+  function xlink(key, text, cls) {
+    if (!hasX(key)) return text ? document.createTextNode(text) : null;
+    var x = XREF[key], a = pageLink(x.u, text || x.n || x.t, cls);
+    a.setAttribute("data-xref", key);
+    return a;
+  }
+
+  // Concept / topic ids mentioned in prose ("见 g-pinhole") become links labelled with the entry's short name.
+  var ID_RE = /(a-[a-z0-9]+(?:-[a-z0-9]+)*|[fgdrilnv]-[a-z0-9]+)/g;
+  var CJK = /[　-〿㐀-鿿＀-￯]/;
+  function rich(text) {
+    var s = str(text), out = [], last = 0, m;
+    ID_RE.lastIndex = 0;
+    while ((m = ID_RE.exec(s)) !== null) {
+      var id = m[1], prev = m.index > 0 ? s.charAt(m.index - 1) : "", next = s.charAt(m.index + id.length);
+      var key = hasX("concept-" + id) ? "concept-" + id : (hasX("adv-" + id) ? "adv-" + id : null);
+      if (!key || /[A-Za-z0-9_\-]/.test(prev) || /[A-Za-z0-9_]/.test(next)) continue;
+      // The prose spaces ids off from Chinese text; a Chinese label needs no such space.
+      var before = s.slice(last, m.index);
+      if (/ $/.test(before) && CJK.test(before.charAt(before.length - 2))) before = before.slice(0, -1);
+      if (before) out.push(document.createTextNode(before));
+      out.push(xlink(key, null, "xref"));
+      last = m.index + id.length;
+      if (s.charAt(last) === " " && CJK.test(s.charAt(last + 1))) last++;
+    }
+    if (last < s.length) out.push(document.createTextNode(s.slice(last)));
+    return out;
+  }
+  function lines(text) { return str(text).split(/\n+/).map(function (t) { return t.trim(); }).filter(Boolean).map(function (t) { return el("p", null, rich(t)); }); }
+
+  // ---------- side notes (numbered) and margin notes (unnumbered); on phones they fold behind a toggle ----------
+  var noteSeq = 0;
+  function sidenote(kids) {
+    var id = "sn-" + (++noteSeq);
+    return el("span", { class: "note-wrap" }, [
+      el("label", { for: id, class: "margin-toggle sidenote-number", "aria-label": "旁注" }),
+      el("input", { type: "checkbox", id: id, class: "margin-toggle" }),
+      el("span", { class: "sidenote" }, kids)
+    ]);
+  }
+  function marginnote(kids) {
+    var id = "mn-" + (++noteSeq);
+    return el("span", { class: "note-wrap" }, [
+      el("label", { for: id, class: "margin-toggle", "aria-label": "边注", text: "⊕" }),
+      el("input", { type: "checkbox", id: id, class: "margin-toggle" }),
+      el("span", { class: "marginnote" }, kids)
+    ]);
+  }
+  function noteLabel(text) { return el("span", { class: "note-label", text: text }); }
+
+  // ---------- article scaffolding ----------
+  var main = document.getElementById("main");
+  var art = main.querySelector("article");
+  function section(id, title, kids) {
+    var s = el("section", { id: id }, [title ? el("h2", { text: title }) : null].concat(kids));
+    art.appendChild(s);
+    return s;
+  }
+  function articleHead(o) {
+    var crumbs = el("nav", { class: "crumbs", "aria-label": "位置" });
+    arr(SITE.crumbs).forEach(function (c, i) {
+      if (i) crumbs.appendChild(el("span", { class: "sep", text: "›", "aria-hidden": "true" }));
+      crumbs.appendChild(c[1] ? pageLink(c[1], c[0]) : el("span", { text: c[0] }));
+    });
+    art.appendChild(el("header", { class: "art-head" }, [
+      crumbs,
+      el("h1", { text: o.title }),
+      o.subtitle ? el("p", { class: "subtitle", text: o.subtitle }) : null,
+      o.meta ? el("p", { class: "meta" }, o.meta) : null
+    ]));
+    if (o.epigraph) art.appendChild(el("div", { class: "epigraph" }, [el("blockquote", null, [el("p", null, rich(o.epigraph))])]));
+  }
+  // Previous / next in the series, each with its hover preview.
+  function seriesNav(prevKey, nextKey, indexUrl, indexLabel) {
+    var nav = el("nav", { class: "series", "aria-label": "同系列" });
+    nav.appendChild(el("div", { class: "prev" }, prevKey && hasX(prevKey) ? [el("small", { text: "上一篇" }), xlink(prevKey)] : []));
+    nav.appendChild(el("div", { class: "up" }, indexUrl ? [pageLink(indexUrl, indexLabel)] : []));
+    nav.appendChild(el("div", { class: "next" }, nextKey && hasX(nextKey) ? [el("small", { text: "下一篇" }), xlink(nextKey)] : []));
+    art.appendChild(nav);
+  }
+
+  // ---------- hover preview for internal links: mouse (after 300 ms) or keyboard focus; never on touch ----------
+  var tip = null, tipTimer = 0, tipFor = null;
+  function hideTip() {
+    clearTimeout(tipTimer);
+    if (tip) tip.hidden = true;
+    if (tipFor) { tipFor.removeAttribute("aria-describedby"); tipFor = null; }
+  }
+  function showTip(a) {
+    var key = a.getAttribute("data-xref");
+    if (!hasX(key)) return;
+    var x = XREF[key];
+    if (!tip) { tip = el("div", { class: "xtip", id: "xtip", role: "tooltip" }); document.body.appendChild(tip); }
+    tip.textContent = "";
+    if (x.m) tip.appendChild(el("div", { class: "xt-m", text: x.m }));
+    tip.appendChild(el("div", { class: "xt-t", text: x.t }));
+    if (x.e) tip.appendChild(el("div", { class: "xt-e", text: x.e }));
+    if (x.s) tip.appendChild(el("p", { class: "xt-s", text: x.s }));
+    tip.hidden = false;
+    var r = a.getClientRects()[0] || a.getBoundingClientRect(), vw = document.documentElement.clientWidth;
+    var w = tip.offsetWidth, h = tip.offsetHeight;
+    var left = Math.max(8, Math.min(r.left, vw - w - 8));
+    var top = r.bottom + 6;
+    if (top + h > window.innerHeight - 8 && r.top - h - 6 > 8) top = r.top - h - 6;
+    tip.style.left = Math.round(left + window.pageXOffset) + "px";
+    tip.style.top = Math.round(top + window.pageYOffset) + "px";
+    a.setAttribute("aria-describedby", "xtip");
+    tipFor = a;
+  }
+  function xrefTarget(e) { return e.target && e.target.closest ? e.target.closest("a[data-xref]") : null; }
+  document.addEventListener("pointerover", function (e) {
+    var a = xrefTarget(e);
+    if (!a || e.pointerType !== "mouse" || a === tipFor) return;
+    clearTimeout(tipTimer);
+    tipTimer = setTimeout(function () { showTip(a); }, 300);
+  });
+  document.addEventListener("pointerout", function (e) {
+    var a = xrefTarget(e);
+    if (!a || (e.relatedTarget && a.contains(e.relatedTarget))) return;
+    hideTip();
+  });
+  document.addEventListener("focusin", function (e) {
+    var a = xrefTarget(e);
+    if (a && a.matches(":focus-visible")) showTip(a);
+  });
+  document.addEventListener("focusout", function (e) { if (xrefTarget(e)) hideTip(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") hideTip(); });
+  window.addEventListener("scroll", function () { if (tipFor && !tipFor.matches(":focus-visible")) hideTip(); }, { passive: true });
+
+  // ---------- top bar: four menus with dropdowns (hover or click on desktop, a folding list on phones) ----------
+  var wide = window.matchMedia("(min-width: 761px)");
+  function setOpen(li, open) {
+    var btn = li.querySelector(".menu-btn");
+    if (open) Array.prototype.forEach.call(li.parentNode.children, function (o) { if (o !== li) setOpen(o, false); });
+    li.classList.toggle("open", open);
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (!open) li._hover = false;
+  }
+  function buildTopbar() {
+    var bar = document.getElementById("topbar");
+    var menus = el("ul", { class: "menus", id: "menus" });
+    arr(SITE.nav).forEach(function (m) {
+      var id = "menu-" + m.key;
+      var btn = el("button", { type: "button", class: "menu-btn", "aria-expanded": "false", "aria-controls": id, text: m.label });
+      var list = el("ul", { class: "drop", id: id }, arr(m.items).map(function (it) {
+        var a = pageLink(it[1], it[0]);
+        if (it[1] === SITE.navItem) a.classList.add("cur");
+        if (it[1] === SITE.path) a.setAttribute("aria-current", "page");
+        return el("li", null, [a]);
+      }));
+      var li = el("li", { class: "menu" + (m.key === SITE.navCur ? " cur" : "") }, [btn, list]);
+      btn.addEventListener("click", function () {
+        // A click on a menu the mouse already opened keeps it open instead of closing it again.
+        if (li._hover) { li._hover = false; return; }
+        setOpen(li, !li.classList.contains("open"));
+      });
+      btn.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowDown") { e.preventDefault(); setOpen(li, true); var f = list.querySelector("a"); if (f) f.focus(); }
+      });
+      li.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse" && wide.matches) { setOpen(li, true); li._hover = true; } });
+      li.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse" && wide.matches) setOpen(li, false); });
+      li.addEventListener("focusout", function (e) { if (wide.matches && !li.contains(e.relatedTarget)) setOpen(li, false); });
+      li.addEventListener("keydown", function (e) { if (e.key === "Escape" && li.classList.contains("open")) { setOpen(li, false); btn.focus(); } });
+      menus.appendChild(li);
+    });
+    var burger = el("button", { type: "button", class: "burger", "aria-expanded": "false", "aria-controls": "menus", text: "Menu" });
+    burger.addEventListener("click", function () {
+      var open = !bar.classList.contains("nav-open");
+      bar.classList.toggle("nav-open", open);
+      burger.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    var themeBtn = el("button", { type: "button", class: "theme-btn" });
+    function darkNow() {
+      var t = document.documentElement.getAttribute("data-theme");
+      return t ? t === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+    function paintThemeBtn() {
+      var dark = darkNow();
+      themeBtn.textContent = dark ? "Light" : "Dark";
+      themeBtn.setAttribute("aria-label", dark ? "切换到浅色" : "切换到深色");
+    }
+    themeBtn.addEventListener("click", function () {
+      var next = darkNow() ? "light" : "dark";
+      var system = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      // Choosing what the system already shows drops the override, so the page follows the system again.
+      if (next === system) document.documentElement.removeAttribute("data-theme");
+      else document.documentElement.setAttribute("data-theme", next);
+      try { if (next === system) localStorage.removeItem("atlas-theme"); else localStorage.setItem("atlas-theme", next); } catch (e) { /* storage unavailable */ }
+      paintThemeBtn();
+    });
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintThemeBtn);
+    paintThemeBtn();
+    bar.appendChild(el("div", { class: "bar-in" }, [pageLink("index.html", SITE.brand || "", "brand"), el("nav", { class: "site-nav", "aria-label": "站点导航" }, [menus]), themeBtn, burger]));
+    document.addEventListener("click", function (e) {
+      if (!bar.contains(e.target)) Array.prototype.forEach.call(menus.children, function (li) { setOpen(li, false); });
+    });
+  }
+
+  function finishPage() {
+    buildTopbar();
+    var foot = document.getElementById("site-foot");
+    if (foot) foot.appendChild(el("p", null, [pageLink("index.html", SITE.brand || ""), SITE.date ? " · 内容截至 " + SITE.date : ""]));
+    typeset(main);
+    // Deep links (#id): the page is rendered by script, so jump once it exists and again after fonts settle.
+    var h = window.location.hash ? window.location.hash.slice(1) : "";
+    if (h && /^[A-Za-z0-9._~-]+$/.test(h) && document.getElementById(h)) {
+      var moved = false;
+      ["wheel", "touchstart", "keydown", "mousedown"].forEach(function (ev) { window.addEventListener(ev, function () { moved = true; }, { once: true, passive: true }); });
+      var settle = function () { var t = document.getElementById(h); if (t && !moved) t.scrollIntoView({ block: "start" }); };
+      settle();
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { window.requestAnimationFrame(settle); });
+      [400, 1200, 2500].forEach(function (ms) { setTimeout(settle, ms); });
+    }
+  }
+
+  // ================= article: one Foundations concept =================
+  (function () {
+    var c = DATA.concept || {};
+    if (!c.id) return;
+    art.id = "concept-" + c.id;
+    var mod = XREF[DATA.module] || {};
+
+    var prereqs = arr(c.prereqs).map(function (p) { return xlink("concept-" + p, XREF["concept-" + p] ? XREF["concept-" + p].t : p); }).filter(Boolean);
+    var metaLine = [];
+    if (prereqs.length) metaLine.push(marginnote([noteLabel("阅读前需要")].concat(joinNodes(prereqs, "；"))));
+    metaLine.push(xlink(DATA.module, mod.t), " · 约 " + (DATA.readMin || 1) + " 分钟");
+    articleHead({ title: c.name_zh, subtitle: c.name_en, meta: metaLine, epigraph: c.tldr_zh });
+
+    function joinNodes(nodes, sep) {
+      var out = [];
+      nodes.forEach(function (n, i) { if (i) out.push(sep); out.push(n); });
+      return out;
+    }
+
+    // 直觉: the analogy sits in the margin beside the first paragraph.
+    var intuition = paras(c.intuition_zh);
+    if (str(c.analogy_zh).trim() && intuition.length) intuition[0].insertBefore(marginnote([noteLabel("类比")].concat(rich(c.analogy_zh))), intuition[0].firstChild);
+    if (intuition.length) section("intuition", "直觉", intuition);
+
+    var eqs = eqList(c.equations);
+    if (eqs) section("equations", "公式", [eqs]);
+    if (str(c.worked_example_zh).trim()) section("example", "例子", lines(c.worked_example_zh));
+    if (arr(c.pitfalls_zh).length) section("pitfalls", "易错点", [el("ol", null, arr(c.pitfalls_zh).map(function (t) { return el("li", null, rich(t)); }))]);
+    if (str(c.in_field_zh).trim()) section("in-field", "在 3D 临场系统中", paras(c.in_field_zh));
+
+    // 案例: where each key paper uses the concept; the paper location is a side note, guide steps a margin note.
+    var steps = arr(DATA.walk);
+    var cases = [];
+    [["quark", c.in_quark], ["ha", c.in_ha]].forEach(function (pair) {
+      var anchor = pair[0], u = pair[1] || {};
+      var head = el("h3", null, [anchorName(anchor),
+        str(u.where).trim() ? sidenote([noteLabel("论文位置")].concat(rich(u.where))) : null,
+        el("span", { class: "used", text: u.used ? "用到" : "未用" })]);
+      cases.push(head);
+      var body = paras(u.how_zh);
+      var mine = steps.filter(function (k) { return k.indexOf("walk-" + anchor + "-") === 0 && hasX(k); });
+      if (mine.length && body.length) {
+        var links = [];
+        mine.forEach(function (k, i) { if (i) links.push(el("br")); links.push(xlink(k, XREF[k].n + " " + XREF[k].t)); });
+        body[0].insertBefore(marginnote([noteLabel("导读步骤")].concat(links)), body[0].firstChild);
+      }
+      cases = cases.concat(body);
+    });
+    section("cases", "案例：Quark 与 Ha 如何使用", cases);
+    function anchorName(a) { return a === "quark" ? "Quark" : "Ha et al."; }
+
+    if (arr(c.self_check).length) {
+      section("self-check", "自测", [el("ol", { class: "quiz" }, arr(c.self_check).map(function (q) {
+        return el("li", null, [el("p", null, rich(q.q_zh)), el("details", null, [el("summary", { text: "答案" }), el("p", null, rich(q.a_zh))])]);
+      }))]);
+    }
+
+    // 延伸阅读: resources with their notes, then topics and classic papers that build on this concept.
+    var further = [];
+    var ty = { book: "教材", course: "课程", paper: "论文", tutorial: "教程", code: "代码", video: "视频", blog: "文章" };
+    if (arr(c.resources).length) {
+      further.push(el("h3", { text: "学习资源" }));
+      further.push(el("ul", { class: "refs" }, arr(c.resources).map(function (r) {
+        return el("li", null, [el("span", { class: "kind", text: ty[r.type] || r.type || "" }),
+          el("div", null, [link(r.title, r.url), str(r.note_zh).trim() ? el("div", { class: "gloss", text: r.note_zh }) : null])]);
+      })));
+    }
+    var adv = arr(DATA.adv).filter(hasX);
+    if (adv.length) {
+      further.push(el("h3", { text: "进阶专题" }));
+      further.push(el("ul", { class: "refs" }, adv.map(function (k) {
+        return el("li", null, [el("span", { class: "kind", text: "专题" }), el("div", null, [xlink(k, XREF[k].t), XREF[k].e ? el("div", { class: "en", text: XREF[k].e }) : null])]);
+      })));
+    }
+    var cls = arr(DATA.classics).filter(hasX);
+    if (cls.length) {
+      further.push(el("h3", { text: "经典论文" }));
+      further.push(el("ul", { class: "refs papers" }, cls.map(function (k) {
+        return el("li", null, [el("span", { class: "yr", text: str(XREF[k].m).replace(/^Classics · /, "") }), xlink(k, XREF[k].t)]);
+      })));
+    }
+    if (further.length) section("further", "延伸阅读", further);
+
+    seriesNav(DATA.prev, DATA.next, "basics/foundations/index.html", "Foundations 目录");
+  })();
+
+  finishPage();
+})();
+</script>
+</body>
+</html>
