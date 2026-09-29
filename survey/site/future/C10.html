@@ -1,0 +1,865 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RigCache：面向固定相机阵列流式多视图几何的变化门控持久化 Token 表 · 3D Telepresence: a field guide</title>
+<meta name="description" content="在固定、已标定、向内拍摄的相机阵列上，几何 transformer 可以维护一张持久化的、按（相机, patch）索引的 token 与 KV 表。">
+<meta name="color-scheme" content="light dark">
+
+<script>
+  // Apply a saved light/dark choice before first paint; without one the page follows the system setting.
+  try { var t = localStorage.getItem("atlas-theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) { /* storage unavailable */ }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Serif+SC:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/lxgwwenkai-regular.css">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]] },
+    options: { skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code", "input", "select", "button"] },
+    svg: { fontCache: "global" },
+    startup: {
+      typeset: false,
+      ready: function () {
+        window.MathJax.startup.defaultReady();
+        if (typeof window.__atlasMathReady === "function") window.__atlasMathReady();
+      }
+    }
+  };
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js"></script>
+<style>
+/* Tufte-style layout for Chinese long-form pages, after tufte-css (MIT, (c) 2014 Dave Liepmann; see LICENSE-tufte-css).
+   ET Book: MIT, (c) 2015 Dmitry Krasny, Bonnie Scranton, Edward Tufte (fonts/et-book/LICENSE).
+   ../ is the page's path to the site root. */
+
+/* ---------- fonts: ET Book for Latin (self-hosted), Noto Serif SC for Chinese text, LXGW WenKai for notes ---------- */
+/* ET Book leaves curly quotes, dashes and ellipses to the Chinese font so they keep full width in Chinese prose,
+   and single guillemets (› ‹), which it lacks. */
+@font-face { font-family: "et-book"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../fonts/et-book/et-book-roman-line-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book"; font-weight: 400; font-style: italic; font-display: swap;
+  src: url("../fonts/et-book/et-book-display-italic-old-style-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book"; font-weight: 700; font-style: normal; font-display: swap;
+  src: url("../fonts/et-book/et-book-bold-line-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+/* Notes pair Latin italic with upright Kai (the "italic ↔ 楷体" rule): the italic cut is registered as an upright
+   family so the browser never slants the Chinese glyphs. */
+@font-face { font-family: "et-book-note"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../fonts/et-book/et-book-display-italic-old-style-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book-osf"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../fonts/et-book/et-book-roman-old-style-figures.woff") format("woff"); }
+
+:root {
+  --bg: #fffff8;
+  --ink: #111111;
+  --ink-2: #3c3c36;
+  --muted: #74746a;
+  --rule: #d8d6c8;
+  --rule-2: #b9b6a4;
+  --accent: #a8322d;
+  --serif: "et-book", "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", Palatino, Georgia, serif;
+  --note: "et-book-note", "LXGW WenKai", "Kaiti SC", "STKaiti", "KaiTi", "et-book", serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --side: clamp(12rem, 21vw, 17rem);
+  --gap: 2.75rem;
+  --main: calc(100% - var(--side) - var(--gap));
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161614; --ink: #e2e0d6; --ink-2: #c3c1b6; --muted: #979589; --rule: #34332e; --rule-2: #4d4b44; --accent: #e8836f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161614; --ink: #e2e0d6; --ink-2: #c3c1b6; --muted: #979589; --rule: #34332e; --rule-2: #4d4b44; --accent: #e8836f;
+  color-scheme: dark;
+}
+
+/* ---------- base ---------- */
+* { box-sizing: border-box; }
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--serif); font-size: 1.15625rem; line-height: 1.85;
+  font-kerning: normal; font-variant-numeric: lining-nums;
+  /* Space between Chinese and Latin text where the source has none; squeeze adjacent CJK punctuation
+     (text-spacing-trim applies the fonts' halt / chws features). Browsers without them keep the source spacing. */
+  text-autospace: normal; text-spacing-trim: normal;
+  overflow-wrap: break-word;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+[hidden] { display: none !important; }
+a { color: inherit; text-decoration-line: underline; text-decoration-thickness: 1px; text-underline-offset: .18em; text-decoration-color: var(--rule-2); }
+a:hover { color: var(--accent); text-decoration-color: currentColor; }
+a:focus-visible, button:focus-visible, summary:focus-visible, label:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.skip { position: absolute; left: -999px; top: 0; }
+.skip:focus { left: 1rem; top: .5rem; background: var(--bg); padding: .2rem .5rem; z-index: 60; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+p { margin: 0; }
+p + p { margin-top: .9em; }
+
+/* ---------- top bar ---------- */
+.topbar { border-bottom: 1px solid var(--rule); }
+.bar-in { max-width: 67rem; margin: 0 auto; padding: 0 1.5rem; display: flex; align-items: center; gap: 2.2rem; min-height: 3.1rem; }
+.brand { font-size: 1rem; text-decoration: none; letter-spacing: .02em; white-space: nowrap; }
+.site-nav { flex: 1; }
+.menus { list-style: none; margin: 0; padding: 0; display: flex; gap: 1.6rem; }
+.menu { position: relative; }
+.menu-btn, .theme-btn, .burger {
+  font-family: "et-book", var(--serif); font-variant-caps: all-small-caps; letter-spacing: .08em; font-size: 1.12rem;
+  color: var(--ink-2); line-height: 3.1rem;
+}
+.menu-btn:hover, .theme-btn:hover, .burger:hover, .menu.open > .menu-btn { color: var(--accent); }
+.menu.cur > .menu-btn { color: var(--ink); box-shadow: inset 0 -1px 0 var(--ink); }
+.drop {
+  display: none; position: absolute; left: -1rem; top: 100%; z-index: 40; min-width: 13rem;
+  list-style: none; margin: 0; padding: .45rem 0; background: var(--bg); border: 1px solid var(--rule);
+}
+.menu.open > .drop { display: block; }
+.drop a { display: block; padding: .15rem 1rem; text-decoration: none; font-size: 1.02rem; color: var(--ink-2); white-space: nowrap; }
+.drop a:hover, .drop a:focus-visible { color: var(--accent); }
+.drop a.cur { color: var(--ink); }
+.drop a.cur::before { content: "›"; position: absolute; margin-left: -.7rem; color: var(--accent); }
+.theme-btn { margin-left: auto; }
+.burger { display: none; }
+
+/* ---------- article column + margin ---------- */
+main { display: block; }
+.art { max-width: 67rem; margin: 0 auto; padding: 2.6rem 1.5rem 3rem; counter-reset: sidenote-counter; }
+.art > *, .art section > * { width: var(--main); }
+.art > section { width: 100%; }
+.art .fullwidth { width: 100%; }
+section { padding-top: .6rem; }
+
+.crumbs { font-size: .86rem; color: var(--muted); letter-spacing: .01em; }
+.crumbs a { color: var(--muted); text-decoration: none; }
+.crumbs a:hover { color: var(--accent); }
+.crumbs .sep { margin: 0 .45em; color: var(--rule-2); }
+h1, h2, h3 { font-family: var(--serif); color: var(--ink); text-wrap: balance; }
+h1 { font-size: 2.3rem; font-weight: 400; line-height: 1.3; margin: .9rem 0 0; letter-spacing: .01em; }
+.subtitle { font-family: "et-book", var(--note); font-style: italic; font-size: 1.45rem; line-height: 1.3; color: var(--ink-2); margin-top: .35rem; }
+.meta { font-size: .92rem; color: var(--muted); margin-top: 1.1rem; }
+.meta a { color: var(--muted); }
+h2 { font-size: 1.42rem; font-weight: 600; line-height: 1.4; margin: 2.6rem 0 .9rem; }
+h3 { font-size: 1.12rem; font-weight: 600; line-height: 1.5; margin: 1.8rem 0 .5rem; }
+h3 .used { font-family: var(--note); font-weight: 400; font-size: .86rem; color: var(--muted); margin-left: .6em; }
+
+.epigraph { margin: 2.2rem 0 .6rem; }
+.epigraph blockquote { margin: 0; padding: 0 0 0 1.6rem; border-left: 1px solid var(--rule-2); }
+.epigraph p { font-family: var(--note); font-size: 1.12rem; line-height: 1.85; color: var(--ink-2); }
+
+.art ol, .art ul { margin: .6rem 0 0; padding-left: 1.6em; }
+.art li + li { margin-top: .45rem; }
+li::marker { font-family: "et-book-osf", var(--serif); color: var(--muted); }
+
+/* Equations: display math in the text column, scrolling sideways on narrow screens. */
+.eqs { display: block; }
+.eq + .eq { margin-top: 1.6rem; }
+.math-block { overflow-x: auto; overflow-y: hidden; margin: .4rem 0 .6rem; padding: .2rem 0; font-size: 1rem; }
+.math-block mjx-container { margin: 0 !important; }
+
+/* ---------- side notes & margin notes (floated into the right margin) ---------- */
+.sidenote, .marginnote {
+  float: right; clear: right; position: relative;
+  width: var(--side); margin-right: calc(-1 * (var(--side) + var(--gap))); margin-top: .3rem; margin-bottom: .6rem;
+  font-family: var(--note); font-size: .88rem; line-height: 1.6; color: var(--ink-2); text-align: left;
+  font-style: normal; font-weight: 400; letter-spacing: 0;
+}
+h3 .sidenote { margin-top: .2rem; }
+.sidenote-number { counter-increment: sidenote-counter; }
+.sidenote-number::after, .sidenote::before { font-family: "et-book-osf", var(--serif); position: relative; vertical-align: baseline; }
+.sidenote-number::after { content: counter(sidenote-counter); font-size: .75rem; top: -.55em; left: .08em; color: var(--ink-2); }
+.sidenote::before { content: counter(sidenote-counter) " "; font-size: .8rem; top: -.4em; }
+.note-label { font-family: var(--serif); font-weight: 600; font-size: .82rem; color: var(--muted); margin-right: .5em; }
+.marginnote .note-label { display: block; margin: 0 0 .1rem; }
+input.margin-toggle { display: none; }
+label.sidenote-number { display: inline; cursor: default; }
+label.margin-toggle:not(.sidenote-number) { display: none; }
+
+/* ---------- quiz, further reading, series ---------- */
+.quiz details { margin-top: .3rem; }
+.quiz summary { font-family: var(--note); font-size: .92rem; color: var(--muted); cursor: pointer; list-style: none; display: inline-block; }
+.quiz summary::-webkit-details-marker { display: none; }
+.quiz summary::before { content: "+ "; font-family: "et-book", var(--serif); }
+.quiz details[open] summary::before { content: "− "; }
+.quiz summary:hover { color: var(--accent); }
+.quiz details > p { margin-top: .3rem; padding-left: 1rem; border-left: 1px solid var(--rule); color: var(--ink-2); }
+
+/* Reference lists: a narrow label column (kind / year) and a hanging text column. */
+.art ul.refs { list-style: none; padding-left: 0; }
+.refs li { display: grid; grid-template-columns: 2.8rem minmax(0, 1fr); column-gap: .5rem; line-height: 1.6; }
+.refs li > :not(.kind):not(.yr) { grid-column: 2; }
+.refs .kind, .refs .yr { grid-column: 1; font-family: var(--note); font-size: .86rem; color: var(--muted); padding-top: .12rem; }
+.refs .yr { font-family: "et-book-osf", var(--serif); font-size: .95rem; padding-top: .05rem; }
+.refs .en { font-family: "et-book", var(--serif); font-style: italic; color: var(--muted); font-size: .92rem; line-height: 1.5; }
+.refs .gloss { font-family: var(--note); font-size: .88rem; color: var(--ink-2); margin-top: .1rem; }
+.art .refs li + li { margin-top: .75rem; }
+.art .papers li + li { margin-top: .35rem; }
+/* Without a label column the list is a plain stack (no grid, so nothing can land in a phantom second column). */
+.refs.noleft li { display: block; }
+.refs .used { font-family: var(--note); font-size: .82rem; color: var(--muted); margin-left: .5em; }
+.refs.terms .plain-t { font-weight: 600; }
+.refs.terms .en { display: inline; margin-left: .6em; }
+.timeline li { line-height: 1.7; }
+.art .timeline li + li { margin-top: .4rem; }
+
+/* ---------- blocks: lede, run-in labels, notes ---------- */
+.lede { margin-top: 1.6rem; color: var(--ink-2); }
+.run-in { font-weight: 600; color: var(--ink); }
+p.note { font-family: var(--note); font-size: .9rem; color: var(--muted); margin-top: .1rem; }
+h2 .en, h3 .en { font-family: "et-book", var(--serif); font-style: italic; font-weight: 400; color: var(--muted); margin-left: .6em; font-size: .92em; }
+h2 a, h3 a { text-decoration-color: var(--rule); }
+.quiz-h { font-family: var(--note); font-size: .88rem; color: var(--muted); margin-top: 1.4rem; }
+.quiz-h + ol.quiz { margin-top: .2rem; }
+
+/* Index pages: a table of contents instead of a card grid. */
+.art ol.toc { list-style: none; padding-left: 0; margin-top: .4rem; }
+.art ol.toc > li + li { margin-top: .85rem; }
+.toc-t { line-height: 1.55; }
+.toc-t .en { font-family: "et-book", var(--serif); font-style: italic; color: var(--muted); margin-left: .6em; font-size: .95em; }
+.toc-meta { font-family: var(--note); font-size: .82rem; color: var(--muted); margin-left: .7em; white-space: nowrap; }
+.toc-s { font-family: var(--note); font-size: .9rem; line-height: 1.65; color: var(--ink-2); margin-top: .1rem; }
+.toc-lede { font-family: var(--note); color: var(--ink-2); font-size: .95rem; }
+h2.toc-h, h3.toc-h { margin-bottom: .3rem; }
+
+/* Tables: booktabs rules (top, under the header, bottom), no vertical lines, no fills. */
+.table-wrap { overflow-x: auto; margin: 1rem 0; }
+table.booktabs { border-collapse: collapse; width: 100%; font-size: .9rem; line-height: 1.6; border-top: 1.5px solid var(--ink); border-bottom: 1.5px solid var(--ink); }
+table.booktabs th { text-align: left; font-weight: 600; padding: .45rem .7rem .35rem 0; border-bottom: 1px solid var(--ink); white-space: nowrap; vertical-align: bottom; }
+table.booktabs td { padding: .45rem .9rem .45rem 0; vertical-align: top; border-top: 1px solid var(--rule); }
+table.booktabs tbody tr:first-child td { border-top: 0; }
+table.rank td { white-space: nowrap; font-variant-numeric: tabular-nums; }
+table.rank td:nth-child(2) { white-space: normal; }
+.art table.kv { border-collapse: collapse; margin: .6rem 0; font-size: .95rem; width: auto; }
+table.kv th { text-align: left; font-weight: 400; color: var(--muted); padding: .25rem 1.2rem .25rem 0; vertical-align: top; min-width: 5em; max-width: 12em; font-family: var(--note); }
+table.kv td { padding: .25rem 0; vertical-align: top; }
+
+/* Long articles: the table of contents sits at the top of the margin. */
+/* It sits in a full-width section, so it floats into the margin without a negative offset. */
+details.mtoc {
+  float: right; clear: right; width: var(--side); margin-right: 0; margin-bottom: 1rem;
+  font-family: var(--note); font-size: .86rem; line-height: 1.55; color: var(--ink-2);
+}
+details.mtoc summary { font-family: var(--serif); font-weight: 600; font-size: .82rem; color: var(--muted); list-style: none; cursor: default; }
+details.mtoc summary::-webkit-details-marker { display: none; }
+.art details.mtoc ol { list-style: none; padding: 0; margin: .3rem 0 0; }
+.art details.mtoc li + li { margin-top: .25rem; }
+details.mtoc a { text-decoration: none; }
+details.mtoc a:hover { text-decoration: underline; }
+
+/* Tools: search and filters with underlined inputs. */
+.tool { margin-top: 1rem; }
+.filters { display: flex; flex-wrap: wrap; gap: .6rem 1.6rem; align-items: baseline; font-family: var(--note); font-size: .92rem; color: var(--muted); }
+.filters label { display: inline-flex; gap: .5rem; align-items: baseline; }
+.filters input, .filters select {
+  font: inherit; color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid var(--rule-2); border-radius: 0;
+  padding: .15rem .1rem; min-width: 7rem;
+}
+.filters input[type="search"] { min-width: 14rem; }
+.filters select { max-width: 16rem; }
+.filters input:focus, .filters select:focus { outline: none; border-bottom-color: var(--accent); }
+.filters select option { background: var(--bg); color: var(--ink); }
+.filters .count { margin-left: auto; font-family: var(--mono); font-size: .8rem; }
+table.gl td.en { font-family: "et-book", var(--serif); width: 20%; }
+table.gl .abbr { color: var(--muted); }
+table.gl td.zh { white-space: nowrap; }
+table.gl td.def { color: var(--ink-2); min-width: 20rem; }
+table.gl td.c { font-size: .85rem; min-width: 9rem; padding-right: 0; }
+table.gl tr:target td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+table.db td.y { font-family: "et-book-osf", var(--serif); white-space: nowrap; }
+table.db td.t { min-width: 16rem; }
+table.db td.t small { display: block; color: var(--muted); font-size: .8rem; line-height: 1.45; margin-top: .15rem; }
+table.db td.tags { min-width: 7rem; font-family: var(--note); font-size: .8rem; color: var(--muted); }
+table.db td.tags span { display: block; }
+table.db .tier.milestone { color: var(--ink); font-weight: 600; }
+table.db td.s { min-width: 18rem; color: var(--ink-2); }
+table.db td.n { min-width: 12rem; font-size: .82rem; color: var(--ink-2); }
+
+/* Figures: the pipeline diagram and the timeline of classic papers, drawn in ink with one accent for interaction. */
+figure { margin: 1.4rem 0; }
+svg a { text-decoration: none; }
+.diagram-wrap, .lanes-wrap { position: relative; overflow-x: auto; }
+svg.diagram { width: 100%; min-width: 760px; height: auto; display: block; font-family: var(--note); }
+svg.diagram .dnode rect { fill: var(--bg); stroke: var(--ink-2); stroke-width: 1; }
+svg.diagram .dnode rect.data { stroke-dasharray: 4 3; }
+svg.diagram .dnode:hover rect, svg.diagram .dnode:focus rect { stroke: var(--accent); stroke-width: 1.5; }
+svg.diagram .dnode:focus { outline: none; }
+svg.diagram text { fill: var(--ink); }
+svg.diagram text.k { font-family: var(--mono); font-size: 10px; fill: var(--muted); }
+svg.diagram text.t { font-family: var(--serif); font-size: 13px; font-weight: 600; }
+svg.diagram text.s { font-size: 11px; fill: var(--ink-2); }
+svg.diagram .dedge { fill: none; stroke: var(--ink-2); stroke-width: 1; }
+svg.diagram .dedge.fb { stroke-dasharray: 4 3; }
+svg.diagram .dhead { fill: var(--ink-2); }
+svg.diagram .dloop { fill: none; stroke: var(--rule-2); stroke-dasharray: 2 3; }
+svg.diagram .dlabel { font-size: 12px; fill: var(--muted); }
+svg.diagram .dnote { font-size: 11px; fill: var(--muted); }
+svg.diagram a.dnode:hover .dnote { fill: var(--accent); }
+svg.lanes { width: 100%; min-width: 720px; height: auto; display: block; font-family: var(--note); }
+svg.lanes .grid { stroke: var(--rule); stroke-width: 1; }
+svg.lanes .axis { font-family: "et-book-osf", var(--serif); font-size: 12px; fill: var(--muted); }
+svg.lanes .lane-l { font-size: 12px; fill: var(--ink-2); }
+svg.lanes .brk { stroke: var(--muted); fill: none; }
+svg.lanes .hit { fill: transparent; }
+svg .dot { fill: var(--ink); }
+svg .dot.hollow { fill: var(--bg); stroke: var(--ink-2); stroke-width: 1.2; }
+svg.lanes a.m:hover .dot, svg.lanes a.m:focus .dot { fill: var(--accent); stroke: var(--accent); }
+svg.lanes a.m:focus { outline: none; }
+.vtip { position: absolute; z-index: 20; max-width: 20rem; padding: .45rem .7rem; background: var(--bg); border: 1px solid var(--rule-2); font-family: var(--note); font-size: .82rem; line-height: 1.5; pointer-events: none; }
+.vtip b { display: block; font-family: "et-book", var(--serif); font-weight: 400; font-size: .92rem; }
+.vtip small { display: block; color: var(--muted); }
+.vtip span { color: var(--accent); }
+figcaption { font-family: var(--note); font-size: .85rem; color: var(--muted); margin-top: .4rem; }
+figcaption svg { vertical-align: -1px; }
+
+.series { display: grid; grid-template-columns: 1fr auto 1fr; gap: 1rem; align-items: end; margin-top: 3.2rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: .98rem; }
+.series small { display: block; font-family: var(--note); font-size: .8rem; color: var(--muted); }
+.series .up { text-align: center; font-size: .88rem; }
+.series .up a { color: var(--muted); }
+.series .next { text-align: right; }
+
+.site-foot { max-width: 67rem; margin: 0 auto; padding: 1.2rem 1.5rem 2.5rem; font-size: .82rem; color: var(--muted); }
+.site-foot a { color: var(--muted); text-decoration: none; }
+
+/* ---------- hover preview ---------- */
+.xtip {
+  position: absolute; z-index: 50; max-width: min(22rem, calc(100vw - 16px)); padding: .55rem .8rem .6rem;
+  background: var(--bg); border: 1px solid var(--rule-2); color: var(--ink);
+  font-family: var(--note); font-size: .88rem; line-height: 1.6; pointer-events: none;
+}
+.xt-m { font-size: .76rem; color: var(--muted); }
+.xt-t { font-family: var(--serif); font-weight: 600; font-size: .95rem; line-height: 1.45; margin-top: .1rem; }
+.xt-e { font-family: "et-book", var(--serif); font-style: italic; color: var(--ink-2); line-height: 1.4; }
+.xt-s { margin-top: .35rem; color: var(--ink-2); }
+
+/* ---------- narrow screens: one column; notes fold behind their number or ⊕ ---------- */
+@media (max-width: 760px) {
+  body { font-size: 1.0625rem; line-height: 1.8; }
+  .bar-in { gap: 1rem; padding: 0 1rem; flex-wrap: wrap; }
+  .site-nav { order: 5; flex-basis: 100%; display: none; }
+  .topbar.nav-open .site-nav { display: block; }
+  .menus { flex-direction: column; gap: 0; padding-bottom: .6rem; }
+  .menu-btn { line-height: 2.4rem; width: 100%; text-align: left; }
+  .menu-btn::after { content: " +"; }
+  .menu.open > .menu-btn::after { content: " −"; }
+  .menu.cur > .menu-btn { box-shadow: none; }
+  .drop { position: static; border: 0; padding: 0 0 .4rem .9rem; min-width: 0; }
+  .drop a { padding: .2rem 0; white-space: normal; }
+  .burger { display: inline; }
+  .theme-btn { margin-left: auto; }
+  .art { padding: 1.6rem 1rem 2.4rem; }
+  .art > *, .art section > * { width: 100%; }
+  h1 { font-size: 1.85rem; }
+  .subtitle { font-size: 1.22rem; }
+  .epigraph blockquote { padding-left: 1rem; }
+  .epigraph p { font-size: 1.05rem; }
+  label.margin-toggle:not(.sidenote-number) { display: inline; cursor: pointer; color: var(--muted); font-family: "et-book", var(--serif); padding: 0 .15em; }
+  label.sidenote-number { cursor: pointer; }
+  .sidenote, .marginnote { display: none; }
+  .margin-toggle:checked + .sidenote, .margin-toggle:checked + .marginnote {
+    display: block; float: left; clear: both; width: 100%; margin: .6rem 0; padding-left: .8rem; border-left: 1px solid var(--rule-2);
+  }
+  .series { grid-template-columns: 1fr 1fr; }
+  .series .up { display: none; }
+  details.mtoc { float: none; width: 100%; margin: 0 0 1.2rem; padding-left: .8rem; border-left: 1px solid var(--rule-2); }
+  details.mtoc summary { cursor: pointer; }
+  details.mtoc summary::after { content: " +"; }
+  details.mtoc[open] summary::after { content: " −"; }
+  .filters { flex-direction: column; align-items: stretch; gap: .5rem; }
+  .filters label { justify-content: space-between; }
+  .filters input[type="search"], .filters input, .filters select { min-width: 0; flex: 1; }
+  .filters .count { margin-left: 0; }
+  .toc-meta { display: block; margin-left: 0; }
+  table.kv, table.kv tbody, table.kv tr, table.kv th, table.kv td { display: block; max-width: none; }
+  table.kv th { padding: .5rem 0 0; }
+}
+@media print {
+  .topbar, .site-foot, .series { display: none; }
+}
+
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<header class="topbar" id="topbar"></header>
+<main id="main"><article class="art"></article></main>
+<footer class="site-foot" id="site-foot"></footer>
+<script type="application/json" id="data">{"site": {"brand": "3D Telepresence: a field guide", "root": "../", "path": "future/C10.html", "nav": [{"key": "overview", "label": "Overview", "items": [["Introduction", "index.html"], ["Methodology", "overview/methodology.html"], ["How to use", "overview/how-to-use.html"]]}, {"key": "basics", "label": "Basics", "items": [["Routes", "basics/routes/index.html"], ["Foundations", "basics/foundations/index.html"], ["Advanced topics", "basics/advanced/index.html"], ["Classics", "basics/classics/index.html"], ["Glossary", "basics/glossary.html"]]}, {"key": "works", "label": "Works", "items": [["Papers", "works/papers/index.html"], ["Walkthrough", "works/walkthrough/index.html"], ["Field map", "works/field-map.html"], ["Sub areas", "works/areas/index.html"]]}, {"key": "future", "label": "Future", "items": [["Directions", "future/index.html"], ["Trends & Challenges", "future/trends.html"]]}], "navCur": "future", "navItem": "future/index.html", "crumbs": [["Future", ""], ["Directions", "future/index.html"]], "date": "2026-09-28"}, "xref": {"idea-C08": {"u": "future/C08.html", "t": "阵列能教会它自身之外的视角吗？实时几何引导 3D 视频的持续留出相机自适应，以及何时能迁移到阵列之外", "e": "Does the Rig Teach Beyond Itself? Continual Held-Out-Camera Adaptation of Real-Time Geometry-Guided 3D Video, and When It Transfers Off-Rig", "m": "Directions · 第 11 名 · 综合 5", "s": "已部署的多相机渲染器利用未用于渲染的阵列相机上的光度损失，在线自适应其深度网络和混合网络。"}, "idea-C14": {"u": "future/C14.html", "t": "为显示而渲染，而非为帧而渲染：面向独立头显上隐藏延迟远程临场的重投影稳定几何引导视图合成", "e": "Render for the Display, Not the Frame: Reprojection-Stable Geometry-Guided View Synthesis for Latency-Hidden Telepresence on Standalone Headsets", "m": "Directions · 第 13 名 · 综合 5", "s": "对实时多视角 IBR 的训练和评估，都以头显在真实位姿预测误差下经 late reprojection 后实际显示的帧为准。"}}, "page": {"id": "idea-C10", "head": {"title": "RigCache：面向固定相机阵列流式多视图几何的变化门控持久化 Token 表", "sub": "RigCache: Change-Gated Persistent Token Tables for Streaming Multi-View Geometry on Fixed Camera Rigs", "meta": ["第 12 名", "重新定位后推进", "查新：部分已被做"], "epigraph": "", "prereqs": [], "lede": "在固定、已标定、向内拍摄的相机阵列上，几何 transformer 可以维护一张持久化的、按（相机, patch）索引的 token 与 KV 表。一个感知陈旧度的三级学习门控只刷新那些深层特征确实会漂移的 token，包括由其他相机中的变化所引起的漂移。其结果是计算开销随场景运动量变化的度量级多视图深度，并且天然具备时间稳定性。同一张表还被一个覆盖全部 N 个相机的目标射线深度头为每个观看者查询。", "minutes": 14}, "body": [{"b": "sec", "h": "评分", "id": "scores"}, {"b": "kv", "items": [["综合", "5"], ["新颖", "5"], ["意义", "6"], ["可行", "5"], ["临场契合", "8"]]}, {"b": "sec", "h": "核心论点（可证伪）", "id": "claim"}, {"b": "p", "t": "设定：同步、已标定、向内拍摄的相机阵列（8-16 个相机），场景中有动态人物。在类似视频会议的运动下（至少 70% 的 patch 为静态），RigCache 相对于每帧稠密重算的同一 student 模型同时满足以下各项。(i) 骨干网络 FLOPs 至少降低 3 倍，wall-clock 时间至少降低 2 倍。(ii) 深度精度：AbsRel 相对差距在 5% 以内，delta1 差距在 1 个点以内。(iii) 静态区域的时间深度闪烁（TAE/OPW）至少降低 30%。在相同计算量下，在注入曝光与光照变化时，它在深度误差和误刷新率上优于三种免训练的复用方案（Eventful 式阈值、VLA-Cache 式静态 token KV 复用，以及 RGB 差分门控）。其全 N 目标射线深度头沿扫动的观看者轨迹，相比 K 近邻 TSDF 融合（base paper），将新视角深度跳变（popping）减少至少 40%。如果两周测试中的 oracle 门控模拟在 70% 复用率下无法保持深度误差，则该主张不成立。"}, {"b": "sec", "h": "关键洞察", "id": "insight"}, {"b": "p", "t": "在固定相机阵列中，一个 patch token（相机 c，位置 u）随时间保持其身份，因此自然的流式记忆是一张按相机和 patch 索引的表，而不是按时间索引的序列缓存。Eventful Transformers 和 VLA-Cache 从未遇到的一个非显然问题是跨视图陈旧性（cross-view staleness）。在全局注意力几何模型中，相机 A 中像素静止的 patch，其深层特征仍依赖于相机 B-N 中确实发生了变化的 patch（例如一个人在它所观察的背景前移动）。因此，“输入没有变化”并不意味着“token 不需要更新”。研究问题是：这种变化会通过跨视图注意力传播多远；以及一个以 teacher 特征漂移为训练目标的门控，配合一个廉价的仅注意力刷新层级，能否以全量开销的一小部分捕捉这种传播。答案决定了多视图几何模型中计算量究竟能否随运动变化。一个次要结果是：这张持久化、大部分冻结的表本身是一个稳定的场景表示。通过关注全部 N 个相机从中读取的新视角深度，既没有逐帧重算带来的闪烁，也没有 K 近邻视图集合切换带来的跳变。"}, {"b": "sec", "h": "方法", "id": "method"}, {"b": "p", "t": "骨干网络（student）。\n- 约 300M 参数，由多视图 DA3-Base 级或 VGGT 蒸馏模型初始化。\n- 在 14 px patch 上交替进行逐相机注意力和全局注意力，每个相机约 518x294（每个相机约 780 个 token，8-16 个相机约 6-12k 个 token）。\n- 标定以 Plücker 射线图 token 注入。对 RGB-D 阵列可选加入传感器深度 prompt token。\n- DPT head 输出每个相机的度量深度和置信度。\n\n持久化表。\n- 对每一层 l 和每个 (c, u)，存储 token 状态 x_l、其 K_l 和 V_l，以及一个陈旧年龄（staleness age）。\n\n三级门控。\n- 门控是作用于曝光归一化浅层特征上的小型 conv 加 MLP：patch embedding 差分、逐相机增益补偿后的 RGB 差分，以及对数色度差分。它还读取表中的年龄和置信度。\n- 它为每个 token 输出以下三个层级之一：\n  - T0 冻结：在所有层复用 x_l、K_l 和 V_l（无开销）。\n  - T1 注意力刷新：复用该 token 自身的投影和 MLP，但以 Eventful delta 形式针对新的 key 重新计算其全局注意力输出。开销约为完整 token 的 1/4。此层级处理跨视图污染。\n  - T2 在所有层完整重算。\n- 强制轮询刷新保证每个 token 至少每 R 帧（R 约 30）被刷新一次，置信度随年龄衰减。\n\n门控监督。\n- 目标是 teacher 漂移：离线运行稠密 student，如果某 token 在指定层的第 l 层特征变化超过 eps_input 或 eps_ctx，则标记为 T2 或 T1。\n- 损失：层级标签上的交叉熵，加上基于 Gumbel straight-through 的期望 FLOPs 预算损失。\n\n感知陈旧度的训练。\n- 8 帧截断 rollout，门控 on-policy 运行，使 student 学会消费陈旧的 KV 条目。\n- 每帧对一个离线双向 teacher 做蒸馏损失：在已知标定下的窗口化 DA3 或 MapAnything，并加一个时间平滑步骤（Video-Depth-Anything 式窗口对齐）。\n- 附加损失：跨视图重投影一致性、在光流 warp 后动态区域上的时间 warp 一致性，以及尺度不变加度量 L1 和梯度项。\n\n目标射线深度头。\n- 每个目标 patch token 是一个 Plücker embedding，加上从上一帧目标深度重投影得到的粗深度，或在初始化时使用平面扫描。\n- 它对全部 N 个相机的最后一层 token，沿极线段在正负 k·sigma 范围内每个相机取 s = 8 个采样做可变形交叉注意力，另加 32 个全局 token。\n- 输出：1/4 目标分辨率的深度、法线和不确定性，然后以 splat 后的 RGB 为引导做联合双边上采样。\n- 每个观看者的开销只有这个 head（低于 3 ms），因此 M 个观看者或眼睛共享一次骨干前向。\n- 监督：留出相机上的 teacher 深度，以及有传感器深度时的传感器深度。\n\n渲染。\n- 接入 base 流水线：由 student 深度（置信度门控）前向 splat 像素级 Gaussian，然后接 base U-Net blender，此时它还额外接收目标射线不确定性。\n- 刻意不构建 LVSM 式渲染器（超出计算范围，且 NSTM 已占据该方向）。\n\n训练数据：DNA-Rendering、MVHumanNet++、Panoptic Studio（HD 加 Kinect）、PackUV-2B 训练序列和 N3DV 训练场景。\n\n计算：在 4-8 块 A100/H100 GPU 上约 2-4k GPU 小时（对 student 做 LoRA 或部分微调，冻结的 teacher 离线运行一次）。\n\n运行时目标（RTX 4090 或 A100 级，8 个相机）：\n- 30% 运动时骨干最多 20 ms，而稠密约为 60-80 ms。\n- 目标 head 每个观看者最多 3 ms。\n- 端到端（含深度）最多 50 ms。base paper 的运行时不含深度；本目标包含。"}, {"b": "sec", "h": "为什么不是工程改进", "id": "not-engineering"}, {"b": "p", "t": "本文回答了先前工作从未需要回答的问题：在每个 token 都关注每个相机的模型中，局部变化是否保持局部？Eventful Transformers 和 VLA-Cache 作用于单相机，在那里静态输入 patch 意味着 token 静态（仅差自注意力上下文）。这里需要测量和建模的是其他相机中静态 token 通过跨视图注意力受到的污染。本文的贡献将是：\n(1) 对多视图几何 transformer 中变化传播的逐层、逐相机的实证刻画。这是一项新分析，无论方法最终数值如何都成立。\n(2) 一个由 teacher 漂移监督的分级门控，带有专为这种污染设计的注意力刷新层级。\n(3) 感知陈旧度的 on-policy 训练，表明可以教会 student 容忍陈旧的 KV 条目。免训练复用做不到这一点，本文通过对比加以展示。\n(4) 一条可证伪的精度-计算-稳定性权衡曲线（随运动比例变化），以先前的门控方案为基线。\n\n如果跨视图传播被证明可以忽略，本文诚实的结论就是“Eventful 式复用可以迁移到相机阵列”。那是一个 workshop 级别的结果，kill criteria 就是为了尽早发现这种情况而设定的。"}, {"b": "sec", "h": "与已有工作的区分", "id": "differentiation"}, {"b": "p", "t": "- Eventful Transformers (ICCV 2023) 和 VLA-Cache (NeurIPS 2025)：单相机、免训练或阈值门控，且没有跨视图的陈旧 token 消费者。它们被采用为基线，而非声称超越的对象。新的部分是跨视图陈旧性层级、对曝光变化鲁棒的漂移监督门控，以及 on-policy 感知陈旧度训练。\n- StreamVGGT、OVGGT、StreamCacheVGGT、STAC 和 InfiniteVGGT：它们处理的是对单个移动相机应保留哪些过去的 token。RigCache 处理的是当相机身份固定时可以跳过计算哪些当前 token。两者正交，本文不声称有界内存是新贡献。\n- KV-Tracker 和 RnG (CVPR 2026)：将几何模型的 KV 缓存或查询为场景表示，但为关键帧级、静态且单相机。RigCache 的表是持久化且动态的，并按 patch 刷新。\n- RaySt3R 和 Z3D：由射线查询得到新视角深度的方法已存在。目标射线 head 作为一个组件提出。其具体主张是通过在时间持久化的表上进行全 N 极线注意力来消除 K 切换跳变，并用新的轨迹跳变指标度量。\n- DriveVGGT 和 Rig3R：标定多相机，但向外拍摄、自车运动且没有 token 复用。在那里没有静态 patch，因此前提不适用。\n- NSTM、Efficient-LVSM 和 Tele360：属于渲染器侧或逐帧方法。RigCache 是几何前端，NSTM 或 U-Net 可以消费它的输出。"}, {"b": "sec", "h": "查新后剩余的可辩护新意", "id": "novel-angle"}, {"b": "p", "t": "已被占据的是机制本身：跨帧的变化门控逐 token 重算加缓存 KV 复用。Eventful Transformers (ICCV 2023) 在 ViT 上做过，VLA-Cache (NeurIPS 2025) 对静态 patch 的 KV 做过跨帧复用。将缓存的几何 transformer KV 作为场景表示来查询以得到新视角 RGB-D 也已被占据（RnG, CVPR 2026；KV-Tracker, CVPR 2026）。有界内存的流式几何同样如此（OVGGT、STAC、StreamCacheVGGT）。\n\n剩下的（我没有找到做这件事的论文）是针对固定、已标定、同步、向内拍摄且含动态内容的相机阵列的特定组合：\n- 在跨视图全局注意力几何 FM（或视图合成编码器）内部的持久化逐（相机, patch）KV 表。相机 A 的陈旧静态 token 被相机 B 的新 query 消费。\n- 一个以 teacher 特征漂移为训练目标（且对光照和曝光鲁棒）的门控，而不是免训练的阈值。\n- 一个由该时间持久化表驱动的、覆盖全部 N 个相机的深度偏置极线目标射线深度 head，证明它能消除 K 近邻视图切换，并给出构造上比特级稳定的静态几何。\n- 对于 GeoLVSM 变体：在动态场景上的解耦视图合成 transformer 中做时间维度的输入 KV 复用，编码器在大量同时观看者或眼睛之间摊销。NSTM、Efficient-LVSM 和 SVSM 各自具备其中一部分，但没有一个具备这种组合。\n\n该主张必须表述为具有扎实测量的系统与架构贡献，而非新机制。有用的测量包括：计算量随场景运动比例的变化；跨视图陈旧性和误差传播的失效模式；学习门控 vs Eventful 式 vs RGB 差分门控；光照鲁棒性；以及包含深度在内的全流水线延迟。必须引用 Eventful Transformers 和 VLA-Cache 并与之做消融对比。"}, {"b": "sec", "h": "主要撞车风险（查新找到的相近工作）", "id": "threats"}, {"b": "refs", "items": [{"left": "高", "url": "https://arxiv.org/abs/2308.13494", "t": "Eventful Transformers: Leveraging Temporal Redundancy in Vision Transformers", "sub": "2023 · ICCV 2023 · 重叠度 高", "gloss": "重叠：这正是两个想法的核心计算机制。逐 token 的门控模块监测时间变化，只重算变化了的 token，并对 query-key 和 attention-value 乘积施加 delta 稀疏更新，其余部分复用上一帧。计算量在运行时随变化自适应，并且可以改装到预训练 ViT 上。\n差异：它面向单相机视频上的视频识别与检测，没有几何、没有多相机标定注意力，也没有新视角输出。它的门控是阈值化的特征差分，而不是以 teacher 特征漂移为目标训练的 head。任何“计算量与变化成正比”的主张都必须表述为将 Eventful 式门控应用并扩展到多视图几何与 NVS transformer，而不是新机制。"}, {"left": "高", "url": "https://arxiv.org/abs/2502.02175", "t": "VLA-Cache: Efficient Vision-Language-Action Manipulation via Adaptive Token Caching", "sub": "2025 · NeurIPS 2025 · 重叠度 高", "gloss": "重叠：识别固定相机或机器人相机相邻帧之间变化极小的 patch token，复用它们缓存的 KV，并逐层自适应复用比例。这就是“逐相机 patch 跨时间 KV 复用”的想法，已在机器人领域发表，并已有一系列后续工作（VLN-Cache 2603.07080、Neural Introspection Gating 2608.10824）。\n差异：单相机、LLM 式 VLA 骨干、输出动作。没有跨视图全局注意力（即一个相机的陈旧 KV 被其他相机的 query 消费），没有几何或深度输出，也没有学习的漂移训练门控。Neural Introspection Gating 的门控是免训练的，基于 logit margin。"}, {"left": "中", "url": "https://arxiv.org/abs/2603.01194", "t": "RnG: A Unified Transformer for Complete 3D Modeling from Partial Observations", "sub": "2026 · CVPR 2026 · 重叠度 中", "gloss": "重叠：将几何 transformer 的 KV cache 视为隐式 3D 表示，任意目标位姿查询它以生成新视角 RGB-D。这与 RigStream 的“在共享场景 token 上的目标射线深度 head”以及 GeoLVSM 的“编码一次、从缓存 KV 解码多个目标”直接重叠。\n差异：静态场景，侧重补全与生成，没有时间复用。它没有几何偏置或极线受限的目标注意力，也没有固定阵列标定。留给 RigStream 的新部分是在时间持久化、变化门控的 KV 表上的全 N 相机目标射线深度 head，用于消除 K 近邻切换。"}, {"left": "中", "url": "https://arxiv.org/abs/2512.22581", "t": "KV-Tracker: Real-Time Pose Tracking with Transformers", "sub": "2025/2026 · CVPR 2026 · 重叠度 中", "gloss": "重叠：在关键帧上缓存多视图几何网络（pi^3）的全局注意力 KV 对，并将其复用为场景表示以进行实时在线处理，加速约 15 倍且无需重新训练。\n差异：单个移动的单目相机，关键帧级缓存，用于位姿跟踪。没有逐 patch 变化门控、没有同步多相机阵列、没有动态内容刷新，也没有深度/NVS 时间一致性。"}, {"left": "中", "url": "https://arxiv.org/abs/2603.05959", "t": "OVGGT / StreamCacheVGGT / STAC / InfiniteVGGT (bounded and compressed KV caches for streaming geometry transformers)", "sub": "2026 · ECCV 2026 (OVGGT); arXiv (StreamCacheVGGT 2604.15237, STAC 2603.20284 CVPR 2026, InfiniteVGGT 2601.02281) · 重叠度 中", "gloss": "重叠：这些工作都给出了固定预算或常数内存的流式几何 FM，包括 token 重要性评分、淘汰和合并。STAC 将被淘汰的 token 组织到体素网格中以便空间复用。这使得“有界内存而非 StreamVGGT 不断增长的缓存”不再能作为贡献。\n差异：全部是单个移动相机，且都关注保留哪些过去的 token，而不是跳过对未变化的当前帧 token 的重算。没有一个利用了固定阵列下（相机, patch）token 的稳定身份。"}]}, {"b": "sec", "h": "实验设计", "id": "experiments"}, {"b": "h3", "t": "数据集"}, {"b": "ul", "items": ["Neural 3D Video / DyNeRF (N3DV)：公开。采用 base paper 的测试协议，并使用干净的场景划分，因为训练场景共享同一厨房。", "ENeRF-Outdoor：公开，户外光照变化。", "D3DMV（已压缩）：用于与 base paper 可比。", "Panoptic Studio：公开的 HD 相机加同步 Kinect 深度。是动态多相机阵列上唯一大规模公开的真实传感器深度来源。用作深度精度的 ground truth。", "DNA-Rendering：申请后公开，60 个相机。主要训练来源和分钟级评估。", "MVHumanNet++：申请后公开。用于训练以及与 NSTM 可比的分钟级协议。", "PackUV-2B（CVPR 2026 发布）：50+ 个同步相机，长达 30 分钟。用于长时漂移和陈旧性测试。依赖之前需核实许可证和下载体量。", "ScanNet++（静态）：针对激光扫描 ground truth 的绝对深度精度合理性检查。"]}, {"b": "h3", "t": "对比基线"}, {"b": "ul", "items": ["Base paper 流水线：RAFT-Stereo 加颜色差分门控的 TSDF，使用 K 近邻视图。由于未发布代码，需要复现。", "Fast-FoundationStereo 加 base TSDF；Stereo Any Video 加 base TSDF（强力的“仅替换深度模块”基线）。", "逐帧稠密 student（相同权重，无复用）；带标定的逐帧 DA3 或 MapAnything（teacher，作为上界）。", "适配到多相机输入的 StreamVGGT 和 OVGGT（将相机展平进流中）。", "将 Eventful Transformers 门控应用于同一 student（免训练，逐层阈值）。", "VLA-Cache 式静态 token KV 复用（免训练）以及 RGB 差分门控（以 base paper 的公式作为门控）。", "在 K 近邻相机上的 RnG / RaySt3R 式射线查询深度，作为目标 head 变体的对照检查。"]}, {"b": "h3", "t": "指标"}, {"b": "ul", "items": ["深度：以 Panoptic Kinect 或 ScanNet++ ground truth 计算 AbsRel、delta1 和 RMSE；以 teacher 伪 GT 计算仅作为次要指标。", "时间：TAE/OPW 深度闪烁，静态与动态 mask 分别报告。", "跨视图：相机间重投影深度一致性误差。", "计算：骨干 FLOPs、wall-clock ms 和 GPU 显存随实测运动比例（分箱）的变化；各层级的刷新率。", "门控质量：注入曝光、增益和闪烁下的误刷新率；慢速运动上的漏检率（重影）；冻结 token 的跨视图污染误差。", "长时：1-10 分钟内深度误差和重影随时间的变化，有无强制刷新两种情况。", "新视角：按 base paper 协议的 PSNR、SSIM、LPIPS、TCC、STED、SDT、SDV 和 EPI；MEt3R。", "新的轨迹跳变指标：在静态帧上沿平滑虚拟相机扫动，新视角深度和颜色的时间导数。它隔离出 K 切换伪影。", "含深度的端到端延迟，以及 M = 1、2、8 和 32 个目标视图时每个观看者的边际开销。"]}, {"b": "h3", "t": "关键消融"}, {"b": "ul", "items": ["门控类型（相同 FLOPs）：学习的漂移监督门控 vs Eventful 阈值 vs RGB 差分 vs oracle teacher 漂移。", "层级结构：2 级（冻结或完整）vs 带注意力刷新层级的 3 级。这是核心的跨视图污染测试。", "感知陈旧度的 on-policy 训练 vs 仅在测试时施加同一门控。", "复用预算扫描（50/70/85/95%）以及强制刷新周期 R。", "标定 token 开 vs 关；传感器深度 prompt 开 vs 关。", "目标射线 head：全 N vs K 近邻相机；极线偏置 vs 完整注意力；head vs TSDF raymarch vs 带一步 TSDF 细化的混合方案。", "相机数量（4/8/16），展示污染和节省如何随 N 缩放。", "光照鲁棒性：合成的全局增益与自动曝光阶跃、局部台灯开关，以及类火焰闪烁（N3DV Flame Steak）。"]}, {"b": "h3", "t": "采集说明"}, {"b": "p", "t": "核心主张可在公开数据上检验。Panoptic Studio 提供动态阵列上的真实传感器深度；DNA-Rendering、MVHumanNet++ 和 PackUV-2B 提供长时、多相机序列；光照和曝光变化可以合成注入。\n\n一次小规模可选采集（6-8 个同步工业相机或 RGB-D 相机，开启自动曝光，受控台灯开关，每段 5 分钟）会增加三点：真实世界光照鲁棒性结果、端到端实时延迟 demo，以及真实远程临场的运动比例分布（坐着说话 vs 站立）。它能增强 IEEE VR / SIGGRAPH Asia 投稿，但对 CVPR/ICCV 论文不是必需的。\n\n隐私注意：人体数据集需要签署申请协议。不要再分发可识别受试者的衍生深度。"}, {"b": "sec", "h": "两周内的验证实验", "id": "two-weeks"}, {"b": "p", "t": "在现成模型上进行免训练的 oracle 研究，只需 1 块 GPU，无需训练。\n\n步骤 1：稠密运行。\n- 在 N3DV（Coffee Martini、Flame Steak）、2-3 个 Panoptic HD+Kinect 序列和 2 个 DNA-Rendering 序列的 100 帧、8 相机片段上，逐时间步稠密运行 VGGT（或多视图 DA3）。\n- 记录每一层的 token 特征。\n\n步骤 2：刻画漂移。\n(a) 每层中帧间特征漂移低于 eps 的 token 比例，按其自身输入 patch 是否变化分开统计。\n(b) 跨视图污染：对像素静止的 token，漂移如何随深度增长，以及与其他相机中变化量的相关性。\n(c) RGB 差分和 Eventful 阈值对漂移的预测能力（AUROC），分别在原始帧和注入全局增益或曝光阶跃的情况下。\n\n步骤 3：在 50/70/90% 复用率下模拟复用。使用三种门控冻结 token 并复用其 KV：oracle 漂移门控、RGB 差分门控和 Eventful 门控。同时模拟 3 级变体，其中冻结 token 仍在全局层重新做注意力。对每种情况测量：\n- 相对 Kinect 和相对稠密输出的深度 AbsRel；\n- 静态区域闪烁；\n- FLOPs。\n\n另外对 70% 复用率下一个全局层的 block-sparse 实现（FlashAttention varlen gather）计时，检查节省在真实 GPU 硬件上是否依然存在。\n\n若以下四点全部成立，则该想法得到验证：\n1. 使用 oracle 门控时，超过 70% 的 token 可以在可接受误差下复用。\n2. 3 级变体明显优于 2 级变体，这表明跨视图污染真实存在且可以处理。\n3. oracle 门控以明显优势胜过 RGB 差分和 Eventful 门控，尤其是在曝光变化下，从而给学习门控留有空间。\n4. block-sparse 层实测 wall-clock 加速至少 2 倍。"}, {"b": "sec", "h": "止损标准", "id": "kill"}, {"b": "p", "t": "若以下任一成立，则放弃或转向：\n(1) 在 Panoptic 或 DNA-Rendering 上，即使 oracle 门控也无法在 70% 复用率下把 AbsRel 相对劣化控制在 5% 以内。这意味着全局注意力将变化传播得过广，相机阵列无法利用。\n(2) 在相同复用率下（包括曝光变化时），免训练的 Eventful 或 RGB 差分门控与 oracle 的差距在约 1% AbsRel 和约 10% 闪烁以内。那么学习门控和感知陈旧度训练就没有提升空间，本文退化为“把 Eventful 应用到 VGGT”。\n(3) 在目标 GPU 上 70% 复用率下 block-sparse wall-clock 加速低于 1.5 倍。\n(4) 到第 3 个月，在 N = 8 时 Fast-FoundationStereo 或 Stereo Any Video 加 TSDF 在精度 / 闪烁 / 延迟 Pareto 前沿上全面优于 student。\n(5) 出现一篇在几何 FM 中做变化门控多相机 token 复用的论文。该领域发展很快，因此每月重新检查一次 arXiv。\n\n如果 (1) 不满足但较小的 4 相机设置可行，可考虑收窄为 workshop 或 3DV 论文。"}, {"b": "sec", "h": "审稿人可能的质疑与回应", "id": "objections"}, {"b": "p", "t": "这就是把 Eventful Transformers 或 VLA-Cache 应用到 VGGT 上，是已知机制换了一个新骨干。", "label": "质疑"}, {"b": "p", "t": "我们把它们的门控作为基线采用，并不声称该机制是我们的。新的、经过测量的现象是跨视图陈旧性：像素静止的 token 因为其他相机发生变化而漂移。我们按层和按相机数量对其进行量化，并展示单相机门控在此会误触发。我们用注意力刷新层级和感知陈旧度的 on-policy 训练来处理它，并在相同 FLOPs 下展示相对两种方法的提升。逐层传播分析本身就是一项独立贡献。", "label": "回应"}, {"b": "p", "t": "token 稀疏带来的 FLOP 节省很少能在 GPU 上转化为 wall-clock 加速，gather 和 scatter 开销会把它吃掉。", "label": "质疑"}, {"b": "p", "t": "我们报告实测延迟（而不仅是 FLOPs），使用 block-sparse、变长注意力 kernel 和 patch 粒度的 gather，并按数据集中真实的运动比例分箱。两周测试在任何训练投入之前包含了一个 kernel 计时关卡（70% 复用率下至少 2 倍）。", "label": "回应"}, {"b": "p", "t": "冻结静态 token 会冻结其误差，并在门控漏掉慢速运动时产生重影。“比特级稳定”是 bug，不是特性。", "label": "质疑"}, {"b": "p", "t": "我们使用强制轮询刷新、随年龄衰减的置信度和漂移训练的门控，并在分钟级（最长 10 分钟）序列上以显式的重影和漏检率指标进行评估。一致的静态误差在感知上远比闪烁危害小，这一点由 NVS 评估中的 TCC 和 STED 支撑。刷新周期会被扫描，以如实揭示这一权衡。", "label": "回应"}, {"b": "p", "t": "实时立体匹配基础模型加 TSDF 已经能给出准确、快速、一致的深度，因此不需要新的几何 FM。", "label": "质疑"}, {"b": "p", "t": "Fast-FoundationStereo 和 Stereo Any Video 加 TSDF 是主要基线，且计入了深度时间，而 base paper 忽略了这一点。RigCache 提供成对立体匹配做不到的东西：无需选择相机对、全 N 跨视图一致性、以标定为条件的度量尺度、消除 K 切换跳变的逐观看者目标射线 head，以及随静态内容增多而下降的开销。如果基线主导 Pareto 前沿，这是一条已声明的 kill criterion。", "label": "回应"}, {"b": "p", "t": "以 teacher 的伪 GT 做监督和评估是循环论证，而留出的阵列相机只能测试插值。", "label": "质疑"}, {"b": "p", "t": "主要深度指标使用真实传感器 ground truth（Panoptic Kinect、ScanNet++ 激光扫描）。跨视图重投影和闪烁指标不需要 teacher。新视角评估在 base paper 的 100 帧和留出相机之外，还加入了虚拟轨迹跳变指标和分钟级序列。", "label": "回应"}, {"b": "sec", "h": "投入", "id": "effort"}, {"b": "kv", "items": [["周期", "8-10（约 1 个月做 oracle 研究和 kernel，3-4 个月做带感知陈旧度训练的 student 和门控，2 个月做目标射线 head 和流水线集成，2 个月做评估和写作）"], ["人力", "2 人（一名博士生负责模型和训练，另一名负责 kernel、流水线、评估协议和可选采集）"], ["算力", "4-8 块 A100/H100 级 GPU；总计约 2-4k GPU 小时。teacher 伪 GT 离线生成一次（最大的单项开销，DNA-Rendering 和 MVHumanNet++ 子集约 500-1000 GPU 小时）。无 LVSM 规模的训练。"], ["目标会议", "ICCV 2027（首选；2026 年 11 月的 CVPR 2027 对完整系统来说太早）。备选：3DV 2027，投传播分析加复用方法；若配合实时阵列 demo 和真实采集，则投 IEEE VR 2028 或 SIGGRAPH Asia 2027。"]]}, {"b": "sec", "h": "可组合的方向", "id": "synergies"}, {"b": "p", "t": "- 面向在线 3D 视频的、与运动成比例的流式扩散或光流修复器：同一套门控和层级 mask 可以驱动增强器中的 latent 和 KV 缓存，因此一个变化信号服务整个技术栈。\n- 深度不确定性作为一等输入：目标射线 head 的不确定性和 token 年龄置信度输入给 blender 或修复器。\n- 多观看者与光场显示的摊销：一次骨干前向，然后 M 个廉价的目标射线 head。这是 GeoLVSM-Stream 中值得保留的部分。\n- Gaussian 与体积流式编解码器：逐（相机, patch）的刷新 mask 就是免费的 delta 编码和带宽 mask，只传输变化的几何。\n- 长时远程临场 benchmark（分钟级、传感器深度、头部跟踪轨迹、跳变指标）：本文可以作为其种子。\n- NSTM 式渲染器：RigCache 的持久化深度表可以提供 NSTM 缺少的几何先验。\n- 可以形成论文系列：(1) 传播分析加 RigCache 几何；(2) 基于该表的几何偏置流式渲染器；(3) 在 IEEE VR 或 SIGGRAPH Asia 上的端到端实时阵列远程临场。"}], "toc": false, "series": {"prev": {"k": "idea-C08"}, "next": {"k": "idea-C14"}, "up": {"u": "future/index.html", "t": "Directions 目录"}}}}</script>
+<script>
+(function () {
+  "use strict";
+  // ================= lib: DOM, text and math helpers shared by every page =================
+  // A page script defines rich(text) (inline cross-links); paras() and eqList() call it.
+  var DATA;
+  try { DATA = JSON.parse(document.getElementById("data").textContent); } catch (e) { DATA = {}; }
+  var meta = DATA.meta || {};
+
+  // ---------- DOM helpers: all text goes through textContent; external links are https-only ----------
+  function safeUrl(u) { if (typeof u !== "string") return null; var s = u.trim(); return /^https:\/\/[^\s"'<>]+$/i.test(s) ? s : null; }
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "class") n.className = v;
+      else if (k === "text") n.textContent = String(v);
+      else if (k === "href") { var u = safeUrl(v); if (u) { n.setAttribute("href", u); n.setAttribute("target", "_blank"); n.setAttribute("rel", "noopener noreferrer"); } }
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c === null || c === undefined || c === false) return; n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return n;
+  }
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function sv(tag, attrs, kids) {
+    var n = document.createElementNS(SVGNS, tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "text") n.textContent = String(v);
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c) n.appendChild(c); });
+    return n;
+  }
+  function arr(x) { return Array.isArray(x) ? x : []; }
+  function str(x) { return typeof x === "string" ? x : (x === null || x === undefined ? "" : String(x)); }
+  function paras(text) { return str(text).split(/\n\s*\n/).map(function (t) { return t.trim(); }).filter(Boolean).map(function (t) { return el("p", null, rich(t)); }); }
+  function link(title, url) { return safeUrl(url) ? el("a", { href: url, text: title }) : el("span", { text: title }); }
+  function ul(items, map) { return el("ul", { class: "plain" }, arr(items).map(function (x) { return el("li", null, [map ? map(x) : str(x)]); })); }
+  function fmtCit(n) { n = Number(n); if (!(n >= 0)) return "—"; if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k"; return String(n); }
+
+  // ---------- math (MathJax, typeset lazily) ----------
+  var mathReady = false, mathQueue = [];
+  function mathUsable() { return !!(window.MathJax && typeof window.MathJax.typesetPromise === "function"); }
+  function flushMath() { mathReady = true; var q = mathQueue.slice(); mathQueue = []; q.forEach(typeset); }
+  window.__atlasMathReady = flushMath;
+  // MathJax may finish loading before this script runs (cached/async), so also poll for it.
+  var mathPoll = setInterval(function () { if (mathUsable()) { clearInterval(mathPoll); flushMath(); } }, 200);
+  setTimeout(function () { clearInterval(mathPoll); }, 30000);
+  function typeset(node) {
+    if (!node) return;
+    if (!mathReady && mathUsable()) mathReady = true;
+    if (!mathReady || !mathUsable()) { mathQueue.push(node); return; }
+    try { window.MathJax.typesetPromise([node]).catch(function () { /* leave raw TeX visible */ }); } catch (e) { /* leave raw TeX visible */ }
+  }
+  function eqList(eqs) {
+    eqs = arr(eqs).filter(function (q) { return q && str(q.tex).trim(); });
+    if (!eqs.length) return null;
+    return el("div", { class: "eqs" }, eqs.map(function (q) {
+      return el("div", { class: "eq" }, [el("div", { class: "math-block", text: "\\[" + str(q.tex) + "\\]" }), q.explain_zh ? el("p", null, rich(q.explain_zh)) : null]);
+    }));
+  }
+  document.addEventListener("toggle", function (e) { var t = e.target; if (t && t.tagName === "DETAILS" && t.open) typeset(t); }, true);
+
+  // ================= frame (Tufte site): links, notes, hover previews, top bar, theme =================
+  var SITE = DATA.site || {};
+  var ROOT = str(SITE.root);
+  var XREF = DATA.xref || {};
+  function hasX(key) { return Object.prototype.hasOwnProperty.call(XREF, key); }
+  // Custom page parts (search tools, diagrams, charts) register here; blocks.js calls them for {"b": "slot"} blocks.
+  var SLOTS = {};
+
+  // ---------- internal links: urls are relative to the site root; pages sit at different depths ----------
+  var SAFE_PATH = /^[A-Za-z0-9][A-Za-z0-9._\/-]*(\?[A-Za-z0-9=&._-]+)?(#[A-Za-z0-9._-]+)?$/;
+  function relHref(u) {
+    u = str(u);
+    if (/^#[A-Za-z0-9._-]+$/.test(u)) return u;
+    if (!SAFE_PATH.test(u)) return null;
+    var cut = u.indexOf("#"), path = cut < 0 ? u : u.slice(0, cut);
+    if (path === SITE.path) return cut < 0 ? "#" : u.slice(cut);
+    return ROOT + u;
+  }
+  function pageLink(u, text, cls) {
+    var h = relHref(u);
+    if (!h) return el("span", { class: cls || null, text: text });
+    var a = el("a", { class: cls || null, text: text });
+    a.setAttribute("href", h);
+    return a;
+  }
+  // A link to a known entry (concept, topic, paper, step...). data-xref drives the hover preview.
+  function xlink(key, text, cls) {
+    if (!hasX(key)) return text ? document.createTextNode(text) : null;
+    var x = XREF[key], a = pageLink(x.u, text || x.n || x.t, cls);
+    a.setAttribute("data-xref", key);
+    return a;
+  }
+
+  // Concept / topic ids mentioned in prose ("见 g-pinhole") become links labelled with the entry's short name.
+  var ID_RE = /(a-[a-z0-9]+(?:-[a-z0-9]+)*|[fgdrilnv]-[a-z0-9]+)/g;
+  var CJK = /[　-〿㐀-鿿＀-￯]/;
+  function rich(text) {
+    var s = str(text), out = [], last = 0, m;
+    ID_RE.lastIndex = 0;
+    while ((m = ID_RE.exec(s)) !== null) {
+      var id = m[1], prev = m.index > 0 ? s.charAt(m.index - 1) : "", next = s.charAt(m.index + id.length);
+      var key = hasX("concept-" + id) ? "concept-" + id : (hasX("adv-" + id) ? "adv-" + id : null);
+      if (!key || /[A-Za-z0-9_\-]/.test(prev) || /[A-Za-z0-9_]/.test(next)) continue;
+      // The prose spaces ids off from Chinese text; a Chinese label needs no such space.
+      var before = s.slice(last, m.index);
+      if (/ $/.test(before) && CJK.test(before.charAt(before.length - 2))) before = before.slice(0, -1);
+      if (before) out.push(document.createTextNode(before));
+      out.push(xlink(key, null, "xref"));
+      last = m.index + id.length;
+      if (s.charAt(last) === " " && CJK.test(s.charAt(last + 1))) last++;
+    }
+    if (last < s.length) out.push(document.createTextNode(s.slice(last)));
+    return out;
+  }
+  function lines(text) { return str(text).split(/\n+/).map(function (t) { return t.trim(); }).filter(Boolean).map(function (t) { return el("p", null, rich(t)); }); }
+
+  // ---------- side notes (numbered) and margin notes (unnumbered); on phones they fold behind a toggle ----------
+  var noteSeq = 0;
+  function sidenote(kids) {
+    var id = "sn-" + (++noteSeq);
+    return el("span", { class: "note-wrap" }, [
+      el("label", { for: id, class: "margin-toggle sidenote-number", "aria-label": "旁注" }),
+      el("input", { type: "checkbox", id: id, class: "margin-toggle" }),
+      el("span", { class: "sidenote" }, kids)
+    ]);
+  }
+  function marginnote(kids) {
+    var id = "mn-" + (++noteSeq);
+    return el("span", { class: "note-wrap" }, [
+      el("label", { for: id, class: "margin-toggle", "aria-label": "边注", text: "⊕" }),
+      el("input", { type: "checkbox", id: id, class: "margin-toggle" }),
+      el("span", { class: "marginnote" }, kids)
+    ]);
+  }
+  function noteLabel(text) { return el("span", { class: "note-label", text: text }); }
+
+  // ---------- article scaffolding ----------
+  var main = document.getElementById("main");
+  var art = main.querySelector("article");
+  function section(id, title, kids) {
+    var s = el("section", { id: id }, [title ? el("h2", { text: title }) : null].concat(kids));
+    art.appendChild(s);
+    return s;
+  }
+  function articleHead(o) {
+    var crumbs = el("nav", { class: "crumbs", "aria-label": "位置" });
+    arr(SITE.crumbs).forEach(function (c, i) {
+      if (i) crumbs.appendChild(el("span", { class: "sep", text: "›", "aria-hidden": "true" }));
+      crumbs.appendChild(c[1] ? pageLink(c[1], c[0]) : el("span", { text: c[0] }));
+    });
+    art.appendChild(el("header", { class: "art-head" }, [
+      crumbs,
+      el("h1", { text: o.title }),
+      o.subtitle ? el("p", { class: "subtitle", text: o.subtitle }) : null,
+      o.meta ? el("p", { class: "meta" }, o.meta) : null
+    ]));
+    if (o.epigraph) art.appendChild(el("div", { class: "epigraph" }, [el("blockquote", null, [el("p", null, rich(o.epigraph))])]));
+  }
+  // Previous / next in the series, each with its hover preview.
+  function seriesNav(prevKey, nextKey, indexUrl, indexLabel) {
+    var nav = el("nav", { class: "series", "aria-label": "同系列" });
+    nav.appendChild(el("div", { class: "prev" }, prevKey && hasX(prevKey) ? [el("small", { text: "上一篇" }), xlink(prevKey)] : []));
+    nav.appendChild(el("div", { class: "up" }, indexUrl ? [pageLink(indexUrl, indexLabel)] : []));
+    nav.appendChild(el("div", { class: "next" }, nextKey && hasX(nextKey) ? [el("small", { text: "下一篇" }), xlink(nextKey)] : []));
+    art.appendChild(nav);
+  }
+
+  // ---------- hover preview for internal links: mouse (after 300 ms) or keyboard focus; never on touch ----------
+  var tip = null, tipTimer = 0, tipFor = null;
+  function hideTip() {
+    clearTimeout(tipTimer);
+    if (tip) tip.hidden = true;
+    if (tipFor) { tipFor.removeAttribute("aria-describedby"); tipFor = null; }
+  }
+  function showTip(a) {
+    var key = a.getAttribute("data-xref");
+    if (!hasX(key)) return;
+    var x = XREF[key];
+    if (!tip) { tip = el("div", { class: "xtip", id: "xtip", role: "tooltip" }); document.body.appendChild(tip); }
+    tip.textContent = "";
+    if (x.m) tip.appendChild(el("div", { class: "xt-m", text: x.m }));
+    tip.appendChild(el("div", { class: "xt-t", text: x.t }));
+    if (x.e) tip.appendChild(el("div", { class: "xt-e", text: x.e }));
+    if (x.s) tip.appendChild(el("p", { class: "xt-s", text: x.s }));
+    tip.hidden = false;
+    var r = a.getClientRects()[0] || a.getBoundingClientRect(), vw = document.documentElement.clientWidth;
+    var w = tip.offsetWidth, h = tip.offsetHeight;
+    var left = Math.max(8, Math.min(r.left, vw - w - 8));
+    var top = r.bottom + 6;
+    if (top + h > window.innerHeight - 8 && r.top - h - 6 > 8) top = r.top - h - 6;
+    tip.style.left = Math.round(left + window.pageXOffset) + "px";
+    tip.style.top = Math.round(top + window.pageYOffset) + "px";
+    a.setAttribute("aria-describedby", "xtip");
+    tipFor = a;
+  }
+  function xrefTarget(e) { return e.target && e.target.closest ? e.target.closest("a[data-xref]") : null; }
+  document.addEventListener("pointerover", function (e) {
+    var a = xrefTarget(e);
+    if (!a || e.pointerType !== "mouse" || a === tipFor) return;
+    clearTimeout(tipTimer);
+    tipTimer = setTimeout(function () { showTip(a); }, 300);
+  });
+  document.addEventListener("pointerout", function (e) {
+    var a = xrefTarget(e);
+    if (!a || (e.relatedTarget && a.contains(e.relatedTarget))) return;
+    hideTip();
+  });
+  document.addEventListener("focusin", function (e) {
+    var a = xrefTarget(e);
+    if (a && a.matches(":focus-visible")) showTip(a);
+  });
+  document.addEventListener("focusout", function (e) { if (xrefTarget(e)) hideTip(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") hideTip(); });
+  window.addEventListener("scroll", function () { if (tipFor && !tipFor.matches(":focus-visible")) hideTip(); }, { passive: true });
+
+  // ---------- top bar: four menus with dropdowns (hover or click on desktop, a folding list on phones) ----------
+  var wide = window.matchMedia("(min-width: 761px)");
+  function setOpen(li, open) {
+    var btn = li.querySelector(".menu-btn");
+    if (open) Array.prototype.forEach.call(li.parentNode.children, function (o) { if (o !== li) setOpen(o, false); });
+    li.classList.toggle("open", open);
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (!open) li._hover = false;
+  }
+  function buildTopbar() {
+    var bar = document.getElementById("topbar");
+    var menus = el("ul", { class: "menus", id: "menus" });
+    arr(SITE.nav).forEach(function (m) {
+      var id = "menu-" + m.key;
+      var btn = el("button", { type: "button", class: "menu-btn", "aria-expanded": "false", "aria-controls": id, text: m.label });
+      var list = el("ul", { class: "drop", id: id }, arr(m.items).map(function (it) {
+        var a = pageLink(it[1], it[0]);
+        if (it[1] === SITE.navItem) a.classList.add("cur");
+        if (it[1] === SITE.path) a.setAttribute("aria-current", "page");
+        return el("li", null, [a]);
+      }));
+      var li = el("li", { class: "menu" + (m.key === SITE.navCur ? " cur" : "") }, [btn, list]);
+      btn.addEventListener("click", function () {
+        // A click on a menu the mouse already opened keeps it open instead of closing it again.
+        if (li._hover) { li._hover = false; return; }
+        setOpen(li, !li.classList.contains("open"));
+      });
+      btn.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowDown") { e.preventDefault(); setOpen(li, true); var f = list.querySelector("a"); if (f) f.focus(); }
+      });
+      li.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse" && wide.matches) { setOpen(li, true); li._hover = true; } });
+      li.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse" && wide.matches) setOpen(li, false); });
+      li.addEventListener("focusout", function (e) { if (wide.matches && !li.contains(e.relatedTarget)) setOpen(li, false); });
+      li.addEventListener("keydown", function (e) { if (e.key === "Escape" && li.classList.contains("open")) { setOpen(li, false); btn.focus(); } });
+      menus.appendChild(li);
+    });
+    var burger = el("button", { type: "button", class: "burger", "aria-expanded": "false", "aria-controls": "menus", text: "Menu" });
+    burger.addEventListener("click", function () {
+      var open = !bar.classList.contains("nav-open");
+      bar.classList.toggle("nav-open", open);
+      burger.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    var themeBtn = el("button", { type: "button", class: "theme-btn" });
+    function darkNow() {
+      var t = document.documentElement.getAttribute("data-theme");
+      return t ? t === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+    function paintThemeBtn() {
+      var dark = darkNow();
+      themeBtn.textContent = dark ? "Light" : "Dark";
+      themeBtn.setAttribute("aria-label", dark ? "切换到浅色" : "切换到深色");
+    }
+    themeBtn.addEventListener("click", function () {
+      var next = darkNow() ? "light" : "dark";
+      var system = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      // Choosing what the system already shows drops the override, so the page follows the system again.
+      if (next === system) document.documentElement.removeAttribute("data-theme");
+      else document.documentElement.setAttribute("data-theme", next);
+      try { if (next === system) localStorage.removeItem("atlas-theme"); else localStorage.setItem("atlas-theme", next); } catch (e) { /* storage unavailable */ }
+      paintThemeBtn();
+    });
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintThemeBtn);
+    paintThemeBtn();
+    bar.appendChild(el("div", { class: "bar-in" }, [pageLink("index.html", SITE.brand || "", "brand"), el("nav", { class: "site-nav", "aria-label": "站点导航" }, [menus]), themeBtn, burger]));
+    document.addEventListener("click", function (e) {
+      if (!bar.contains(e.target)) Array.prototype.forEach.call(menus.children, function (li) { setOpen(li, false); });
+    });
+  }
+
+  function finishPage() {
+    buildTopbar();
+    var foot = document.getElementById("site-foot");
+    if (foot) foot.appendChild(el("p", null, [pageLink("index.html", SITE.brand || ""), SITE.date ? " · 内容截至 " + SITE.date : ""]));
+    typeset(main);
+    // Deep links (#id): the page is rendered by script, so jump once it exists and again after fonts settle.
+    var h = window.location.hash ? window.location.hash.slice(1) : "";
+    if (h && /^[A-Za-z0-9._~-]+$/.test(h) && document.getElementById(h)) {
+      var moved = false;
+      ["wheel", "touchstart", "keydown", "mousedown"].forEach(function (ev) { window.addEventListener(ev, function () { moved = true; }, { once: true, passive: true }); });
+      var settle = function () { var t = document.getElementById(h); if (t && !moved) t.scrollIntoView({ block: "start" }); };
+      settle();
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { window.requestAnimationFrame(settle); });
+      [400, 1200, 2500].forEach(function (ms) { setTimeout(settle, ms); });
+    }
+  }
+
+  // ================= article: a page composed as blocks in routes.py =================
+  (function () {
+    var PG = DATA.page || {};
+    var H = PG.head || {};
+    if (PG.id) art.id = PG.id;
+
+    // A link dict from routes.py: {k} an entry with hover preview, {u, t} a page of this site, {url, t} an external page.
+    function part(x) {
+      if (x === null || x === undefined) return null;
+      if (typeof x === "string") return x;
+      if (x.k) return xlink(x.k, x.t || null);
+      if (x.u) return pageLink(x.u, x.t || x.u);
+      if (x.url) return link(x.t || x.url, x.url);
+      return x.t ? str(x.t) : null;
+    }
+    function noteNodes(n) {
+      var kids = [noteLabel(n.label)];
+      if (n.t) kids = kids.concat(rich(n.t));
+      arr(n.links).forEach(function (l, i) { if (i) kids.push(el("br")); kids.push(part(l)); });
+      return kids;
+    }
+    function runIn(label) { return el("b", { class: "run-in", text: label + "：" }); }
+    function multiline(text) {
+      var out = [];
+      str(text).split("\n").forEach(function (line, i) { if (i) out.push(el("br")); out = out.concat(rich(line)); });
+      return out;
+    }
+
+    // ---------- head ----------
+    var meta = [];
+    if (arr(H.prereqs).length) {
+      meta.push(marginnote([noteLabel("阅读前需要")].concat(arr(H.prereqs).map(function (p, i) {
+        var a = part(p);
+        return i ? el("span", null, ["；", a]) : a;
+      }))));
+    }
+    var sep = false;
+    arr(H.meta).concat(H.minutes > 1 ? ["约 " + H.minutes + " 分钟"] : []).forEach(function (x) {
+      var n = part(x);
+      if (!n || (typeof n === "string" && !n.trim())) return;
+      if (sep) meta.push(" · ");
+      meta.push(n);
+      sep = !(typeof x === "string" && /：$/.test(x));
+    });
+    articleHead({ title: H.title, subtitle: H.sub, meta: meta.length ? meta : null, epigraph: H.epigraph });
+    if (str(H.lede).trim()) art.appendChild(el("div", { class: "lede" }, paras(H.lede)));
+
+    // ---------- blocks ----------
+    function heading(tag, b) {
+      var title = b.url && safeUrl(b.url) ? link(b.t, b.url) : (b.k ? part({ k: b.k, t: b.t }) : str(b.t));
+      var h = el(tag, { id: b.id || null }, [title]);
+      if (b.sn) h.appendChild(sidenote(noteNodes(b.sn)));
+      if (b.en) h.appendChild(el("span", { class: "en", text: b.en }));
+      if (b.tag) h.appendChild(el("span", { class: "used", text: b.tag }));
+      return h;
+    }
+    function withNotes(nodes, b) {
+      if (nodes.length && b.mn) nodes[0].insertBefore(marginnote(noteNodes(b.mn)), nodes[0].firstChild);
+      if (nodes.length && b.label) nodes[0].insertBefore(runIn(b.label), nodes[0].firstChild);
+      return nodes;
+    }
+    function listItem(x) {
+      if (typeof x === "string") return el("li", null, rich(x));
+      return el("li", null, (x.label ? [runIn(x.label)] : []).concat(rich(x.t)));
+    }
+    function refsList(items, cls) {
+      var left = items.some(function (x) { return x.left; });
+      return el("ul", { class: "refs " + (cls || "") + (left ? "" : " noleft") }, items.map(function (x) {
+        var body = [x.k || x.u || x.url ? part(x) : el("span", { class: "plain-t", text: x.t })];
+        if (x.tag) body.push(el("span", { class: "used", text: x.tag }));
+        if (x.sub) body.push(el("div", { class: "en", text: x.sub }));
+        if (str(x.gloss).trim()) body.push(el("div", { class: "gloss" }, multiline(x.gloss)));
+        var kids = left ? [el("span", { class: /^\d{4}$/.test(str(x.left)) ? "yr" : "kind", text: str(x.left) })] : [];
+        return el("li", { id: x.id || null }, kids.concat([el("div", null, body)]));
+      }));
+    }
+    var TY = { book: "教材", course: "课程", paper: "论文", tutorial: "教程", code: "代码", video: "视频", blog: "文章" };
+    function tocGroups(groups, level) {
+      var out = [];
+      arr(groups).forEach(function (g) {
+        if (g.h) out.push(el(level, { class: "toc-h" }, [g.k || g.u ? part({ k: g.k, u: g.u, t: g.h }) : g.h]));
+        if (str(g.lede).trim()) out.push(el("p", { class: "toc-lede" }, rich(g.lede)));
+        out.push(el("ol", { class: "toc" }, arr(g.items).map(function (it) {
+          return el("li", null, [
+            el("div", { class: "toc-t" }, [part({ k: it.k, u: it.u, t: it.t }), it.en ? el("span", { class: "en", text: it.en }) : null,
+              it.meta ? el("span", { class: "toc-meta", text: it.meta }) : null]),
+            str(it.s).trim() ? el("p", { class: "toc-s", text: it.s }) : null
+          ]);
+        })));
+      });
+      return out;
+    }
+    function cell(tag, c) { return el(tag, null, c && typeof c === "object" ? [part(c)] : rich(c)); }
+
+    var box = null;
+    function cur() { if (!box) { box = el("section"); art.appendChild(box); } return box; }
+    function render(b) {
+      switch (b.b) {
+        case "p": return withNotes(paras(b.t), b);
+        case "lines": return withNotes(lines(b.t), b);
+        case "h3": return [heading("h3", b)];
+        case "note": return [el("p", { class: "note", text: b.t })];
+        case "ul": case "ol": return [el(b.b, null, arr(b.items).map(listItem))];
+        case "eqs": return [eqList(b.eqs)];
+        case "qa": return [el("p", { class: "quiz-h", text: "自测" }), el("ol", { class: "quiz" }, arr(b.items).map(function (q) {
+          return el("li", null, [el("p", null, rich(q.q)), el("details", null, [el("summary", { text: "答案" }), el("p", null, rich(q.a))])]);
+        }))];
+        case "res": return [refsList(arr(b.items).map(function (r) {
+          return { left: TY[r.type] || r.type || "", url: r.url, t: r.title, gloss: r.note_zh };
+        }))];
+        case "refs": return [refsList(arr(b.items), b.cls)];
+        case "toc": return tocGroups(b.groups, cur().querySelector("h2") ? "h3" : "h2");
+        case "table": return [el("div", { class: "table-wrap" + (b.wide ? " fullwidth" : "") }, [el("table", { class: "booktabs" + (b.cls ? " " + b.cls : "") }, [
+          el("thead", null, [el("tr", null, arr(b.head).map(function (h) { return el("th", { text: h }); }))]),
+          el("tbody", null, arr(b.rows).map(function (r) { return el("tr", null, arr(r).map(function (c) { return cell("td", c); })); }))
+        ])])];
+        case "timeline": return [el("ul", { class: "refs timeline" }, arr(b.items).map(function (x) {
+          return el("li", null, [el("span", { class: "yr", text: str(x[0]) }), el("div", null, rich(x[1]))]);
+        }))];
+        case "kv": return [el("table", { class: "kv" }, [el("tbody", null, arr(b.items).map(function (x) {
+          return el("tr", null, [el("th", { text: x[0] }), el("td", null, rich(x[1]))]);
+        }))])];
+        case "mtoc": return [marginToc(b.items)];
+        case "slot": return typeof SLOTS[b.name] === "function" ? [SLOTS[b.name](b)] : [];
+        default: return [];
+      }
+    }
+    // Long articles: a table of contents at the top of the margin (a folding list on phones).
+    function marginToc(items) {
+      var d = el("details", { class: "mtoc" }, [el("summary", { text: "本文目录" }), el("ol", null, arr(items).map(function (x) { return el("li", null, [part(x)]); }))]);
+      var wide = window.matchMedia("(min-width: 761px)");
+      d.open = wide.matches;
+      return d;
+    }
+    arr(PG.body).forEach(function (b) {
+      if (b.b === "sec") {
+        box = el("section", { id: b.id || null });
+        if (b.h) box.appendChild(heading("h2", { t: b.h, sn: b.sn }));
+        art.appendChild(box);
+        return;
+      }
+      render(b).forEach(function (n) { if (n) cur().appendChild(n); });
+    });
+
+    var S = PG.series || {};
+    if (S.prev || S.next || S.up) {
+      var nav = el("nav", { class: "series", "aria-label": "同系列" });
+      nav.appendChild(el("div", { class: "prev" }, S.prev ? [el("small", { text: "上一篇" }), part(S.prev)] : []));
+      nav.appendChild(el("div", { class: "up" }, S.up ? [part(S.up)] : []));
+      nav.appendChild(el("div", { class: "next" }, S.next ? [el("small", { text: "下一篇" }), part(S.next)] : []));
+      art.appendChild(nav);
+    }
+  })();
+
+  finishPage();
+})();
+</script>
+</body>
+</html>
