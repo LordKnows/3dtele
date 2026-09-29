@@ -1,6 +1,6 @@
 """Layout checks in real 390px (phone) and 1400px (desktop) viewports, using an iframe in headless Chrome.
 
-For every page: horizontal overflow with every <details> expanded. For a set of deep links: where the target
+For every page: horizontal overflow with every <details> expanded, and reference lists whose items do not line up. For a set of deep links: where the target
 lands relative to the viewport top (should clear the sticky bar on phones and sit near the top on desktop).
 Each measurement runs in its own short Chrome process; several run in parallel.
 """
@@ -38,6 +38,16 @@ f.onload = function () {
       d.querySelectorAll("details").forEach(function (x) { x.open = true; });
       setTimeout(function () {
         res.scrollWidth = de.scrollWidth; res.clientWidth = de.clientWidth; res.culprits = [];
+        // Reference lists: the text column of every item starts at the same x.
+        res.misaligned = [];
+        d.querySelectorAll("ul.refs").forEach(function (ul) {
+          var xs = Array.prototype.map.call(ul.children, function (li) { return li.lastElementChild ? li.lastElementChild.getBoundingClientRect().left : null; })
+            .filter(function (x) { return x !== null; });
+          if (xs.length > 1 && Math.max.apply(null, xs) - Math.min.apply(null, xs) > 1) {
+            var where = ul.closest("[id]");
+            res.misaligned.push("#" + (where ? where.id : "") + " spread=" + Math.round(Math.max.apply(null, xs) - Math.min.apply(null, xs)) + "px");
+          }
+        });
         if (de.scrollWidth > de.clientWidth + 1) {
           var hits = [];
           var inScroller = function (n) {
@@ -137,9 +147,10 @@ def main() -> int:
             bad += not ok
             print(f"{'ok  ' if ok else 'FAIL'} {j['kind']:8s} {j['w']:4d}px {j['src']:36s} " + " ".join(f"{k}={r.get(k)}" for k in keys))
         elif j["kind"] == "overflow":
-            ok = r["scrollWidth"] <= r["clientWidth"] + 1
+            ok = r["scrollWidth"] <= r["clientWidth"] + 1 and not r.get("misaligned")
             bad += not ok
-            print(f"{'ok  ' if ok else 'FAIL'} overflow {j['w']:4d}px {j['src']:36s} scrollWidth={r['scrollWidth']} client={r['clientWidth']} {'' if ok else r['culprits']}")
+            print(f"{'ok  ' if ok else 'FAIL'} overflow {j['w']:4d}px {j['src']:36s} scrollWidth={r['scrollWidth']} client={r['clientWidth']} "
+                  f"{'' if ok else (r['culprits'] or '') + ' misaligned lists: ' + str(r.get('misaligned', [])[:3])}")
         else:
             want = r["barBottom"]
             ok = r["top"] is not None and want <= r["top"] <= want + 60 and r["open"] is not False
