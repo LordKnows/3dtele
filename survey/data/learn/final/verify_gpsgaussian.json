@@ -406,7 +406,7 @@
      "explain_zh": "端到端系统时间（示意，不是论文公式）。论文只报告了 T_src 和 T_nov；采集、抠像、校正、编码传输和显示都没有报告。做远程临场系统时要把这些都测出来。"
     }
    ],
-   "numbers_zh": "论文 Table 1（RTX 3090，本文与 FloRen 用 TensorRT）：本文 27 ms + 0.8 ms，25 FPS；FloRen 14 ms + 11 ms，15 FPS；ENeRF 11 ms + 125 ms，5 FPS；IBRNet 每个新视角约 4000 ms（源视角耗时未能核实）；3D-GS 需要逐人物优化数分钟（具体数值未能核实）。同时合成 10 个新视角：本文 35 ms，FloRen 124 ms，ENeRF 1261 ms。论文：训练约 15 小时（单卡 RTX 3090）。演示：前方 6 台相机。第三方或用户实测：issue #18 约 26.8 + 77.4 + 4.8 ms（RTX 3090，PyTorch）；issue #52 TensorRT FP16、2048×1024 输入约 60 ms；Ha et al. 143.4 ms；站内综述记录 Tele360 在其 6 视图 2K 设置下测得约 300 ms。模型总参数 5.14M（按代码统计，其中约 1.0M 从不参与计算）。",
+   "numbers_zh": "论文 Table 1（RTX 3090，本文与 FloRen 用 TensorRT）：本文 27 ms + 0.8 ms，25 FPS；FloRen 14 ms + 11 ms，15 FPS；ENeRF 11 ms + 125 ms，5 FPS；IBRNet 每个新视角约 4000 ms（源视角耗时未能核实）；3D-GS 需要逐人物优化数分钟（具体数值未能核实）。同时合成 10 个新视角：本文 35 ms，FloRen 124 ms，ENeRF 1261 ms。论文：训练约 15 小时（单卡 RTX 3090）。演示：前方 6 台相机。第三方或用户实测：issue #18 约 26.8 + 77.4 + 4.8 ms（RTX 3090，PyTorch）；issue #52 TensorRT FP16、2048×1024 输入约 60 ms；Ha et al. 143.4 ms；Tele360 Table 1（DNA-Rendering，2048×2048 评测，本文方法给 8 个视角）测得约 300 ms。模型总参数 5.14M（按代码统计，其中约 1.0M 从不参与计算）。",
    "why_design_zh": "把重活放在“源视角”一侧，是显式 3D 表示的必然结果，也是作者选择 3DGS 而不是神经辐射场的主要理由之一：辐射场每个新视角都要沿射线采样、跑网络。公开代码与论文速度之间的差距，主要来自论文计时用了 TensorRT（论文注明），而这部分部署没有随代码发布；是否还用了半精度或其他改动，未能核实。",
    "pitfalls_zh": "（1）不要把“25 FPS”当作系统帧率：它不含抠像、校正、采集和传输，也不含在线换源视角对的开销。（2）公开的 PyTorch 代码实测明显更慢（issue #18），做基线对比时要写清楚用的是哪个版本、什么精度。（3）演示只接入 6 台相机，背后的视角合成不了；想覆盖 360°，显存和计算都要成倍增加。（4）Table 1 里的 FPS 与 27 + 0.8 ms 换算出的约 36 FPS 对不上；FloRen（25 ms 对 15 FPS）、ENeRF（136 ms 对 5 FPS）同样如此，口径不明。",
    "concept_ids": [
@@ -585,7 +585,7 @@
   },
   {
    "item": "后续工作的对比：Tele-Aloha、Tele360、EVA-Gaussian、RoGSplat",
-   "how_to_read_zh": "Tele-Aloha 的合成数据：本文方法 25.204 dB，Tele-Aloha 26.543 dB。站内综述记录 Tele360 在 DNA-Rendering 上：本文方法 22.40 dB，Tele360 32.15 dB，并在其 6 视图 2K 设置下测得本文方法约 300 ms。EVA-Gaussian 和 RoGSplat 专门针对大夹角、少重叠的情形。",
+   "how_to_read_zh": "Tele-Aloha 的合成数据：本文方法 25.204 dB，Tele-Aloha 26.543 dB。Tele360 在 DNA-Rendering 上：本文方法 22.40 dB，Tele360 32.15 dB；该行本文方法用 8 个视角（6 视角下立体校正可能失败），约 300 ms；ActorsHQ（Table 3）上本文方法 23.62 dB，Tele360 30.72 dB。EVA-Gaussian 和 RoGSplat 专门针对大夹角、少重叠的情形。",
    "takeaway_zh": "在同团队的上半身设定下，本文仍是有竞争力的基线；到了宽基线、无标定、DNA-Rendering 这类更难的设定，差距迅速拉大。后续工作的共同方向是去掉“相邻小夹角成对匹配”这一前提。"
   },
   {
@@ -1491,6 +1491,12 @@
    "problem": "把两个代码现象说成“支持 Ha 的怀疑”，推理过度。",
    "fix": "改为只说明作用受限，并指向可检验的练习。",
    "evidence": "lib/gs_parm_network.py:76（clamp_max 0.01）；prepare_data/render_data.py:157（fx=819.2）；尺度是高斯的标准差，4 px 标准差已足以覆盖相邻像素，说明不了“各向异性作用很小”"
+  },
+  {
+   "location": "walkthrough.gp11.numbers_zh; reading_experiments[6]; paper.system_perf[5]; paper.limitations_unstated_zh[1]; paper.results_zh[5]; paper.lineage.successors[11]",
+   "problem": "沿用站内综述“Tele360 在其 6 视图 2K 设置下测得约 300 ms”；Tele360 Table 1 中 GPS-Gaussian 实际给了 8 个视角",
+   "fix": "改为 8 视角、2048×2048 评测，并补 ActorsHQ（Table 3）上的对照数字",
+   "evidence": "Tele360 精读核查（data/learn/final/verify_tele360.json）：Table 1 脚注说明 6 视角下立体校正可能失败，故 GPS-Gaussian 用 8 视角"
   }
  ],
  "diagram": {

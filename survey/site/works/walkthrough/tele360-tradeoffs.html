@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>光栅化、z-buffer 与点溅射（splatting） · 3D Telepresence: a field guide</title>
-<meta name="description" content="光栅化以图元为中心：把三角形或点投到屏幕上，再用 z-buffer 为每个像素保留最近的那个图元。">
+<title>Tele360 · 设计权衡 · 3D Telepresence: a field guide</title>
+<meta name="description" content="8 个关键设计选择：换来了什么，付出了什么。">
 <meta name="color-scheme" content="light dark">
 
 <script>
@@ -393,7 +393,7 @@ figcaption svg { vertical-align: -1px; }
 <header class="topbar" id="topbar"></header>
 <main id="main"><article class="art"></article></main>
 <footer class="site-foot" id="site-foot"></footer>
-<script type="application/json" id="data">{"site": {"brand": "3D Telepresence: a field guide", "root": "../../", "path": "basics/foundations/r-raster.html", "nav": [{"key": "overview", "label": "Overview", "items": [["Introduction", "index.html"], ["Methodology", "overview/methodology.html"], ["How to use", "overview/how-to-use.html"]]}, {"key": "basics", "label": "Basics", "items": [["Routes", "basics/routes/index.html"], ["Foundations", "basics/foundations/index.html"], ["Advanced topics", "basics/advanced/index.html"], ["Classics", "basics/classics/index.html"], ["Glossary", "basics/glossary.html"]]}, {"key": "works", "label": "Works", "items": [["Papers", "works/papers/index.html"], ["Walkthrough", "works/walkthrough/index.html"], ["Field map", "works/field-map.html"], ["Sub areas", "works/areas/index.html"]]}, {"key": "future", "label": "Future", "items": [["Directions", "future/index.html"], ["Trends & Challenges", "future/trends.html"]]}], "navCur": "basics", "navItem": "basics/foundations/index.html", "crumbs": [["Basics", ""], ["Foundations", "basics/foundations/index.html"], ["M4 图形学与渲染基础", "basics/foundations/m4.html"]], "date": "2026-09-28"}, "xref": {"adv-a-3dgs-ext": {"u": "basics/advanced/a-3dgs-ext.html", "t": "3D Gaussian Splatting 的扩展", "e": "Extensions of 3D Gaussian Splatting", "m": "Advanced topics", "s": "3DGS（Kerbl et al., SIGGRAPH 2023）把场景表示为数百万个带不透明度和 SH 颜色的各向异性 3D 高斯。"}, "adv-a-diff-render": {"u": "basics/advanced/a-diff-render.html", "t": "可微渲染与逆渲染", "e": "Differentiable & inverse rendering", "m": "Advanced topics", "s": "渲染器 R 把场景参数 θ（几何、材质、光照、相机）映射成图像。"}, "adv-a-ff-3dgs": {"u": "basics/advanced/a-ff-3dgs.html", "t": "前馈 3DGS 与大重建模型", "e": "Feed-forward 3DGS & large reconstruction models", "m": "Advanced topics", "s": "3DGS（见 n-3dgs）渲染极快，但每个场景都要从 SfM 点出发优化几分钟到几十分钟，没法用在每帧都在变的临场通话中。"}, "classic-11": {"u": "basics/classics/t-ibr-geometry.html#classic-11", "t": "Layered Depth Images", "e": "", "m": "Classics · 1998", "s": "这篇论文提出分层深度图像（LDI）：从单一参考相机出发，每条视线上存储多个像素（颜色 + 深度），被前景挡住的背景也因此被保留下来，新视角露出遮挡区域时不再出…"}, "classic-113": {"u": "basics/classics/t-neural-rendering.html#classic-113", "t": "3D Gaussian Splatting for Real-Time Radiance Field Rendering", "e": "", "m": "Classics · 2023", "s": "3DGS 用可优化的各向异性 3D Gaussian 原语，加上按 tile 划分的可微光栅化，取代了 NeRF 的射线步进。"}, "classic-124": {"u": "basics/classics/t-neural-rendering.html#classic-124", "t": "2D Gaussian Splatting for Geometrically Accurate Radiance Fields", "e": "", "m": "Classics · 2024", "s": "2DGS 指出 3D Gaussian 渲染出的深度在不同视角间不一致，于是改用 2D 有向平面 Gaussian 面元来表示表面，并通过射线与面元求交实现透…"}, "classic-125": {"u": "basics/classics/t-dynamic-human.html#classic-125", "t": "4D Gaussian Splatting for Real-Time Dynamic Scene Rendering", "e": "", "m": "Classics · 2024", "s": "这是本主题中引用最多的动态高斯方法。"}, "classic-131": {"u": "basics/classics/t-neural-rendering.html#classic-131", "t": "Mip-Splatting: Alias-free 3D Gaussian Splatting", "e": "", "m": "Classics · 2024", "s": "Mip-Splatting 发现，3DGS 在采样率变化（改变焦距或相机距离）时会出现严重伪影，根源有两个：缺少 3D 频率约束，以及屏幕空间使用固定的 2D…"}, "classic-132": {"u": "basics/classics/t-generative-ff.html#classic-132", "t": "pixelSplat: 3D Gaussian Splats from Image Pairs for Scalable Generalizable 3D Reconstruction", "e": "", "m": "Classics · 2024", "s": "它是前馈 3DGS 的开山之作之一：从一对图像直接预测逐像素的 3D Gaussian。"}, "classic-138": {"u": "basics/classics/t-generative-ff.html#classic-138", "t": "GS-LRM: Large Reconstruction Model for 3D Gaussian Splatting", "e": "", "m": "Classics · 2024", "s": "GS-LRM 把 LRM 的规模化思路和逐像素 Gaussian 结合起来：用一个极简的纯 Transformer，从 2–4 张带位姿的图像在单张 A100…"}, "classic-144": {"u": "basics/classics/t-dynamic-human.html#classic-144", "t": "4K4D: Real-Time 4D View Synthesis at 4K Resolution", "e": "", "m": "Classics · 2024", "s": "4K4D 把动态场景的渲染速度推到了 4K 分辨率下实时。"}, "classic-3": {"u": "basics/classics/t-ibr-geometry.html#classic-3", "t": "View Interpolation for Image Synthesis", "e": "", "m": "Classics · 1993", "s": "这是最早的 IBR 论文之一。"}, "classic-78": {"u": "basics/classics/t-neural-rendering.html#classic-78", "t": "Neural Point-Based Graphics", "e": "", "m": "Classics · 2020", "s": "NPBG 提出了一个简单有效的神经渲染范式：点云，加上每个点一个可学习特征，再加一个屏幕空间 CNN 渲染器。"}, "classic-81": {"u": "basics/classics/t-neural-rendering.html#classic-81", "t": "Immersive Light Field Video with a Layered Mesh Representation", "e": "", "m": "Classics · 2020", "s": "这是一个完整覆盖采集、重建、压缩、渲染全流程的沉浸式光场视频系统：6DoF 视频帧率 30 fps，观看基线 80 cm，视场超过 220°，可以在移动 VR…"}, "concept-d-sensors": {"u": "basics/foundations/d-sensors.html", "t": "深度传感器与噪声特性", "e": "Depth sensors & noise characteristics", "m": "Foundations · M3 深度估计与三维重建", "s": "主动深度相机（结构光、主动立体、ToF、LiDAR）自带光源，所以在无纹理处也能测出深度，但各有典型误差：三角测量类误差随距离平方增长，ToF 有多路径干扰和相位混叠，所有类型都会在物体边缘产生飞点，而且都怕阳光、深色或高光材质以及彼此之…", "n": "深度传感器与噪声特性"}, "concept-g-pinhole": {"u": "basics/foundations/g-pinhole.html", "t": "针孔相机模型：内参、外参、投影与反投影", "e": "Pinhole camera: intrinsics, extrinsics, projection & unprojection", "m": "Foundations · M2 相机与多视几何", "s": "针孔模型先用外参 [R|t] 把世界点变到相机坐标系，再用内参 K 投到像素；反过来，只有像素时只能确定一条射线，像素加上深度才能唯一确定一个 3D 点。", "n": "针孔相机模型"}, "concept-r-alpha": {"u": "basics/foundations/r-alpha.html", "t": "Alpha 合成与 over 算子", "e": "Alpha compositing & the over operator", "m": "Foundations · M4 图形学与渲染基础", "s": "alpha 表示一个像素被前景覆盖的比例。", "n": "Alpha 合成与 over 算子"}, "concept-r-raster": {"u": "basics/foundations/r-raster.html", "t": "光栅化、z-buffer 与点溅射（splatting）", "e": "Rasterization, z-buffer & point splatting", "m": "Foundations · M4 图形学与渲染基础", "s": "光栅化以图元为中心：把三角形或点投到屏幕上，再用 z-buffer 为每个像素保留最近的那个图元。", "n": "光栅化、z-buffer 与点溅射（splatting）"}, "module-M4": {"u": "basics/foundations/m4.html", "t": "M4 · 图形学与渲染基础", "e": "Graphics & rendering fundamentals", "m": "Foundations", "s": "理解光栅化、alpha 合成、体渲染和光线步进，这是读懂所有神经渲染论文的共同语言。"}, "walk-depthsplat-ds9": {"u": "works/walkthrough/depthsplat.html#walk-depthsplat-ds9", "t": "渲染与损失：CUDA 光栅化渲染目标视角，损失为 MSE + 0.05·LPIPS，中间尺度再乘 0.9，全程没有深度监督", "e": "", "m": "Walkthrough · DepthSplat · DS9", "s": "输入：高斯集合 [B, V·H·W]，以及目标相机的外参 [B,V_tgt,4,4]、内参和 near/far。", "n": "DS9"}, "walk-freesplat-fs10": {"u": "works/walkthrough/freesplat.html#walk-freesplat-fs10", "t": "渲染与损失：3DGS 光栅化输出 RGB 和深度，训练只用 1.0·MSE + 0.05·LPIPS", "e": "", "m": "Walkthrough · FreeSplat · FS10", "s": "输入：N_g 个全局高斯，T 个目标视角的内外参。", "n": "FS10"}, "walk-freesplat-fs7": {"u": "works/walkthrough/freesplat.html#walk-freesplat-fs7", "t": "PTF①像素级对齐：把全局高斯投影到新视角，做 z-buffer，深度差小于 max(5%·d, 0.1 m) 即判为同一点", "e": "", "m": "Walkthrough · FreeSplat · FS7", "s": "输入：当前的全局三元组集合（第一次是视角 0 的全部 196,608 个）、第 i 个视角的深度图 D_i（384×512）及其内外参。", "n": "FS7"}, "walk-gpsgaussian-gp8": {"u": "works/walkthrough/gpsgaussian.html#walk-gpsgaussian-gp8", "t": "合并与渲染：两视角的高斯一次性送进原版 3DGS 光栅器，输出 2048×2048，新视角渲染 0.8 ms", "e": "", "m": "Walkthrough · GPS-Gaussian · GP8", "s": "输入：左右两视角的有效高斯（位置 N×3、颜色 N×3、四元数 N×4、尺度 N×3、不透明度 N×1，N ≤ 2×1024²，只取前景像素）和新视点相机（内…", "n": "GP8"}, "walk-ha-h3": {"u": "works/walkthrough/ha.html#walk-ha-h3", "t": "前向渲染：像素大小、各向同性、完全不透明的高斯，逐视角单独 splat，得到 𝓘_k、α_k、𝒟_k", "e": "", "m": "Walkthrough · Ha et al. · H3", "s": "输入：第 k 个选中视角的 RGB 图 I_k^t、深度 D_k^t（论文写的是 D_k^t，未写 Ḋ_k^t）及其位姿。", "n": "H3"}, "walk-mvsplat-mv9": {"u": "works/walkthrough/mvsplat.html#walk-mvsplat-mv9", "t": "合并与渲染：各视角高斯直接取并集，3DGS 光栅化，渲染一张 256² 图约 1.5 ms", "e": "", "m": "Walkthrough · MVSplat · MV9", "s": "输入：K 组各 H×W 个高斯；目标视角的内外参、near/far。", "n": "MV9"}, "walk-pixelsplat-ps11": {"u": "works/walkthrough/pixelsplat.html#walk-pixelsplat-ps11", "t": "渲染与训练：393,216 个高斯一次光栅化；MSE + 0.05·LPIPS；Adam 1.5e-4、300k 步、batch 7", "e": "", "m": "Walkthrough · pixelSplat · PS11", "s": "输入：一个场景的全部高斯（B×393216×…）与 4 个目标相机。", "n": "PS11"}, "walk-quark-q5": {"u": "works/walkthrough/quark.html#walk-quark-q5", "t": "Render：把当前 LDM 双线性 splat 到每个输入视角并 over 合成得到 Ĩ", "e": "", "m": "Walkthrough · Quark · Q5", "s": "输入：当前特征体 V^(n) [L,H,W,C]，各输入相机参数。", "n": "Q5"}, "walk-tele360-tl11": {"u": "works/walkthrough/tele360.html#walk-tele360-tl11", "t": "接收端与系统时序：硬件解码 + WebGPU 渲染（30 FPS），网络 35.36 ms/帧，端到端约 500 ms / 650 ms", "e": "", "m": "Walkthrough · Tele360 · TL11", "s": "输入：两路 H.265 码流。", "n": "TL11"}, "walk-tele360-tl7": {"u": "works/walkthrough/tele360.html#walk-tele360-tl7", "t": "组装 3D 高斯：用细化后的位姿反投影预测深度，每个前景像素一个高斯，6 视角约 60–90 万个", "e": "", "m": "Walkthrough · Tele360 · TL7", "s": "输入：每个视角的预测深度图 D_i、细化后的位姿 T_i 与内参 K_i、高斯属性图（不透明度、尺度、旋转、外观）、前景 mask。", "n": "TL7"}}, "concept": {"id": "r-raster", "name_zh": "光栅化、z-buffer 与点溅射（splatting）", "name_en": "Rasterization, z-buffer & point splatting", "tldr_zh": "光栅化以图元为中心：把三角形或点投到屏幕上，再用 z-buffer 为每个像素保留最近的那个图元。splatting 把每个点换成有面积的足迹核（例如 2D 高斯）。二者都是 scatter 式的前向渲染，速度快，但可见性、空洞和走样都要自己处理。", "intuition_zh": "渲染有两种基本的循环顺序。光线追踪以像素为中心：每个像素发出一条射线，问它先碰到什么（gather）。光栅化以图元为中心：对每个三角形或点，先用针孔模型把顶点投影到屏幕，找出它覆盖了哪些像素，再把颜色写进去（scatter）。多个图元落在同一像素时，用 z-buffer 决定谁留下：每个像素存一个当前最近深度，新片元只有更近才能覆盖。GPU 图形管线就是这样一条链：顶点变换 → 裁剪与图元装配 → 覆盖测试（edge function）→ 透视校正的属性插值 → 片元着色 → 深度测试 → 写帧缓冲。\n\n点云没有三角形那样的连接关系。最朴素的做法是每个点只写一个像素，但这会造成采样率失配。新视角比原视角更近（放大）时，相邻点投影后的间距超过 1 像素，出现裂缝和空洞；缩小时，多个点挤进同一像素，产生锯齿和闪烁。Splatting 给每个点一个有面积的核（圆盘或 2D 高斯）。EWA splatting（Zwicker 等，2001/2002）给出了有原理依据的做法：把点看作 3D 高斯，用投影在该点处的雅可比 J 做局部线性化，把 3D 协方差变成 2D 屏幕协方差，再叠加一个屏幕空间低通滤波，从而同时解决空洞和走样。3DGS 就是 EWA splatting 的可微 GPU 实现：把屏幕切成 16×16 的 tile，按“视空间深度 + tile ID”对全部高斯做一次基数排序，然后逐像素从前到后做 alpha 混合。\n\n可见性是 splatting 的核心难点。硬 z-buffer 对深度噪声很脆弱。两个来自不同相机、对应同一表面的点，深度只差几毫米，谁胜出完全由噪声决定，输出就在两者之间随机跳变，这就是 z-fighting。一个深度错误的“飞点”（落在前景和背景之间）一旦通过深度测试，就会遮住正确的背景，而且之后无法挽回。因此实际系统有两种选择：用软 z-buffer，让深度差小于阈值的片元做混合而不是覆盖；或者像 Ha et al. 那样把每个输入视角分开渲染，把“该信谁”留给后面的融合网络去判断。\n\nscatter 与 gather 是一对伴随算子。在几何固定时，双线性 splat 把一个值按双线性权重分给 4 个邻近像素，它的转置恰好是双线性采样，也就是按同样的权重从 4 个邻近像素取值。Quark 用的正是这一对：迭代中用 splat（记为 P）把 LDM 投到输入视角；最终渲染时用它的伴随 P^T，把输入图像“反投影”到 LDM 各层上。", "analogy_zh": "光栅化像用镂空模板往墙上喷漆。每个图形按自己的位置喷一遍；z-buffer 相当于给墙上每个格子记下当前那层漆离观察者多远，后喷的漆只有“更靠前”才能盖住原来的。点溅射则像往纸上甩水彩点：点太稀会露白（空洞）；只有晕染半径（高斯核）随远近调得合适，才能既不露白，又不糊成一片。", "equations": [{"tex": "E_{ab}(\\mathbf{p}) = (p_x - a_x)(b_y - a_y) - (p_y - a_y)(b_x - a_x),\\qquad \\lambda_2 = \\frac{E_{v_0 v_1}(\\mathbf{p})}{E_{v_0 v_1}(\\mathbf{v}_2)}", "explain_zh": "Edge function。a、b 是三角形某条边两个端点的屏幕坐标，p 是像素中心。E_ab(p) 是 2D 叉积，等于 p 与这条边构成的平行四边形的有向面积（三角形面积的 2 倍）。三条边的 E_{v0v1}、E_{v1v2}、E_{v2v0} 同号时，p 在三角形内。面积之比就是重心坐标：λ2 = E_{v0v1}(p)/E_{v0v1}(v2)，λ0、λ1 同理，且 λ0+λ1+λ2 = 1。GPU 的覆盖测试就是对每个像素并行求这三个值。"}, {"tex": "a(\\mathbf{p}) = \\frac{\\sum_i \\lambda_i\\, a_i / z_i}{\\sum_i \\lambda_i / z_i},\\quad z(\\mathbf{p}) = \\Big(\\sum_i \\lambda_i / z_i\\Big)^{-1};\\qquad \\text{if } z(\\mathbf{p}) < Z[\\mathbf{p}]:\\ \\ Z[\\mathbf{p}] \\leftarrow z(\\mathbf{p}),\\ \\ C[\\mathbf{p}] \\leftarrow a(\\mathbf{p})", "explain_zh": "透视校正插值加深度测试。a_i 是三个顶点的属性（颜色、纹理坐标等），z_i 是顶点在相机坐标下的深度，λ_i 是屏幕空间重心坐标。透视投影之后，在屏幕上线性变化的是 1/z 和 a/z，而不是 a 本身，所以要先插值 a/z 与 1/z，再相除；像素深度 z(p) 也由插值后的 1/z 取倒数得到。Z 是 z-buffer，每像素存当前最近的深度；C 是颜色缓冲。只有新片元的 z(p) 更小时，才同时更新两者。"}, {"tex": "\\Sigma_{2D} = J\\,W\\,\\Sigma\\,W^{\\top}J^{\\top} + 0.3\\,I_2,\\qquad J = \\begin{pmatrix} f_x/z & 0 & -f_x x/z^2 \\\\ 0 & f_y/z & -f_y y/z^2 \\end{pmatrix}", "explain_zh": "EWA 协方差投影，即 3DGS 论文 Eq. 5 的 Σ' = JWΣWᵀJᵀ（取前两行两列）。Σ 是高斯在世界坐标下的 3×3 协方差；W 是世界到相机变换的旋转部分；(x, y, z) 是高斯中心在相机坐标下的位置；f_x、f_y 是以像素为单位的焦距。J 是透视投影在高斯中心处的雅可比，即局部仿射近似：1/z 项让足迹随距离缩小，含 x/z²、y/z² 的项体现离轴时的拉伸。结果 Σ_2D 是 2×2 的屏幕协方差，单位 px²。+0.3·I 是官方光栅器 computeCov2D 里加的屏幕空间低通，使每个高斯在屏幕上的标准差至少约 √0.3 ≈ 0.55 px。"}, {"tex": "\\alpha_i(\\mathbf{p}) = \\min\\!\\Big(0.99,\\ o_i \\exp\\!\\big(-\\tfrac{1}{2}(\\mathbf{p}-\\boldsymbol{\\mu}_i)^{\\top}\\Sigma_{2D,i}^{-1}(\\mathbf{p}-\\boldsymbol{\\mu}_i)\\big)\\Big),\\qquad C(\\mathbf{p}) = \\sum_i \\mathbf{c}_i\\,\\alpha_i \\prod_{j<i}(1-\\alpha_j)", "explain_zh": "高斯 splat 的逐像素混合。μ_i 是第 i 个高斯中心在屏幕上的投影；o_i 是不透明度参数（Ha 设为 1）；α_i(p) 是它在像素 p 处的有效不透明度，上限截到 0.99；c_i 是颜色；i 按深度从近到远排序。按 3DGS 附录 C 和 forward.cu，α < 1/255 的贡献直接跳过；如果加上当前高斯后透射率会低于 10⁻⁴，就提前终止。完全不透明的高斯在中心处 α = 0.99，几乎把后面全部遮住，此时整个过程近似一个带软边的 z-buffer。"}], "worked_example_zh": "设源相机和目标相机的焦距都是 f = 1000 px。\n\n(1) 像素高斯的屏幕足迹。源图中某像素的深度为 2.0 m。Ha 的论文只说高斯尺度要让它在源图中的投影恰好覆盖 1 个像素，没有给出常数因子；这里取 s = z/f = 2 mm。设该点在目标相机坐标系下为 (x, y, z) = (0.2, 0, 2.0) m，投影在距主点 u = f·x/z = 100 px 处。雅可比 J = [[500, 0, −50], [0, 500, 0]]。各向同性时 Σ = s²·I = 4×10⁻⁶·I m²，旋转 W 不影响结果，于是 Σ_2D = s²·J·Jᵀ = 4×10⁻⁶ × [[500²+50², 0], [0, 500²]] = [[1.01, 0], [0, 1.00]] px²。加上 0.3 的低通后为 [[1.31, 0], [0, 1.30]]，标准差约 1.14 px。光栅器按 λ_max = mid + √max(0.1, mid² − det) 估计最大特征值：这里 mid = 1.305，mid² − det ≈ 0，被 max(0.1, ·) 抬到 0.1，得 λ_max ≈ 1.62，包围半径 ceil(3·√1.62) = 4 px。可见对近似各向同性的高斯，这个 max(0.1, ·) 会把半径略微放大。\n\n(2) 该高斯在各像素的 α（o = 1）：\n- 中心处 min(0.99, 1) = 0.99；\n- 水平偏 1 px 时 exp(−0.5·1/1.31) = 0.68；\n- 偏 2 px 时 0.22；\n- 偏 3 px 时 0.03，仍大于 1/255，参与混合；\n- 偏 4 px 时 0.002，小于 1/255，被跳过。\n可见“完全不透明”的像素高斯在中心就把透射率压到了 0.01，效果相当于一个带约 1 px 抗锯齿边缘的软 z-buffer。\n\n(3) 空洞。改用 1 像素点溅射，并把目标相机前移，使同一表面的深度变为 1.0 m。相邻源像素在世界中相距 2 mm，在目标图中相距 1000×0.002/1.0 = 2 px，于是每隔一个像素就空一个，出现网格状裂缝。高斯足迹会按 1/z 放大，此时标准差约 √(2² + 0.3) ≈ 2.1 px，裂缝被填上。这就是 Ha 在附录 A.3 和图 10 中说点溅射有“像素间空隙和锯齿边”的原因。\n\n(4) z-fighting。同一表面点在视角 A 的深度估计为 2.003 m，在视角 B 为 1.998 m（立体噪声在 ±5 mm 量级）。如果像 GPS-Gaussian 那样一次性渲染所有视角的高斯，每个像素都由更近者以 α ≈ 0.99 占据，而“谁更近”随噪声逐像素随机切换。只要 A、B 之间有 1 px 的配准误差或一点曝光差，输出就是两张图的椒盐式拼贴。Ha 表 3 中，单遍渲染的 No Blending 为 PSNR 24.64、STED 483.3，完整方法为 31.17、68.76。这个差距里也包含融合网络本身的贡献；但作者在 Sec. 3.1 和图 4 中给出的直接原因，就是单遍渲染造成的飞点、空洞和 Z-fighting。", "pitfalls_zh": ["把 splat 半径当成常数。足迹必须随深度和视角变化：EWA 的 J 同时含 1/z 项和 x/z²、y/z² 项。固定 1 px 的点溅射在放大时必然开裂。Ha 用解析尺度，但高斯是各向同性的，忽略了表面倾斜，在掠射角下仍会拉伸或留缝。", "以为 3DGS 光栅器逐像素排序。它只按“中心深度 + tile ID”全局排一次序，3DGS Sec. 6 原话是 no additional per-pixel ordering，所以大高斯交叠时会错序并出现 popping。论文同一段指出，只有高斯接近像素大小时，这个近似的误差才可以忽略，而这恰好是 Ha 选择像素级高斯的前提。", "硬 z-test 对深度噪声没有容错。多台相机拍到的同一表面会在 z-buffer 中互相 z-fighting；飞点一旦通过深度测试，就会遮住正确内容，之后无法纠正。多视角融合要么用软 z-buffer 或按深度阈值混合，要么像 Ha 那样逐视角分开渲染后再融合。", "混淆 scatter 与 gather。前向 splat（源 → 目标）会产生空洞，但不需要目标深度；后向采样（目标 → 源）不产生空洞，但要先知道目标深度。Quark 的最终渲染（式 (1) 中的 P^T）属于后者，深度由 LDM 给出；迭代内部的 Render to Input Views（式 (2)）属于前者。"], "in_quark": {"used": true, "where": "Sec. 3.2.2（Render to Input Views，Eq. 2）；Sec. 3.1 Eq. 1 中的 P^T；Sec. 1 与 Sec. 2.1（LDM 与 layered mesh 的区别）", "how_zh": "Quark 既不用三角形光栅化，也不用 z-buffer。每个 Update & Fuse 步里，它按当前深度 d，把中间 LDM 每层的 density 和 appearance 双线性 splat 到 M = 8 个输入视角（投影算子 P_θ），再逐层 over 合成得到 Ĩ（Eq. 2）。论文原话是 “Splatting avoids expensive ray tracing or rasterization”。可见性靠层的顺序（画家算法式的 over）来处理，而不是靠深度测试。\n\n这样做成立有一个几何前提（论文没有明说，是推论）。Eq. 3–4 把每层限制在互不重叠的等视差带内，而带的边界是目标相机的等深平面。只要输入相机的光心位于近平面之前、射线朝深度增大的方向前进，射线穿过各带的先后次序就不会改变，所以在输入视角里按层号合成仍然正确。\n\n最终渲染（Eq. 1）方向相反：用 P 的伴随 P^T，把全分辨率输入图像反投影到各层深度上，也就是对每个 LDM 像素去输入图中双线性取值（gather）。因此最终输出没有前向 splat 那样的空洞，只在投影落到输入图外时才缺值。Sec. 1 和 Sec. 2.1 还指出，以往的 layered mesh 方法要先把 LDM 转成网格才能渲染到其他视角，而 Quark 直接渲染 LDM，从不实例化网格。不理解 scatter/gather 和伴随关系，就读不懂 P 与 P^T 这对记号。"}, "in_ha": {"used": true, "where": "Sec. 3.1、附录 A.3、图 4、图 10、表 3（No Blending）、表 4（Forward-splatting 10 ms）；A.2（差分掩码同样用高斯 splat 投到目标视角）", "how_zh": "Ha 的第一阶段就是点溅射。取最近的 K 个输入视角（DyNeRF 上 K = 4），把每个像素按深度反投影成一个完全不透明、各向同性、在源图中的投影恰好覆盖 1 个像素的 3D 高斯。然后用原版 3DGS 光栅器逐视角单独渲染到目标相机，得到 K 张前向渲染图 𝓘_k、累积不透明度 α_k 和深度 𝒟_k。在 DyNeRF（1352×1014）上这一步耗时 10 ms（表 4）。\n\n作者给出两条光栅化层面的理由。(1) 与传统点溅射相比，高斯足迹能处理遮挡，并减少“像素间空隙和锯齿边”（Sec. 3.1、A.3、图 10）。(2) 把所有视角的高斯一次性渲染会产生飞点和去遮挡空洞，还会因 Z-fighting 让边缘变差（Sec. 3.1、图 4a），所以必须分视角渲染，由融合网络决定取舍。表 3 中，单遍渲染的 No Blending 为 PSNR 24.64、STED 483.3。另外，A.2 中的 K 张差分掩码也用高斯 splat 投到目标视角，再取逐通道最大值。不理解 z-buffer 和 splat 足迹，就看不出“分开渲染”为什么是这篇论文的关键设计。"}, "in_field_zh": "(1) 基于 3DGS 的实时临场系统都依赖 tile 光栅化，例如房间尺度 AR/VR 临场系统 GaussianNexus，以及在接收端渲染推流来的 Gaussian maps 的 Tele360。排序方式和足迹近似直接决定边缘质量和 popping。(2) Project Starline（Sec. 4.6）用点溅射把输入深度图光栅化到低分辨率的目标视角，做 2D min/max 滤波后得到每条射线的 TSDF 搜索区间。它还为 4 台彩色相机各算一张 shadow map（用 raycasting 得到该相机视角的深度图），再用深度比较加 percentage closer filtering 判断某表面点对哪台相机可见，这和 z-buffer 是同一类深度测试。(3) 头显的 late-stage reprojection：ATW 只做旋转重投影；利用深度的 positional timewarp 类方法按新的头部位姿把上一帧 RGB-D 前向 warp，同样会遇到空洞和飞点。(4) 光场屏和裸眼 3D 显示每帧要渲染几十个视角，光栅化吞吐量是硬约束。", "resources": [{"title": "Scratchapixel: Rasterization: a Practical Implementation", "url": "https://www.scratchapixel.com/lessons/3d-basic-rendering/rasterization-practical-implementation/overview-rasterization-algorithm.html", "type": "tutorial", "note_zh": "从 edge function、重心坐标、透视校正插值一直讲到 depth buffer，附 C++ 代码。先读 overview 一章，再读 “The Visibility Problem, the Depth Buffer Algorithm and Depth Interpolation” 和 “Perspective Correct Interpolation and Vertex Attributes”。"}, {"title": "tinyrenderer (Dmitry Sokolov)", "url": "https://github.com/ssloy/tinyrenderer/wiki", "type": "code", "note_zh": "用约 500 行代码从零写一个软件光栅化器。前几课依次实现画线（Lesson 1）、三角形填充（Lesson 2）和 z-buffer（Lesson 3），最适合动手练习。"}, {"title": "EWA Splatting (Zwicker, Pfister, van Baar, Gross, IEEE TVCG 2002)", "url": "https://www.cs.umd.edu/~zwicker/publications/EWASplatting-TVCG02.pdf", "type": "paper", "note_zh": "EWA splatting 的完整推导，包括 3D 高斯重建核、投影的局部仿射近似（雅可比）和屏幕空间低通。3DGS 官方光栅器 computeCov2D 的注释直接引用了本文的公式 (29) 和 (31)。"}, {"title": "3D Gaussian Splatting for Real-Time Radiance Field Rendering (Kerbl et al., SIGGRAPH 2023)", "url": "https://arxiv.org/abs/2308.04079", "type": "paper", "note_zh": "建议读：Sec. 2.3（点渲染与体渲染是同一成像模型，Eq. 1–3）；Sec. 4（Eq. 4 高斯定义、Eq. 5 协方差投影、Eq. 6 Σ = RSSᵀRᵀ）；Sec. 6 与附录 C（16×16 tile、按深度加 tile 排序、α 上限 0.99、1/255 阈值、0.9999 提前终止）。配合官方光栅器 https://github.com/graphdeco-inria/diff-gaussian-rasterization 中的 cuda_rasterizer/forward.cu 一起看。"}], "self_check": [{"q_zh": "用 1 像素点溅射把一张 RGB-D 图前向 warp 到一个更靠近物体的相机，为什么会出现规则的裂缝？有哪些修复办法，各自代价是什么？", "a_zh": "放大时，相邻源像素在目标图中的间距 f·Δ/z' 超过 1 px。例如世界间距 2 mm、f = 1000、z' = 1 m 时间距为 2 px，1 像素的点写不满。修复办法有三种。(a) 用随深度自适应的足迹（EWA 或高斯 splat，即 Ha 的做法），代价是要排序并做 alpha 混合。(b) 把像素连成三角网格再光栅化，代价是深度不连续处会拉出“橡皮膜”三角形，必须按深度差把网格断开。(c) 事后补洞，或改用后向 warping，但后者需要先知道目标深度。"}, {"q_zh": "Ha et al. 为什么不把 K 个视角的像素高斯一次性渲染？", "a_zh": "同一表面在不同视角的深度估计有毫米级噪声。单遍渲染时，每个像素由更近者以 α ≈ 0.99 占据，而谁更近随噪声随机切换，于是产生 z-fighting。错误深度的飞点还会遮住正确的背景，而且事后无法纠正（图 4a）。分开渲染能保留 K 个候选以及各自的 α_k 和深度，让几何引导的融合网络决定每个像素该信谁。表 3 中，单遍渲染的 PSNR 为 24.64，完整方法为 31.17。"}, {"q_zh": "Quark 的 P 与 P^T 分别是 scatter 还是 gather？为什么最终渲染用 P^T 不会出现前向 warp 那样的空洞？", "a_zh": "P（Eq. 2）把 LDM 各层按深度双线性 splat 到输入视角，是 scatter。P^T 是它的伴随：对每个 LDM 像素，按其深度投到输入图中双线性取值，是 gather。gather 能为每个目标像素都取到一个值（投影落到输入图外时除外），所以没有空洞。代价是必须先知道目标视角的几何，也就是 LDM 的深度，而这正是网络要求解的量。"}], "prereqs": ["g-pinhole"]}, "module": "module-M4", "walk": ["walk-quark-q5", "walk-ha-h3", "walk-tele360-tl7", "walk-tele360-tl11", "walk-pixelsplat-ps11", "walk-gpsgaussian-gp8", "walk-mvsplat-mv9", "walk-freesplat-fs7", "walk-freesplat-fs10", "walk-depthsplat-ds9"], "classics": ["classic-3", "classic-11", "classic-78", "classic-81", "classic-113", "classic-124", "classic-125", "classic-131", "classic-132", "classic-138", "classic-144"], "adv": ["adv-a-3dgs-ext", "adv-a-ff-3dgs", "adv-a-diff-render"], "prev": "concept-d-sensors", "next": "concept-r-alpha", "readMin": 9}</script>
+<script type="application/json" id="data">{"site": {"brand": "3D Telepresence: a field guide", "root": "../../", "path": "works/walkthrough/tele360-tradeoffs.html", "nav": [{"key": "overview", "label": "Overview", "items": [["Introduction", "index.html"], ["Methodology", "overview/methodology.html"], ["How to use", "overview/how-to-use.html"]]}, {"key": "basics", "label": "Basics", "items": [["Routes", "basics/routes/index.html"], ["Foundations", "basics/foundations/index.html"], ["Advanced topics", "basics/advanced/index.html"], ["Classics", "basics/classics/index.html"], ["Glossary", "basics/glossary.html"]]}, {"key": "works", "label": "Works", "items": [["Papers", "works/papers/index.html"], ["Walkthrough", "works/walkthrough/index.html"], ["Field map", "works/field-map.html"], ["Sub areas", "works/areas/index.html"]]}, {"key": "future", "label": "Future", "items": [["Directions", "future/index.html"], ["Trends & Challenges", "future/trends.html"]]}], "navCur": "works", "navItem": "works/walkthrough/index.html", "crumbs": [["Works", ""], ["Walkthrough", "works/walkthrough/index.html"], ["Tele360 导读", "works/walkthrough/tele360.html"]], "date": "2026-09-28"}, "xref": {"guide-tele360": {"u": "works/walkthrough/tele360.html", "t": "Tele360 导读", "e": "", "m": "Walkthrough", "s": "先想象一个具体的场景：一个人站在房间中央，周围只架了 4 到 6 台普通工业相机，没有标定板，也没有人去量每台相机的位置和朝向。"}, "wpart-tele360-experiments": {"u": "works/walkthrough/tele360-experiments.html", "t": "Tele360 · 阅读实验", "e": "", "m": "Walkthrough · Tele360", "s": "论文里 9 组实验分别怎么读、真正说明了什么。"}, "wpart-tele360-faq": {"u": "works/walkthrough/tele360-faq.html", "t": "Tele360 · 常见问题", "e": "", "m": "Walkthrough · Tele360", "s": "初读时最常问的 11 个问题。"}}, "page": {"id": "wpart-tele360-tradeoffs", "head": {"title": "Tele360 · 设计权衡", "sub": "Tele360: Real-Time Feed-Forward Human Reconstruction from Sparse Unposed Cameras", "meta": ["配套文章：", {"k": "guide-tele360", "t": "回到 Tele360 导读"}], "epigraph": "", "prereqs": [], "lede": "8 个关键设计选择：换来了什么，付出了什么。", "minutes": 1}, "body": [{"b": "h3", "t": "只把前景 patch 变成 token，另加一个共享 scene token"}, {"b": "p", "t": "2K、6 视角下 token 数大幅减少，帧间注意力开销按前景占比的平方下降，是 35 ms 实时的前提", "label": "换来的"}, {"b": "p", "t": "强依赖抠像；mask 错误会同时丢掉 token 和高斯；人物变大或多人时开销回升；背景不重建", "label": "付出的"}, {"b": "h3", "t": "前馈位姿 + 可微 LM 细化（2,048 anchor、4 次迭代）"}, {"b": "p", "t": "免标定、可端到端训练，6 视角下 <0.5 ms；BA 使平均 RRE 从 1.73° 降到 1.55°", "label": "换来的"}, {"b": "p", "t": "依赖前馈初值落在半径 3 的匹配窗口内；每帧重新估计位姿，固定阵列上会引入逐帧位姿抖动；只修相机不修深度", "label": "付出的"}, {"b": "h3", "t": "用 Gram 损失从冻结 VGGT 蒸馏，而不是直接微调大模型"}, {"b": "p", "t": "学生小而快，在旋转精度上与老师持平，在平移方向上更好（1.14° 对 1.74°）", "label": "换来的"}, {"b": "p", "t": "继承老师的盲点；没有去掉蒸馏的消融；学生与老师 patch 集合如何对应等实现细节未公开", "label": "付出的"}, {"b": "h3", "t": "全 Transformer 解码器替代 DPT 卷积上采样"}, {"b": "p", "t": "按作者的说法，边界更锐、飞点更少，且能保持稀疏计算；解码器逐视角独立（Table 6 表明加跨视角注意力无收益）", "label": "换来的"}, {"b": "p", "t": "解码 query 与像素的对应关系未交代，高斯图只有约 1K；最终仍需浅层 CNN 头；与 DPT 头没有直接数值对比（Table 6 只比较了注意力排列）", "label": "付出的"}, {"b": "h3", "t": "输出像素对齐高斯图、传到终端渲染"}, {"b": "p", "t": "一次重建供多个终端、多个视点；观看者转头只需本地光栅化；高斯图可以直接用硬件视频编解码器", "label": "换来的"}, {"b": "p", "t": "约 80–100 Mbit/s 的带宽；接收端需要 GPU（iPad Pro 比 MacBook Pro 多约 150 ms 延迟）；各视角高斯直接合并，可能有重叠的双层表面", "label": "付出的"}, {"b": "h3", "t": "分字节 H.265：MSB 无损、LSB 有损（QP 28）"}, {"b": "p", "t": "在 8 bit 编码器下保住 16 bit 几何精度；兼容所有终端的硬件解码", "label": "换来的"}, {"b": "p", "t": "两路流、4:4:4 采样，码率高；低字节锯齿在有损编码下可能在跳变处出错（本导读推断）；没有利用高斯的帧间对应", "label": "付出的"}, {"b": "h3", "t": "逐帧、无跨帧状态"}, {"b": "p", "t": "实现简单，对快速运动与遮挡变化没有“拖影”风险；任何一帧出错不会传到下一帧", "label": "换来的"}, {"b": "p", "t": "作者承认会闪烁；时间稳定性只有 VBench 无参考指标；无法利用“之前看得见、现在被挡住”的信息", "label": "付出的"}, {"b": "h3", "t": "多级流水线重叠执行"}, {"b": "p", "t": "稳态吞吐高，客户端 30 FPS", "label": "换来的"}, {"b": "p", "t": "端到端延迟约 500–650 ms，远高于对话需要；论文没有延迟分解", "label": "付出的"}], "toc": false, "series": {"prev": {"k": "wpart-tele360-experiments"}, "next": {"k": "wpart-tele360-faq"}, "up": {"u": "works/walkthrough/tele360.html", "t": "Tele360 导读"}}}}</script>
 <script>
 (function () {
   "use strict";
@@ -705,106 +705,158 @@ figcaption svg { vertical-align: -1px; }
     }
   }
 
-  // ================= article: one Foundations concept =================
+  // ================= article: a page composed as blocks in routes.py =================
   (function () {
-    var c = DATA.concept || {};
-    if (!c.id) return;
-    art.id = "concept-" + c.id;
-    var mod = XREF[DATA.module] || {};
+    var PG = DATA.page || {};
+    var H = PG.head || {};
+    if (PG.id) art.id = PG.id;
 
-    var prereqs = arr(c.prereqs).map(function (p) { return xlink("concept-" + p, XREF["concept-" + p] ? XREF["concept-" + p].t : p); }).filter(Boolean);
-    var metaLine = [];
-    if (prereqs.length) metaLine.push(marginnote([noteLabel("阅读前需要")].concat(joinNodes(prereqs, "；"))));
-    metaLine.push(xlink(DATA.module, mod.t), " · 约 " + (DATA.readMin || 1) + " 分钟");
-    articleHead({ title: c.name_zh, subtitle: c.name_en, meta: metaLine, epigraph: c.tldr_zh });
-
-    function joinNodes(nodes, sep) {
+    // A link dict from routes.py: {k} an entry with hover preview, {u, t} a page of this site, {url, t} an external page.
+    function part(x) {
+      if (x === null || x === undefined) return null;
+      if (typeof x === "string") return x;
+      if (x.k) return xlink(x.k, x.t || null);
+      if (x.u) return pageLink(x.u, x.t || x.u);
+      if (x.url) return link(x.t || x.url, x.url);
+      return x.t ? str(x.t) : null;
+    }
+    function noteNodes(n) {
+      var kids = [noteLabel(n.label)];
+      if (n.t) kids = kids.concat(rich(n.t));
+      arr(n.links).forEach(function (l, i) { if (i) kids.push(el("br")); kids.push(part(l)); });
+      return kids;
+    }
+    function runIn(label) { return el("b", { class: "run-in", text: label + "：" }); }
+    function multiline(text) {
       var out = [];
-      nodes.forEach(function (n, i) { if (i) out.push(sep); out.push(n); });
+      str(text).split("\n").forEach(function (line, i) { if (i) out.push(el("br")); out = out.concat(rich(line)); });
       return out;
     }
 
-    // 直觉: the analogy sits in the margin beside the first paragraph.
-    var intuition = paras(c.intuition_zh);
-    if (str(c.analogy_zh).trim() && intuition.length) intuition[0].insertBefore(marginnote([noteLabel("类比")].concat(rich(c.analogy_zh))), intuition[0].firstChild);
-    if (intuition.length) section("intuition", "直觉", intuition);
-
-    var eqs = eqList(c.equations);
-    if (eqs) section("equations", "公式", [eqs]);
-    if (str(c.worked_example_zh).trim()) section("example", "例子", lines(c.worked_example_zh));
-    if (arr(c.pitfalls_zh).length) section("pitfalls", "易错点", [el("ol", null, arr(c.pitfalls_zh).map(function (t) { return el("li", null, rich(t)); }))]);
-    if (str(c.in_field_zh).trim()) section("in-field", "在 3D 临场系统中", paras(c.in_field_zh));
-
-    // 案例: where each key paper uses the concept; the paper location is a side note, guide steps a margin note.
-    var steps = arr(DATA.walk);
-    var cases = [];
-    [["quark", c.in_quark], ["ha", c.in_ha]].forEach(function (pair) {
-      var anchor = pair[0], u = pair[1] || {};
-      var head = el("h3", null, [anchorName(anchor),
-        str(u.where).trim() ? sidenote([noteLabel("论文位置")].concat(rich(u.where))) : null,
-        el("span", { class: "used", text: u.used ? "用到" : "未用" })]);
-      cases.push(head);
-      var body = paras(u.how_zh);
-      var mine = steps.filter(function (k) { return k.indexOf("walk-" + anchor + "-") === 0 && hasX(k); });
-      if (mine.length && body.length) {
-        var links = [];
-        mine.forEach(function (k, i) { if (i) links.push(el("br")); links.push(xlink(k, XREF[k].n + " " + XREF[k].t)); });
-        body[0].insertBefore(marginnote([noteLabel("导读步骤")].concat(links)), body[0].firstChild);
-      }
-      cases = cases.concat(body);
+    // ---------- head ----------
+    var meta = [];
+    if (arr(H.prereqs).length) {
+      meta.push(marginnote([noteLabel("阅读前需要")].concat(arr(H.prereqs).map(function (p, i) {
+        var a = part(p);
+        return i ? el("span", null, ["；", a]) : a;
+      }))));
+    }
+    var sep = false;
+    arr(H.meta).concat(H.minutes > 1 ? ["约 " + H.minutes + " 分钟"] : []).forEach(function (x) {
+      var n = part(x);
+      if (!n || (typeof n === "string" && !n.trim())) return;
+      if (sep) meta.push(" · ");
+      meta.push(n);
+      sep = !(typeof x === "string" && /：$/.test(x));
     });
-    section("cases", "案例：Quark 与 Ha 如何使用", cases);
-    function anchorName(a) { return a === "quark" ? "Quark" : "Ha et al."; }
+    articleHead({ title: H.title, subtitle: H.sub, meta: meta.length ? meta : null, epigraph: H.epigraph });
+    if (str(H.lede).trim()) art.appendChild(el("div", { class: "lede" }, paras(H.lede)));
 
-    // The other deep reads: their walkthrough steps that build on this concept, labelled with the paper.
-    var more = steps.filter(function (k) { return !/^walk-(quark|ha)-/.test(k) && hasX(k); });
-    if (more.length) {
-      var byPaper = [], seen = {};
-      more.forEach(function (k) {
-        var paper = str(XREF[k].m).split(" · ")[1] || "";
-        if (!seen[paper]) { seen[paper] = []; byPaper.push(paper); }
-        seen[paper].push(k);
+    // ---------- blocks ----------
+    function heading(tag, b) {
+      var title = b.url && safeUrl(b.url) ? link(b.t, b.url) : (b.k ? part({ k: b.k, t: b.t }) : str(b.t));
+      var h = el(tag, { id: b.id || null }, [title]);
+      if (b.sn) h.appendChild(sidenote(noteNodes(b.sn)));
+      if (b.en) h.appendChild(el("span", { class: "en", text: b.en }));
+      if (b.tag) h.appendChild(el("span", { class: "used", text: b.tag }));
+      return h;
+    }
+    function withNotes(nodes, b) {
+      if (nodes.length && b.mn) nodes[0].insertBefore(marginnote(noteNodes(b.mn)), nodes[0].firstChild);
+      if (nodes.length && b.label) nodes[0].insertBefore(runIn(b.label), nodes[0].firstChild);
+      return nodes;
+    }
+    function listItem(x) {
+      if (typeof x === "string") return el("li", null, rich(x));
+      return el("li", null, (x.label ? [runIn(x.label)] : []).concat(rich(x.t)));
+    }
+    function refsList(items, cls) {
+      var left = items.some(function (x) { return x.left; });
+      return el("ul", { class: "refs " + (cls || "") + (left ? "" : " noleft") }, items.map(function (x) {
+        var body = [x.k || x.u || x.url ? part(x) : el("span", { class: "plain-t", text: x.t })];
+        if (x.tag) body.push(el("span", { class: "used", text: x.tag }));
+        if (x.sub) body.push(el("div", { class: "en", text: x.sub }));
+        if (str(x.gloss).trim()) body.push(el("div", { class: "gloss" }, multiline(x.gloss)));
+        var kids = left ? [el("span", { class: /^\d{4}$/.test(str(x.left)) ? "yr" : "kind", text: str(x.left) })] : [];
+        return el("li", { id: x.id || null }, kids.concat([el("div", null, body)]));
+      }));
+    }
+    var TY = { book: "教材", course: "课程", paper: "论文", tutorial: "教程", code: "代码", video: "视频", blog: "文章" };
+    function tocGroups(groups, level) {
+      var out = [];
+      arr(groups).forEach(function (g) {
+        if (g.h) out.push(el(level, { class: "toc-h" }, [g.k || g.u ? part({ k: g.k, u: g.u, t: g.h }) : g.h]));
+        if (str(g.lede).trim()) out.push(el("p", { class: "toc-lede" }, rich(g.lede)));
+        out.push(el("ol", { class: "toc" }, arr(g.items).map(function (it) {
+          return el("li", null, [
+            el("div", { class: "toc-t" }, [part({ k: it.k, u: it.u, t: it.t }), it.en ? el("span", { class: "en", text: it.en }) : null,
+              it.meta ? el("span", { class: "toc-meta", text: it.meta }) : null]),
+            str(it.s).trim() ? el("p", { class: "toc-s", text: it.s }) : null
+          ]);
+        })));
       });
-      section("cases-more", "更多精读中的用法", [el("ul", { class: "refs wide-kind" }, byPaper.map(function (paper) {
-        var links = [];
-        seen[paper].forEach(function (k, i) { if (i) links.push(el("br")); links.push(xlink(k, XREF[k].n + " " + XREF[k].t)); });
-        return el("li", null, [el("span", { class: "kind", text: paper }), el("div", null, links)]);
-      }))]);
+      return out;
     }
+    function cell(tag, c) { return el(tag, null, c && typeof c === "object" ? [part(c)] : rich(c)); }
 
-    if (arr(c.self_check).length) {
-      section("self-check", "自测", [el("ol", { class: "quiz" }, arr(c.self_check).map(function (q) {
-        return el("li", null, [el("p", null, rich(q.q_zh)), el("details", null, [el("summary", { text: "答案" }), el("p", null, rich(q.a_zh))])]);
-      }))]);
+    var box = null;
+    function cur() { if (!box) { box = el("section"); art.appendChild(box); } return box; }
+    function render(b) {
+      switch (b.b) {
+        case "p": return withNotes(paras(b.t), b);
+        case "lines": return withNotes(lines(b.t), b);
+        case "h3": return [heading("h3", b)];
+        case "note": return [el("p", { class: "note", text: b.t })];
+        case "ul": case "ol": return [el(b.b, null, arr(b.items).map(listItem))];
+        case "eqs": return [eqList(b.eqs)];
+        case "qa": return [el("p", { class: "quiz-h", text: "自测" }), el("ol", { class: "quiz" }, arr(b.items).map(function (q) {
+          return el("li", null, [el("p", null, rich(q.q)), el("details", null, [el("summary", { text: "答案" }), el("p", null, rich(q.a))])]);
+        }))];
+        case "res": return [refsList(arr(b.items).map(function (r) {
+          return { left: TY[r.type] || r.type || "", url: r.url, t: r.title, gloss: r.note_zh };
+        }))];
+        case "refs": return [refsList(arr(b.items), b.cls)];
+        case "toc": return tocGroups(b.groups, cur().querySelector("h2") ? "h3" : "h2");
+        case "table": return [el("div", { class: "table-wrap" + (b.wide ? " fullwidth" : "") }, [el("table", { class: "booktabs" + (b.cls ? " " + b.cls : "") }, [
+          el("thead", null, [el("tr", null, arr(b.head).map(function (h) { return el("th", { text: h }); }))]),
+          el("tbody", null, arr(b.rows).map(function (r) { return el("tr", null, arr(r).map(function (c) { return cell("td", c); })); }))
+        ])])];
+        case "timeline": return [el("ul", { class: "refs timeline" }, arr(b.items).map(function (x) {
+          return el("li", null, [el("span", { class: "yr", text: str(x[0]) }), el("div", null, rich(x[1]))]);
+        }))];
+        case "kv": return [el("table", { class: "kv" }, [el("tbody", null, arr(b.items).map(function (x) {
+          return el("tr", null, [el("th", { text: x[0] }), el("td", null, rich(x[1]))]);
+        }))])];
+        case "mtoc": return [marginToc(b.items)];
+        case "slot": return typeof SLOTS[b.name] === "function" ? [SLOTS[b.name](b)] : [];
+        default: return [];
+      }
     }
+    // Long articles: a table of contents at the top of the margin (a folding list on phones).
+    function marginToc(items) {
+      var d = el("details", { class: "mtoc" }, [el("summary", { text: "本文目录" }), el("ol", null, arr(items).map(function (x) { return el("li", null, [part(x)]); }))]);
+      var wide = window.matchMedia("(min-width: 761px)");
+      d.open = wide.matches;
+      return d;
+    }
+    arr(PG.body).forEach(function (b) {
+      if (b.b === "sec") {
+        box = el("section", { id: b.id || null });
+        if (b.h) box.appendChild(heading("h2", { t: b.h, sn: b.sn }));
+        art.appendChild(box);
+        return;
+      }
+      render(b).forEach(function (n) { if (n) cur().appendChild(n); });
+    });
 
-    // 延伸阅读: resources with their notes, then topics and classic papers that build on this concept.
-    var further = [];
-    var ty = { book: "教材", course: "课程", paper: "论文", tutorial: "教程", code: "代码", video: "视频", blog: "文章" };
-    if (arr(c.resources).length) {
-      further.push(el("h3", { text: "学习资源" }));
-      further.push(el("ul", { class: "refs" }, arr(c.resources).map(function (r) {
-        return el("li", null, [el("span", { class: "kind", text: ty[r.type] || r.type || "" }),
-          el("div", null, [link(r.title, r.url), str(r.note_zh).trim() ? el("div", { class: "gloss" }, rich(r.note_zh)) : null])]);
-      })));
+    var S = PG.series || {};
+    if (S.prev || S.next || S.up) {
+      var nav = el("nav", { class: "series", "aria-label": "同系列" });
+      nav.appendChild(el("div", { class: "prev" }, S.prev ? [el("small", { text: "上一篇" }), part(S.prev)] : []));
+      nav.appendChild(el("div", { class: "up" }, S.up ? [part(S.up)] : []));
+      nav.appendChild(el("div", { class: "next" }, S.next ? [el("small", { text: "下一篇" }), part(S.next)] : []));
+      art.appendChild(nav);
     }
-    var adv = arr(DATA.adv).filter(hasX);
-    if (adv.length) {
-      further.push(el("h3", { text: "进阶专题" }));
-      further.push(el("ul", { class: "refs" }, adv.map(function (k) {
-        return el("li", null, [el("span", { class: "kind", text: "专题" }), el("div", null, [xlink(k, XREF[k].t), XREF[k].e ? el("div", { class: "en", text: XREF[k].e }) : null])]);
-      })));
-    }
-    var cls = arr(DATA.classics).filter(hasX);
-    if (cls.length) {
-      further.push(el("h3", { text: "经典论文" }));
-      further.push(el("ul", { class: "refs papers" }, cls.map(function (k) {
-        return el("li", null, [el("span", { class: "yr", text: str(XREF[k].m).replace(/^Classics · /, "") }), xlink(k, XREF[k].t)]);
-      })));
-    }
-    if (further.length) section("further", "延伸阅读", further);
-
-    seriesNav(DATA.prev, DATA.next, "basics/foundations/index.html", "Foundations 目录");
   })();
 
   finishPage();

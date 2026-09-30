@@ -14,6 +14,12 @@
    "venue": "CVPR 2025"
   },
   {
+   "key": "tele360",
+   "short": "Tele360",
+   "group": "systems",
+   "venue": "arXiv 2026"
+  },
+  {
    "key": "ibrnet",
    "short": "IBRNet",
    "group": "generalizable",
@@ -66,7 +72,7 @@
   {
    "id": "systems",
    "h": "实时临场系统",
-   "lede": "两篇完整的实时多视角新视角合成系统：逐帧前馈的高质量渲染，和带几何累积的在线视频合成。"
+   "lede": "三篇完整的实时临场系统：逐帧前馈的高质量渲染，带几何累积的在线视频合成，以及免标定、从采集到多终端显示打通的人体直播系统。"
   },
   {
    "id": "generalizable",
