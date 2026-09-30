@@ -80,6 +80,7 @@
     }
     spec.edges.forEach(function (e) { svg.appendChild(sv("path", { class: "dedge" + (e.fb ? " fb" : ""), d: e.d, "marker-end": "url(#" + (e.fb ? "ahf-" : "ah-") + anchorKey + ")" })); });
     spec.nodes.forEach(function (n) {
+      n.k = n.k || n.step;
       svg.appendChild(step(n.k, [
         sv("rect", { class: n.data ? "data" : null, x: n.x, y: n.y, width: n.w, height: n.h, rx: 3 }),
         sv("text", { class: "k", x: n.x + 10, y: n.y + 16, text: n.k }),
@@ -92,6 +93,10 @@
     return svg;
   }
   SLOTS.diagram = function (b) {
+    // Laid-out specs come with the page (routes.layout_diagram); the first two deep reads keep their hand-drawn ones.
+    if (b.spec && /^[a-z0-9]+$/.test(str(b.which))) {
+      return el("figure", { class: "fullwidth diagram-fig" }, [el("div", { class: "diagram-wrap" }, [drawDiagram(b.spec, b.which, str(b.label))])]);
+    }
     var which = b.which === "ha" ? "ha" : "quark";
     var spec = which === "quark" ? diagramQuark() : diagramHa();
     return el("figure", { class: "fullwidth diagram-fig" }, [el("div", { class: "diagram-wrap" }, [drawDiagram(spec, which, (which === "quark" ? "Quark" : "Ha et al.") + " 流程图")])]);

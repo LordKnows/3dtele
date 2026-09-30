@@ -16,7 +16,7 @@ Links are dicts: {"k": element id} (an entry of the xref table, with hover previ
 import re
 
 BRAND = "3D Telepresence: a field guide"
-ANCHOR_SHORT = {"quark": "Quark", "ha": "Ha et al."}
+LEGACY_PAPERS = ("quark", "ha")  # the only deep reads the old 11-page site had (redirect maps stay as they were)
 ID_TOKEN = re.compile(r"(a-[a-z0-9]+(?:-[a-z0-9]+)*|[fgdrilnv]-[a-z0-9]+)")
 PRIORITY = {"must": "必读", "should": "建议", "optional": "选读"}
 DECISION = {"pursue": "建议推进", "pursue_with_repositioning": "重新定位后推进", "drop": "建议放弃"}
@@ -62,6 +62,11 @@ OLD_PREFIX = [("concept-", "foundations.html"), ("module-", "foundations.html"),
               ("stage-", "roadmap.html"), ("area-", "areas.html"), ("idea-", "ideas.html"), ("anchor-", "anchors.html")]
 
 
+def paper_short(ctx) -> dict:
+    """Deep-read papers in reading order (data/site/papers.json): key -> short name."""
+    return {p["key"]: p["short"] for p in ctx["registry"]["papers"]}
+
+
 # ---------- text helpers ----------
 def first_sentence(text, limit: int) -> str:
     """One-line summary for link previews: the first sentence, cut to about `limit` characters."""
@@ -70,6 +75,18 @@ def first_sentence(text, limit: int) -> str:
     if m:
         t = t[:m.end()]
     return t if len(t) <= limit else t[:limit - 1].rstrip("，、；：,;: ") + "…"
+
+
+def lead(text, limit: int, least: int = 40) -> str:
+    """Like first_sentence, but keeps adding sentences until the summary says something (a story may open with "先看问题。")."""
+    t = re.sub(r"\s+", " ", str(text or "")).strip()
+    out = ""
+    for m in re.finditer(r"[^。！？]*[。！？]", t):
+        out += m.group(0)
+        if len(out) >= least:
+            break
+    out = out or t
+    return out if len(out) <= limit else out[:limit - 1].rstrip("，、；：,;: ") + "…"
 
 
 def all_strings(x):
@@ -213,10 +230,11 @@ def xref_table(ctx) -> dict:
         x[f"term-{slug(t['term_en'])}"] = {"u": f"basics/glossary.html#term-{slug(t['term_en'])}", "t": t.get("term_zh", ""),
                                            "e": t["term_en"] + (f" ({t['abbr']})" if t.get("abbr") else ""),
                                            "m": "Glossary · " + (t.get("category") or ""), "s": first_sentence(t.get("def_zh"), 80)}
+    shorts = paper_short(ctx)
     for anchor, g in (learn.get("guided") or {}).items():
-        short = ANCHOR_SHORT.get(anchor, anchor)
+        short = shorts.get(anchor, anchor)
         x[f"guide-{anchor}"] = {"u": f"works/walkthrough/{anchor}.html", "t": f"{short} 导读", "e": "", "m": "Walkthrough",
-                                "s": first_sentence(g.get("story_zh"), 80)}
+                                "s": lead(g.get("story_zh"), 90)}
         for s in g.get("walkthrough", []):
             x[f"walk-{anchor}-{s['id']}"] = {"u": f"works/walkthrough/{anchor}.html#walk-{anchor}-{s['id']}", "t": s.get("title_zh", ""),
                                             "e": "", "m": f"Walkthrough · {short} · {s['id'].upper()}",
@@ -225,10 +243,15 @@ def xref_table(ctx) -> dict:
             x[f"wpart-{anchor}-{suffix}"] = {"u": f"works/walkthrough/{anchor}-{suffix}.html", "t": f"{short} · {title}", "e": "",
                                              "m": f"Walkthrough · {short}", "s": part_summary(field, g.get(field) or [])}
     anchors = survey.get("anchors") or {}
-    for key in ("quark", "ha"):
-        a = anchors.get(key) or {}
-        x[f"anchor-{key}"] = {"u": f"works/papers/{key}.html", "t": f"{ANCHOR_SHORT[key]} 精读", "e": (a.get("citation") or {}).get("title", ""),
-                              "m": "Papers · 重点论文", "s": first_sentence(a.get("tldr_zh"), 120)}
+    for key, short in shorts.items():
+        a = anchors.get(key)
+        if not a:
+            continue
+        x[f"anchor-{key}"] = {"u": f"works/papers/{key}.html", "t": f"{short} 精读", "e": (a.get("citation") or {}).get("title", ""),
+                              "m": "Papers · 论文精读", "s": lead(a.get("tldr_zh"), 120)}
+    if (ctx["registry"].get("compare") or {}).get("rows"):
+        x["anchor-all"] = {"u": "works/papers/deep-reads.html", "t": f"{len(shorts)} 篇精读论文：对照与演进", "e": "", "m": "Papers",
+                           "s": first_sentence(ctx["registry"]["compare"].get("lede"), 100)}
     x["anchor-cmp"] = {"u": "works/papers/compare.html", "t": "Quark 与 Ha et al.：对比与互补", "e": "", "m": "Papers",
                        "s": first_sentence((anchors.get("compare") or {}).get("philosophy_zh"), 100)}
     x["summary"] = {"u": "works/papers/summary.html", "t": "调研摘要", "e": "Survey summary", "m": "Papers",
@@ -549,20 +572,31 @@ def paper_page(key, a, xref):
 
 
 def papers_routes(ctx, xref):
-    survey = ctx["survey"]
+    survey, reg = ctx["survey"], ctx["registry"]
     anchors, synth = survey.get("anchors") or {}, survey.get("synth") or {}
+    keys = [k for k in paper_short(ctx) if f"anchor-{k}" in xref]
+    venue = {p["key"]: p.get("venue", "") for p in reg["papers"]}
     crumbs = [["Works", ""], ["Papers", "works/papers/index.html"]]
-    index = route("works/papers/index.html", "works", "works/papers/index.html", "重点论文与论文库",
-                  page("anchors", "重点论文与论文库", [TOC([{"items": key_items(["anchor-quark", "anchor-ha", "anchor-cmp", "summary", "papers"], xref)}])],
-                       sub="Papers", lede="两篇重点论文的研究视角精读：精确数字、设计选择、局限与谱系，以及两者的对比。想从零读懂，先看 Walkthrough 里的导读长文。"),
+    groups = []
+    for g in reg["groups"]:
+        ks = [f"anchor-{p['key']}" for p in reg["papers"] if p["group"] == g["id"] and f"anchor-{p['key']}" in xref]
+        if ks:
+            groups.append({"h": g["h"], "lede": g.get("lede", ""), "items": key_items(ks, xref, lambda k: venue.get(k[7:], ""))})
+    groups.append({"h": "对照、调研摘要与论文库", "items": key_items(["anchor-all", "anchor-cmp", "summary", "papers"], xref)})
+    index = route("works/papers/index.html", "works", "works/papers/index.html", ctx["section_title"]["anchors"],
+                  page("anchors", ctx["section_title"]["anchors"], [TOC(groups)], sub="Papers", meta=[f"{len(keys)} 篇精读"],
+                       lede=f"{len(keys)} 篇论文的研究视角精读：精确数字、设计选择、局限与谱系，按技术路线分成四组；另有 {len(keys)} 篇的对照表、"
+                            "Quark 与 Ha et al. 的两两对比、调研摘要和可筛选的论文库。想从零读懂一篇论文，先看 Walkthrough 里对应的导读长文。"),
                   [["Works", ""], ["Papers", ""]], ctx["page_desc"]["anchors"])
     out = []
-    for key in ("quark", "ha"):
+    for key in keys:
         a = anchors.get(key) or {}
         body, meta = paper_page(key, a, xref)
         out.append(route(f"works/papers/{key}.html", "works", "works/papers/index.html", xref[f"anchor-{key}"]["t"],
                          page(f"anchor-{key}", xref[f"anchor-{key}"]["t"], body, sub=(a.get("citation") or {}).get("title", ""),
                               meta=meta, epigraph=a.get("tldr_zh", "")), crumbs, xref[f"anchor-{key}"]["s"]))
+    if "anchor-all" in xref:
+        out.append(deep_reads_route(ctx, xref, keys, crumbs))
     cmp_ = anchors.get("compare") or {}
     body = [SEC("逐项对比", "table"), TABLE(["维度", "Quark", "Ha et al."], [[r.get("dimension", ""), r.get("quark", ""), r.get("ha", "")] for r in cmp_.get("comparison_table", [])], wide=True),
             SEC("两种设计哲学", "philosophy"), P(cmp_.get("philosophy_zh")),
@@ -583,6 +617,27 @@ def papers_routes(ctx, xref):
     out.append(db)
     chain(out, {"u": "works/papers/index.html", "t": "Papers 目录"})
     return [index] + out
+
+
+def deep_reads_route(ctx, xref, keys, crumbs):
+    """All deep-read papers side by side: one row per paper, then how they relate and a reading order."""
+    cmp_ = ctx["registry"]["compare"]
+    cols = cmp_.get("columns", [])
+    short = paper_short(ctx)
+    rows = [[{"k": f"anchor-{r['key']}", "t": short.get(r["key"], r["key"])}] + [r.get("cells", {}).get(c["id"], "") for c in cols]
+            for r in cmp_.get("rows", []) if f"anchor-{r['key']}" in xref]
+    body = [SEC("逐篇对照", "table"), TABLE(["论文"] + [c["h"] for c in cols], rows, wide=True)]
+    for sec in cmp_.get("sections", []):
+        body += [SEC(sec.get("h"), sec.get("id")), P(sec.get("t")), UL(sec.get("items"))]
+    order = cmp_.get("reading_order", [])
+    if order:
+        body += [SEC("建议的阅读顺序", "order"),
+                 REFS([{"left": str(i), "k": f"guide-{o['key']}" if f"guide-{o['key']}" in xref else f"anchor-{o['key']}", "gloss": o.get("why_zh", "")}
+                       for i, o in enumerate(order, 1)])]
+    return route("works/papers/deep-reads.html", "works", "works/papers/index.html", xref["anchor-all"]["t"],
+                 page("anchor-all", xref["anchor-all"]["t"], body, sub="Deep reads side by side", lede=cmp_.get("lede", ""),
+                      meta=[f"{len(keys)} 篇"]),
+                 crumbs, xref["anchor-all"]["s"])
 
 
 def walk_step(anchor, s, xref):
@@ -608,7 +663,7 @@ def walk_part_body(field, items, xref):
     if field == "exercises":
         out = []
         for x in items:
-            need = links([f"concept-{c}" for c in x.get("concept_ids", [])], xref)
+            need = links([f"concept-{c}" for c in x.get("concept_ids", [])] + [f"adv-{a}" for a in x.get("adv_ids", [])], xref)
             out += [H3(x.get("title_zh"), tag=x.get("level", "")), P(x.get("task_zh"), mn=note("概念", links=need) if need else None),
                     P(x.get("expected_zh"), label="预期结果"), P(x.get("hint_zh"), label="提示")]
         return out
@@ -618,25 +673,36 @@ def walk_part_body(field, items, xref):
 
 
 def walkthrough_routes(ctx, xref):
-    guided = ctx["learn"].get("guided") or {}
-    groups = [{"h": xref[f"guide-{a}"]["t"], "k": f"guide-{a}",
-               "items": key_items([f"guide-{a}"] + [f"wpart-{a}-{s}" for s, _, _ in WALK_PARTS], xref)} for a in ("quark", "ha") if a in guided]
+    guided, reg, shorts = ctx["learn"].get("guided") or {}, ctx["registry"], paper_short(ctx)
+    keys = [k for k in shorts if k in guided]
+    steps_of = {k: len(guided[k].get("walkthrough", [])) for k in keys}
+    groups = []
+    for g in reg["groups"]:
+        ks = [f"guide-{p['key']}" for p in reg["papers"] if p["group"] == g["id"] and p["key"] in guided]
+        if ks:
+            groups.append({"h": g["h"], "lede": g.get("lede", ""),
+                           "items": key_items(ks, xref, lambda k: f"{steps_of[k[6:]]} 步 · 6 篇配套")})
     index = route("works/walkthrough/index.html", "works", "works/walkthrough/index.html", "精读导读",
-                  page("guided", "精读导读", [TOC(groups)], sub="Walkthrough", lede=ctx["overview"]["ledes"].get("guided") or ctx["meta"].get("guided_lede", "")),
+                  page("guided", "精读导读", [TOC(groups)], sub="Walkthrough", meta=[f"{len(keys)} 篇导读 · {sum(steps_of.values())} 步"],
+                       lede=ctx["overview"]["ledes"].get("guided") or ctx["meta"].get("guided_lede", "")),
                   [["Works", ""], ["Walkthrough", ""]], ctx["page_desc"]["guided"])
-    out = [index]
+    out, longs = [index], []
     anchors = ctx["survey"].get("anchors") or {}
-    for a in ("quark", "ha"):
-        g = guided.get(a)
-        if not g:
-            continue
-        short, steps = ANCHOR_SHORT[a], g.get("walkthrough", [])
+    for a in keys:
+        g = guided[a]
+        short, steps = shorts[a], g.get("walkthrough", [])
         before = REFS([{"k": f"concept-{b['concept_id']}", "gloss": b.get("why_zh", "")} for b in g.get("before_you_read", [])
                        if f"concept-{b['concept_id']}" in xref])
+        diagram = None
+        if g.get("diagram"):
+            diagram = {"b": "slot", "name": "diagram", "which": a, "label": f"{short} 流程图", "spec": layout_diagram(g["diagram"])}
+        elif a in LEGACY_PAPERS:
+            diagram = {"b": "slot", "name": "diagram", "which": a}
         body = [SEC(None, "story"), {"b": "mtoc", "items": [{"u": f"#walk-{a}-{s['id']}", "t": f"{s['id'].upper()} {s.get('title_zh', '')}"} for s in steps]},
-                P(g.get("story_zh")),
-                SEC("流水线", "pipeline"), P("点击方框跳到对应步骤。"), {"b": "slot", "name": "diagram", "which": a},
-                SEC("读之前先掌握", "before"), before]
+                P(g.get("story_zh"))]
+        if diagram:
+            body += [SEC("流水线", "pipeline"), P("点击方框跳到对应步骤。"), diagram]
+        body += [SEC("读之前先掌握", "before"), before]
         body += [b for s in steps for b in walk_step(a, s, xref)]
         body += [SEC("配套文章", "parts"), TOC([{"items": key_items([f"wpart-{a}-{s}" for s, _, _ in WALK_PARTS], xref)}])]
         cit = (anchors.get(a) or {}).get("citation") or {}
@@ -644,7 +710,8 @@ def walkthrough_routes(ctx, xref):
         long_r = route(f"works/walkthrough/{a}.html", "works", "works/walkthrough/index.html", xref[f"guide-{a}"]["t"],
                        page(f"guide-{a}", xref[f"guide-{a}"]["t"], body, sub=cit.get("title", ""),
                             meta=[f"{len(steps)} 步", {"k": f"anchor-{a}", "t": f"{short} 精读"}], mtoc=True),
-                       crumbs, xref[f"guide-{a}"]["s"], scripts=["diagram.js"])
+                       crumbs, xref[f"guide-{a}"]["s"], scripts=["diagram.js"] if diagram else [])
+        longs.append(long_r)
         parts = []
         for suffix, title, field in WALK_PARTS:
             key = f"wpart-{a}-{suffix}"
@@ -654,7 +721,74 @@ def walkthrough_routes(ctx, xref):
                                crumbs + [[f"{short} 导读", f"works/walkthrough/{a}.html"]], xref[key]["s"]))
         chain(parts, {"u": f"works/walkthrough/{a}.html", "t": f"{short} 导读"})
         out += [long_r] + parts
+    chain(longs, {"u": "works/walkthrough/index.html", "t": "Walkthrough 目录"})
     return out
+
+
+def layout_diagram(d):
+    """Grid spec (nodes on columns / rows, edges by node id) -> the absolute layout that diagram.js draws."""
+    nodes = {n["id"]: n for n in d.get("nodes", [])}
+    cols = max([n.get("col", 0) for n in nodes.values()] or [0]) + 1
+    rows = max([n.get("row", 0) for n in nodes.values()] or [0]) + 1
+    loop = d.get("loop")
+    W, NH = 960, 64
+    col_w = (W - 20) / cols
+    nw = round(col_w - 22)
+    row_h = 112 if loop else 100
+    top = 48 if loop else 24
+    pos = {k: (round(10 + n.get("col", 0) * col_w), top + n.get("row", 0) * row_h) for k, n in nodes.items()}
+    # "step", not "k": a "k" anywhere in page data means a link to an element id (refs_of).
+    spec = {"w": W, "nodes": [{"x": pos[k][0], "y": pos[k][1], "w": nw, "h": NH, "t": n.get("t", ""), "s": n.get("s", ""), "step": n.get("k", ""),
+                               **({"data": True} if n.get("data") else {})} for k, n in nodes.items()], "edges": []}
+    for e in d.get("edges", []):
+        if len(e) < 2 or e[0] not in nodes or e[1] not in nodes:
+            continue
+        (ax, ay), (bx, by) = pos[e[0]], pos[e[1]]
+        ca, cb = nodes[e[0]].get("col", 0), nodes[e[1]].get("col", 0)
+        if cb > ca:
+            x1, y1, x2, y2 = ax + nw, ay + NH / 2, bx, by + NH / 2
+            mx = (x1 + x2) / 2
+            path = f"M{x1:.0f},{y1:.0f} L{x2:.0f},{y2:.0f}" if y1 == y2 else f"M{x1:.0f},{y1:.0f} C{mx:.0f},{y1:.0f} {mx:.0f},{y2:.0f} {x2:.0f},{y2:.0f}"
+        elif cb == ca:
+            cx = ax + nw / 2
+            path = f"M{cx:.0f},{ay + NH:.0f} L{cx:.0f},{by:.0f}" if by > ay else f"M{cx:.0f},{ay:.0f} L{cx:.0f},{by + NH:.0f}"
+        else:  # backwards: loop under both nodes and come up into the target
+            x1, y1, x2, y2 = ax + nw / 2, ay + NH, bx + nw / 2, by + NH
+            dip = max(y1, y2) + 30
+            path = f"M{x1:.0f},{y1:.0f} C{x1:.0f},{dip:.0f} {x2:.0f},{dip:.0f} {x2:.0f},{y2:.0f}"
+        spec["edges"].append({"d": path, **({"fb": True} if len(e) > 2 and e[2] == "fb" else {})})
+    h = top + rows * row_h - (row_h - NH) + 24
+    if loop and any(k in nodes for k in loop.get("nodes", [])):
+        inside = [pos[k] for k in loop["nodes"] if k in nodes]
+        x0, y0 = min(p[0] for p in inside) - 12, min(p[1] for p in inside) - 32
+        x1, y1 = max(p[0] for p in inside) + nw + 12, max(p[1] for p in inside) + NH + 26
+        spec["loop"] = {"x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0, "label": loop.get("label", ""), "noteK": loop.get("k", ""), "note": loop.get("note", "")}
+        h = max(h, y1 + 12)
+    src = nodes.get(d.get("out_from"))
+    if src is not None and d.get("out"):
+        sx, sy = pos[d["out_from"]]
+        cx = sx + nw / 2
+        text = d["out"]
+        tw = sum(12 if ord(ch) > 0x2E80 else 6.5 for ch in text)
+        below = [n for n in nodes.values() if n.get("col", 0) == src.get("col", 0) and n.get("row", 0) > src.get("row", 0)]
+        in_loop = "loop" in spec and d["out_from"] in loop.get("nodes", [])
+        if in_loop:  # leave by the right side, clear of the loop's note, and run down past the loop box
+            bottom = max(top + rows * row_h - (row_h - NH), spec["loop"]["y"] + spec["loop"]["h"])
+            gx = min(spec["loop"]["x"] + spec["loop"]["w"] + 8, W - 4)
+            spec["edges"].append({"d": f"M{sx + nw:.0f},{sy + NH / 2:.0f} L{gx:.0f},{sy + NH / 2:.0f} L{gx:.0f},{bottom + 14:.0f}"})
+            ax, ty = gx, bottom + 32
+        elif below:  # a node sits underneath: step aside into the column gap and run down past the last row
+            bottom = top + rows * row_h - (row_h - NH)
+            gx = sx + nw + 11
+            spec["edges"].append({"d": f"M{cx:.0f},{sy + NH:.0f} L{cx:.0f},{sy + NH + 16:.0f} L{gx:.0f},{sy + NH + 16:.0f} L{gx:.0f},{bottom + 18:.0f}"})
+            ax, ty = gx, bottom + 36
+        else:
+            spec["edges"].append({"d": f"M{cx:.0f},{sy + NH:.0f} L{cx:.0f},{sy + NH + 26:.0f}"})
+            ax, ty = cx, sy + NH + 44
+        spec["out"] = {"x": round(min(max(ax, tw / 2 + 6), W - tw / 2 - 6)), "y": round(ty), "text": text}
+        h = max(h, ty + 12)
+    spec["h"] = round(h)
+    return spec
 
 
 def fieldmap_route(ctx, xref):
@@ -843,6 +977,9 @@ def legacy_map(xref) -> dict:
     out = {p: {"": xref[OLD_SECTIONS[p][0]]["u"]} for p in OLD_SECTIONS}
     for key, x in xref.items():
         p = old_page_of(key)
+        m = re.match(r"(?:walk|guide|anchor)-([a-z]+)", key)
+        if m and m.group(1) not in LEGACY_PAPERS + ("cmp",):
+            continue
         if p:
             out[p][key] = x["u"]
     return out

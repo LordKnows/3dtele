@@ -1,0 +1,970 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LVSM 导读 · 3D Telepresence: a field guide</title>
+<meta name="description" content="先看一个具体任务：给你两张同一房间的照片和它们的相机位姿，要求合成两者之间某个新相机位置看到的画面。">
+<meta name="color-scheme" content="light dark">
+
+<script>
+  // Apply a saved light/dark choice before first paint; without one the page follows the system setting.
+  try { var t = localStorage.getItem("atlas-theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) { /* storage unavailable */ }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Serif+SC:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/lxgwwenkai-regular.css">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]] },
+    options: { skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code", "input", "select", "button"] },
+    svg: { fontCache: "global" },
+    startup: {
+      typeset: false,
+      ready: function () {
+        window.MathJax.startup.defaultReady();
+        if (typeof window.__atlasMathReady === "function") window.__atlasMathReady();
+      }
+    }
+  };
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js"></script>
+<style>
+/* Tufte-style layout for Chinese long-form pages, after tufte-css (MIT, (c) 2014 Dave Liepmann; see LICENSE-tufte-css).
+   ET Book: MIT, (c) 2015 Dmitry Krasny, Bonnie Scranton, Edward Tufte (fonts/et-book/LICENSE).
+   ../../ is the page's path to the site root. */
+
+/* ---------- fonts: ET Book for Latin (self-hosted), Noto Serif SC for Chinese text, LXGW WenKai for notes ---------- */
+/* ET Book leaves curly quotes, dashes and ellipses to the Chinese font so they keep full width in Chinese prose,
+   and single guillemets (› ‹), which it lacks. */
+@font-face { font-family: "et-book"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-roman-line-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book"; font-weight: 400; font-style: italic; font-display: swap;
+  src: url("../../fonts/et-book/et-book-display-italic-old-style-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book"; font-weight: 700; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-bold-line-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+/* Notes pair Latin italic with upright Kai (the "italic ↔ 楷体" rule): the italic cut is registered as an upright
+   family so the browser never slants the Chinese glyphs. */
+@font-face { font-family: "et-book-note"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-display-italic-old-style-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book-osf"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-roman-old-style-figures.woff") format("woff"); }
+
+:root {
+  --bg: #fffff8;
+  --ink: #111111;
+  --ink-2: #3c3c36;
+  --muted: #74746a;
+  --rule: #d8d6c8;
+  --rule-2: #b9b6a4;
+  --accent: #a8322d;
+  --serif: "et-book", "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", Palatino, Georgia, serif;
+  --note: "et-book-note", "LXGW WenKai", "Kaiti SC", "STKaiti", "KaiTi", "et-book", serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --side: clamp(12rem, 21vw, 17rem);
+  --gap: 2.75rem;
+  --main: calc(100% - var(--side) - var(--gap));
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161614; --ink: #e2e0d6; --ink-2: #c3c1b6; --muted: #979589; --rule: #34332e; --rule-2: #4d4b44; --accent: #e8836f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161614; --ink: #e2e0d6; --ink-2: #c3c1b6; --muted: #979589; --rule: #34332e; --rule-2: #4d4b44; --accent: #e8836f;
+  color-scheme: dark;
+}
+
+/* ---------- base ---------- */
+* { box-sizing: border-box; }
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--serif); font-size: 1.15625rem; line-height: 1.85;
+  font-kerning: normal; font-variant-numeric: lining-nums;
+  /* Space between Chinese and Latin text where the source has none; squeeze adjacent CJK punctuation
+     (text-spacing-trim applies the fonts' halt / chws features). Browsers without them keep the source spacing. */
+  text-autospace: normal; text-spacing-trim: normal;
+  overflow-wrap: break-word;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+[hidden] { display: none !important; }
+a { color: inherit; text-decoration-line: underline; text-decoration-thickness: 1px; text-underline-offset: .18em; text-decoration-color: var(--rule-2); }
+a:hover { color: var(--accent); text-decoration-color: currentColor; }
+a:focus-visible, button:focus-visible, summary:focus-visible, label:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.skip { position: absolute; left: -999px; top: 0; }
+.skip:focus { left: 1rem; top: .5rem; background: var(--bg); padding: .2rem .5rem; z-index: 60; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+p { margin: 0; }
+p + p { margin-top: .9em; }
+
+/* ---------- top bar ---------- */
+.topbar { border-bottom: 1px solid var(--rule); }
+.bar-in { max-width: 67rem; margin: 0 auto; padding: 0 1.5rem; display: flex; align-items: center; gap: 2.2rem; min-height: 3.1rem; }
+.brand { font-size: 1rem; text-decoration: none; letter-spacing: .02em; white-space: nowrap; }
+.site-nav { flex: 1; }
+.menus { list-style: none; margin: 0; padding: 0; display: flex; gap: 1.6rem; }
+.menu { position: relative; }
+.menu-btn, .theme-btn, .burger {
+  font-family: "et-book", var(--serif); font-variant-caps: all-small-caps; letter-spacing: .08em; font-size: 1.12rem;
+  color: var(--ink-2); line-height: 3.1rem;
+}
+.menu-btn:hover, .theme-btn:hover, .burger:hover, .menu.open > .menu-btn { color: var(--accent); }
+.menu.cur > .menu-btn { color: var(--ink); box-shadow: inset 0 -1px 0 var(--ink); }
+.drop {
+  display: none; position: absolute; left: -1rem; top: 100%; z-index: 40; min-width: 13rem;
+  list-style: none; margin: 0; padding: .45rem 0; background: var(--bg); border: 1px solid var(--rule);
+}
+.menu.open > .drop { display: block; }
+.drop a { display: block; padding: .15rem 1rem; text-decoration: none; font-size: 1.02rem; color: var(--ink-2); white-space: nowrap; }
+.drop a:hover, .drop a:focus-visible { color: var(--accent); }
+.drop a.cur { color: var(--ink); }
+.drop a.cur::before { content: "›"; position: absolute; margin-left: -.7rem; color: var(--accent); }
+.theme-btn { margin-left: auto; }
+.burger { display: none; }
+
+/* ---------- article column + margin ---------- */
+main { display: block; }
+.art { max-width: 67rem; margin: 0 auto; padding: 2.6rem 1.5rem 3rem; counter-reset: sidenote-counter; }
+.art > *, .art section > * { width: var(--main); }
+.art > section { width: 100%; }
+.art .fullwidth { width: 100%; }
+section { padding-top: .6rem; }
+
+.crumbs { font-size: .86rem; color: var(--muted); letter-spacing: .01em; }
+.crumbs a { color: var(--muted); text-decoration: none; }
+.crumbs a:hover { color: var(--accent); }
+.crumbs .sep { margin: 0 .45em; color: var(--rule-2); }
+h1, h2, h3 { font-family: var(--serif); color: var(--ink); text-wrap: balance; }
+h1 { font-size: 2.3rem; font-weight: 400; line-height: 1.3; margin: .9rem 0 0; letter-spacing: .01em; }
+.subtitle { font-family: "et-book", var(--note); font-style: italic; font-size: 1.45rem; line-height: 1.3; color: var(--ink-2); margin-top: .35rem; }
+.meta { font-size: .92rem; color: var(--muted); margin-top: 1.1rem; }
+.meta a { color: var(--muted); }
+h2 { font-size: 1.42rem; font-weight: 600; line-height: 1.4; margin: 2.6rem 0 .9rem; }
+h3 { font-size: 1.12rem; font-weight: 600; line-height: 1.5; margin: 1.8rem 0 .5rem; }
+h3 .used { font-family: var(--note); font-weight: 400; font-size: .86rem; color: var(--muted); margin-left: .6em; }
+
+.epigraph { margin: 2.2rem 0 .6rem; }
+.epigraph blockquote { margin: 0; padding: 0 0 0 1.6rem; border-left: 1px solid var(--rule-2); }
+.epigraph p { font-family: var(--note); font-size: 1.12rem; line-height: 1.85; color: var(--ink-2); }
+
+.art ol, .art ul { margin: .6rem 0 0; padding-left: 1.6em; }
+.art li + li { margin-top: .45rem; }
+li::marker { font-family: "et-book-osf", var(--serif); color: var(--muted); }
+
+/* Equations: display math in the text column, scrolling sideways on narrow screens. */
+.eqs { display: block; }
+.eq + .eq { margin-top: 1.6rem; }
+.math-block { overflow-x: auto; overflow-y: hidden; margin: .4rem 0 .6rem; padding: .2rem 0; font-size: 1rem; }
+.math-block mjx-container { margin: 0 !important; }
+
+/* ---------- side notes & margin notes (floated into the right margin) ---------- */
+.sidenote, .marginnote {
+  float: right; clear: right; position: relative;
+  width: var(--side); margin-right: calc(-1 * (var(--side) + var(--gap))); margin-top: .3rem; margin-bottom: .6rem;
+  font-family: var(--note); font-size: .88rem; line-height: 1.6; color: var(--ink-2); text-align: left;
+  font-style: normal; font-weight: 400; letter-spacing: 0;
+}
+h3 .sidenote { margin-top: .2rem; }
+.sidenote-number { counter-increment: sidenote-counter; }
+.sidenote-number::after, .sidenote::before { font-family: "et-book-osf", var(--serif); position: relative; vertical-align: baseline; }
+.sidenote-number::after { content: counter(sidenote-counter); font-size: .75rem; top: -.55em; left: .08em; color: var(--ink-2); }
+.sidenote::before { content: counter(sidenote-counter) " "; font-size: .8rem; top: -.4em; }
+.note-label { font-family: var(--serif); font-weight: 600; font-size: .82rem; color: var(--muted); margin-right: .5em; }
+.marginnote .note-label { display: block; margin: 0 0 .1rem; }
+input.margin-toggle { display: none; }
+label.sidenote-number { display: inline; cursor: default; }
+label.margin-toggle:not(.sidenote-number) { display: none; }
+
+/* ---------- quiz, further reading, series ---------- */
+.quiz details { margin-top: .3rem; }
+.quiz summary { font-family: var(--note); font-size: .92rem; color: var(--muted); cursor: pointer; list-style: none; display: inline-block; }
+.quiz summary::-webkit-details-marker { display: none; }
+.quiz summary::before { content: "+ "; font-family: "et-book", var(--serif); }
+.quiz details[open] summary::before { content: "− "; }
+.quiz summary:hover { color: var(--accent); }
+.quiz details > p { margin-top: .3rem; padding-left: 1rem; border-left: 1px solid var(--rule); color: var(--ink-2); }
+
+/* Reference lists: a narrow label column (kind / year) and a hanging text column. */
+.art ul.refs { list-style: none; padding-left: 0; }
+.refs li { display: grid; grid-template-columns: 2.8rem minmax(0, 1fr); column-gap: .5rem; line-height: 1.6; }
+.refs li > :not(.kind):not(.yr) { grid-column: 2; }
+.refs .kind, .refs .yr { grid-column: 1; font-family: var(--note); font-size: .86rem; color: var(--muted); padding-top: .12rem; }
+.refs .yr { font-family: "et-book-osf", var(--serif); font-size: .95rem; padding-top: .05rem; }
+.refs .en { font-family: "et-book", var(--serif); font-style: italic; color: var(--muted); font-size: .92rem; line-height: 1.5; }
+.refs .gloss { font-family: var(--note); font-size: .88rem; color: var(--ink-2); margin-top: .1rem; }
+.art .refs li + li { margin-top: .75rem; }
+.art .papers li + li { margin-top: .35rem; }
+/* Without a label column the list is a plain stack (no grid, so nothing can land in a phantom second column). */
+.refs.noleft li { display: block; }
+.refs.wide-kind li { grid-template-columns: 6.2rem minmax(0, 1fr); }
+.refs .used { font-family: var(--note); font-size: .82rem; color: var(--muted); margin-left: .5em; }
+.refs.terms .plain-t { font-weight: 600; }
+.refs.terms .en { display: inline; margin-left: .6em; }
+.timeline li { line-height: 1.7; }
+.art .timeline li + li { margin-top: .4rem; }
+
+/* ---------- blocks: lede, run-in labels, notes ---------- */
+.lede { margin-top: 1.6rem; color: var(--ink-2); }
+.run-in { font-weight: 600; color: var(--ink); }
+p.note { font-family: var(--note); font-size: .9rem; color: var(--muted); margin-top: .1rem; }
+h2 .en, h3 .en { font-family: "et-book", var(--serif); font-style: italic; font-weight: 400; color: var(--muted); margin-left: .6em; font-size: .92em; }
+h2 a, h3 a { text-decoration-color: var(--rule); }
+.quiz-h { font-family: var(--note); font-size: .88rem; color: var(--muted); margin-top: 1.4rem; }
+.quiz-h + ol.quiz { margin-top: .2rem; }
+
+/* Index pages: a table of contents instead of a card grid. */
+.art ol.toc { list-style: none; padding-left: 0; margin-top: .4rem; }
+.art ol.toc > li + li { margin-top: .85rem; }
+.toc-t { line-height: 1.55; }
+.toc-t .en { font-family: "et-book", var(--serif); font-style: italic; color: var(--muted); margin-left: .6em; font-size: .95em; }
+.toc-meta { font-family: var(--note); font-size: .82rem; color: var(--muted); margin-left: .7em; white-space: nowrap; }
+.toc-s { font-family: var(--note); font-size: .9rem; line-height: 1.65; color: var(--ink-2); margin-top: .1rem; }
+.toc-lede { font-family: var(--note); color: var(--ink-2); font-size: .95rem; }
+h2.toc-h, h3.toc-h { margin-bottom: .3rem; }
+
+/* Tables: booktabs rules (top, under the header, bottom), no vertical lines, no fills. */
+.table-wrap { overflow-x: auto; margin: 1rem 0; }
+table.booktabs { border-collapse: collapse; width: 100%; font-size: .9rem; line-height: 1.6; border-top: 1.5px solid var(--ink); border-bottom: 1.5px solid var(--ink); }
+table.booktabs th { text-align: left; font-weight: 600; padding: .45rem .7rem .35rem 0; border-bottom: 1px solid var(--ink); white-space: nowrap; vertical-align: bottom; }
+table.booktabs td { padding: .45rem .9rem .45rem 0; vertical-align: top; border-top: 1px solid var(--rule); }
+table.booktabs tbody tr:first-child td { border-top: 0; }
+table.rank td { white-space: nowrap; font-variant-numeric: tabular-nums; }
+table.rank td:nth-child(2) { white-space: normal; }
+.art table.kv { border-collapse: collapse; margin: .6rem 0; font-size: .95rem; width: auto; }
+table.kv th { text-align: left; font-weight: 400; color: var(--muted); padding: .25rem 1.2rem .25rem 0; vertical-align: top; min-width: 5em; max-width: 12em; font-family: var(--note); }
+table.kv td { padding: .25rem 0; vertical-align: top; }
+
+/* Long articles: the table of contents sits at the top of the margin. */
+/* It sits in a full-width section, so it floats into the margin without a negative offset. */
+details.mtoc {
+  float: right; clear: right; width: var(--side); margin-right: 0; margin-bottom: 1rem;
+  font-family: var(--note); font-size: .86rem; line-height: 1.55; color: var(--ink-2);
+}
+details.mtoc summary { font-family: var(--serif); font-weight: 600; font-size: .82rem; color: var(--muted); list-style: none; cursor: default; }
+details.mtoc summary::-webkit-details-marker { display: none; }
+.art details.mtoc ol { list-style: none; padding: 0; margin: .3rem 0 0; }
+.art details.mtoc li + li { margin-top: .25rem; }
+details.mtoc a { text-decoration: none; }
+details.mtoc a:hover { text-decoration: underline; }
+
+/* Tools: search and filters with underlined inputs. */
+.tool { margin-top: 1rem; }
+.filters { display: flex; flex-wrap: wrap; gap: .6rem 1.6rem; align-items: baseline; font-family: var(--note); font-size: .92rem; color: var(--muted); }
+.filters label { display: inline-flex; gap: .5rem; align-items: baseline; }
+.filters input, .filters select {
+  font: inherit; color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid var(--rule-2); border-radius: 0;
+  padding: .15rem .1rem; min-width: 7rem;
+}
+.filters input[type="search"] { min-width: 14rem; }
+.filters select { max-width: 16rem; }
+.filters input:focus, .filters select:focus { outline: none; border-bottom-color: var(--accent); }
+.filters select option { background: var(--bg); color: var(--ink); }
+.filters .count { margin-left: auto; font-family: var(--mono); font-size: .8rem; }
+table.gl td.en { font-family: "et-book", var(--serif); width: 20%; }
+table.gl .abbr { color: var(--muted); }
+table.gl td.zh { white-space: nowrap; }
+table.gl td.def { color: var(--ink-2); min-width: 20rem; }
+table.gl td.c { font-size: .85rem; min-width: 9rem; padding-right: 0; }
+table.gl tr:target td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+table.db td.y { font-family: "et-book-osf", var(--serif); white-space: nowrap; }
+table.db td.t { min-width: 16rem; }
+table.db td.t small { display: block; color: var(--muted); font-size: .8rem; line-height: 1.45; margin-top: .15rem; }
+table.db td.tags { min-width: 7rem; font-family: var(--note); font-size: .8rem; color: var(--muted); }
+table.db td.tags span { display: block; }
+table.db .tier.milestone { color: var(--ink); font-weight: 600; }
+table.db td.s { min-width: 18rem; color: var(--ink-2); }
+table.db td.n { min-width: 12rem; font-size: .82rem; color: var(--ink-2); }
+
+/* Figures: the pipeline diagram and the timeline of classic papers, drawn in ink with one accent for interaction. */
+figure { margin: 1.4rem 0; }
+svg a { text-decoration: none; }
+.diagram-wrap, .lanes-wrap { position: relative; overflow-x: auto; }
+svg.diagram { width: 100%; min-width: 760px; height: auto; display: block; font-family: var(--note); }
+svg.diagram .dnode rect { fill: var(--bg); stroke: var(--ink-2); stroke-width: 1; }
+svg.diagram .dnode rect.data { stroke-dasharray: 4 3; }
+svg.diagram .dnode:hover rect, svg.diagram .dnode:focus rect { stroke: var(--accent); stroke-width: 1.5; }
+svg.diagram .dnode:focus { outline: none; }
+svg.diagram text { fill: var(--ink); }
+svg.diagram text.k { font-family: var(--mono); font-size: 10px; fill: var(--muted); }
+svg.diagram text.t { font-family: var(--serif); font-size: 13px; font-weight: 600; }
+svg.diagram text.s { font-size: 11px; fill: var(--ink-2); }
+svg.diagram .dedge { fill: none; stroke: var(--ink-2); stroke-width: 1; }
+svg.diagram .dedge.fb { stroke-dasharray: 4 3; }
+svg.diagram .dhead { fill: var(--ink-2); }
+svg.diagram .dloop { fill: none; stroke: var(--rule-2); stroke-dasharray: 2 3; }
+svg.diagram .dlabel { font-size: 12px; fill: var(--muted); }
+svg.diagram .dnote { font-size: 11px; fill: var(--muted); }
+svg.diagram a.dnode:hover .dnote { fill: var(--accent); }
+svg.lanes { width: 100%; min-width: 720px; height: auto; display: block; font-family: var(--note); }
+svg.lanes .grid { stroke: var(--rule); stroke-width: 1; }
+svg.lanes .axis { font-family: "et-book-osf", var(--serif); font-size: 12px; fill: var(--muted); }
+svg.lanes .lane-l { font-size: 12px; fill: var(--ink-2); }
+svg.lanes .brk { stroke: var(--muted); fill: none; }
+svg.lanes .hit { fill: transparent; }
+svg .dot { fill: var(--ink); }
+svg .dot.hollow { fill: var(--bg); stroke: var(--ink-2); stroke-width: 1.2; }
+svg.lanes a.m:hover .dot, svg.lanes a.m:focus .dot { fill: var(--accent); stroke: var(--accent); }
+svg.lanes a.m:focus { outline: none; }
+.vtip { position: absolute; z-index: 20; max-width: 20rem; padding: .45rem .7rem; background: var(--bg); border: 1px solid var(--rule-2); font-family: var(--note); font-size: .82rem; line-height: 1.5; pointer-events: none; }
+.vtip b { display: block; font-family: "et-book", var(--serif); font-weight: 400; font-size: .92rem; }
+.vtip small { display: block; color: var(--muted); }
+.vtip span { color: var(--accent); }
+figcaption { font-family: var(--note); font-size: .85rem; color: var(--muted); margin-top: .4rem; }
+figcaption svg { vertical-align: -1px; }
+
+.series { display: grid; grid-template-columns: 1fr auto 1fr; gap: 1rem; align-items: end; margin-top: 3.2rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: .98rem; }
+.series small { display: block; font-family: var(--note); font-size: .8rem; color: var(--muted); }
+.series .up { text-align: center; font-size: .88rem; }
+.series .up a { color: var(--muted); }
+.series .next { text-align: right; }
+
+.site-foot { max-width: 67rem; margin: 0 auto; padding: 1.2rem 1.5rem 2.5rem; font-size: .82rem; color: var(--muted); }
+.site-foot a { color: var(--muted); text-decoration: none; }
+
+/* ---------- hover preview ---------- */
+.xtip {
+  position: absolute; z-index: 50; max-width: min(22rem, calc(100vw - 16px)); padding: .55rem .8rem .6rem;
+  background: var(--bg); border: 1px solid var(--rule-2); color: var(--ink);
+  font-family: var(--note); font-size: .88rem; line-height: 1.6; pointer-events: none;
+}
+.xt-m { font-size: .76rem; color: var(--muted); }
+.xt-t { font-family: var(--serif); font-weight: 600; font-size: .95rem; line-height: 1.45; margin-top: .1rem; }
+.xt-e { font-family: "et-book", var(--serif); font-style: italic; color: var(--ink-2); line-height: 1.4; }
+.xt-s { margin-top: .35rem; color: var(--ink-2); }
+
+/* ---------- narrow screens: one column; notes fold behind their number or ⊕ ---------- */
+@media (max-width: 760px) {
+  body { font-size: 1.0625rem; line-height: 1.8; }
+  .bar-in { gap: 1rem; padding: 0 1rem; flex-wrap: wrap; }
+  .site-nav { order: 5; flex-basis: 100%; display: none; }
+  .topbar.nav-open .site-nav { display: block; }
+  .menus { flex-direction: column; gap: 0; padding-bottom: .6rem; }
+  .menu-btn { line-height: 2.4rem; width: 100%; text-align: left; }
+  .menu-btn::after { content: " +"; }
+  .menu.open > .menu-btn::after { content: " −"; }
+  .menu.cur > .menu-btn { box-shadow: none; }
+  .drop { position: static; border: 0; padding: 0 0 .4rem .9rem; min-width: 0; }
+  .drop a { padding: .2rem 0; white-space: normal; }
+  .burger { display: inline; }
+  .theme-btn { margin-left: auto; }
+  .art { padding: 1.6rem 1rem 2.4rem; }
+  .art > *, .art section > * { width: 100%; }
+  h1 { font-size: 1.85rem; }
+  .subtitle { font-size: 1.22rem; }
+  .epigraph blockquote { padding-left: 1rem; }
+  .epigraph p { font-size: 1.05rem; }
+  label.margin-toggle:not(.sidenote-number) { display: inline; cursor: pointer; color: var(--muted); font-family: "et-book", var(--serif); padding: 0 .15em; }
+  label.sidenote-number { cursor: pointer; }
+  .sidenote, .marginnote { display: none; }
+  .margin-toggle:checked + .sidenote, .margin-toggle:checked + .marginnote {
+    display: block; float: left; clear: both; width: 100%; margin: .6rem 0; padding-left: .8rem; border-left: 1px solid var(--rule-2);
+  }
+  .series { grid-template-columns: 1fr 1fr; }
+  .series .up { display: none; }
+  details.mtoc { float: none; width: 100%; margin: 0 0 1.2rem; padding-left: .8rem; border-left: 1px solid var(--rule-2); }
+  details.mtoc summary { cursor: pointer; }
+  details.mtoc summary::after { content: " +"; }
+  details.mtoc[open] summary::after { content: " −"; }
+  .filters { flex-direction: column; align-items: stretch; gap: .5rem; }
+  .filters label { justify-content: space-between; }
+  .filters input[type="search"], .filters input, .filters select { min-width: 0; flex: 1; }
+  .filters .count { margin-left: 0; }
+  .toc-meta { display: block; margin-left: 0; }
+  table.kv, table.kv tbody, table.kv tr, table.kv th, table.kv td { display: block; max-width: none; }
+  table.kv th { padding: .5rem 0 0; }
+}
+@media print {
+  .topbar, .site-foot, .series { display: none; }
+}
+
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<header class="topbar" id="topbar"></header>
+<main id="main"><article class="art"></article></main>
+<footer class="site-foot" id="site-foot"></footer>
+<script type="application/json" id="data">{"site": {"brand": "3D Telepresence: a field guide", "root": "../../", "path": "works/walkthrough/lvsm.html", "nav": [{"key": "overview", "label": "Overview", "items": [["Introduction", "index.html"], ["Methodology", "overview/methodology.html"], ["How to use", "overview/how-to-use.html"]]}, {"key": "basics", "label": "Basics", "items": [["Routes", "basics/routes/index.html"], ["Foundations", "basics/foundations/index.html"], ["Advanced topics", "basics/advanced/index.html"], ["Classics", "basics/classics/index.html"], ["Glossary", "basics/glossary.html"]]}, {"key": "works", "label": "Works", "items": [["Papers", "works/papers/index.html"], ["Walkthrough", "works/walkthrough/index.html"], ["Field map", "works/field-map.html"], ["Sub areas", "works/areas/index.html"]]}, {"key": "future", "label": "Future", "items": [["Directions", "future/index.html"], ["Trends & Challenges", "future/trends.html"]]}], "navCur": "works", "navItem": "works/walkthrough/index.html", "crumbs": [["Works", ""], ["Walkthrough", "works/walkthrough/index.html"]], "date": "2026-09-28"}, "xref": {"adv-a-diffusion-3d": {"u": "basics/advanced/a-diffusion-3d.html", "t": "扩散模型与三维/新视角生成先验", "e": "Diffusion models as 3D / novel-view priors", "m": "Advanced topics", "s": "为什么新视角合成需要“生成”？"}, "adv-a-ff-3dgs": {"u": "basics/advanced/a-ff-3dgs.html", "t": "前馈 3DGS 与大重建模型", "e": "Feed-forward 3DGS & large reconstruction models", "m": "Advanced topics", "s": "3DGS（见 n-3dgs）渲染极快，但每个场景都要从 SfM 点出发优化几分钟到几十分钟，没法用在每帧都在变的临场通话中。"}, "adv-a-generalizable-ibr": {"u": "basics/advanced/a-generalizable-ibr.html", "t": "可泛化 NeRF 与学习式 IBR", "e": "Generalizable NeRF & learned IBR", "m": "Advanced topics", "s": "逐场景的 NeRF 需要几十上百张图和数小时的优化；传统 IBR（如 ULR，见 i-blending）速度快，但依赖稠密的视角或准确的代理几何。"}, "adv-a-geometry-free": {"u": "basics/advanced/a-geometry-free.html", "t": "无几何 Transformer 渲染器", "e": "Geometry-free transformer renderers", "m": "Advanced topics", "s": "前三个专题的方法都显式地建模几何，用的是平面扫描、深度、体渲染或高斯光栅化。"}, "adv-a-telepresence-sys": {"u": "basics/advanced/a-telepresence-sys.html", "t": "三维临场系统设计", "e": "3D telepresence system design", "m": "Advanced topics", "s": "三维临场（3D telepresence）要把远端参与者的外观和几何实时“搬”过来，并按本地观看者双眼的位置正确显示，使观看者获得立体视差、运动视差和目光接触。"}, "adv-a-temporal-video": {"u": "basics/advanced/a-temporal-video.html", "t": "视频时间一致性方法", "e": "Temporal consistency methods for video", "m": "Advanced topics", "s": "很多视频处理都是逐帧做的：逐帧估计深度、逐帧做新视角合成、逐帧风格化。"}, "anchor-lvsm": {"u": "works/papers/lvsm.html", "t": "LVSM 精读", "e": "LVSM: A Large View Synthesis Model with Minimal 3D Inductive Bias", "m": "Papers · 论文精读", "s": "LVSM 把新视角合成（NVS）当成纯粹的序列到序列问题：不建 NeRF、3DGS 或代价体，也不做极线采样，只给每个像素算一条 6 维 Plücker 射线，与 RGB 一起切成 8×8 的 patch token，再用一个大 Tran…"}, "concept-f-image": {"u": "basics/foundations/f-image.html", "t": "数字图像：颜色、采样、插值与金字塔", "e": "Digital images: color, sampling, interpolation & pyramids", "m": "Foundations · M1 数学与图像基础", "s": "图像是对连续光场的离散采样。", "n": "数字图像"}, "concept-f-linalg": {"u": "basics/foundations/f-linalg.html", "t": "线性代数、齐次坐标与刚体变换", "e": "Linear algebra, homogeneous coordinates & rigid transforms", "m": "Foundations · M1 数学与图像基础", "s": "把一个像素从一台相机“搬”到另一台相机，本质上是一串矩阵乘法加一次透视除法：齐次坐标让平移和透视投影都能写成矩阵运算，SE(3) 位姿 [R|t] 描述相机的位置和朝向，SVD 和最小二乘则是从带噪数据里解出这些矩阵的通用工具。", "n": "线性代数、齐次坐标与刚体变换"}, "concept-f-optim": {"u": "basics/foundations/f-optim.html", "t": "优化、鲁棒估计与梯度下降", "e": "Optimization, robust estimation & gradient descent", "m": "Foundations · M1 数学与图像基础", "s": "相机标定、光束法平差、立体匹配、网络训练，乃至 Quark 的网络结构本身，做的都是同一件事：定义一个误差，然后沿着让误差变小的方向迭代。", "n": "优化、鲁棒估计与梯度下降"}, "concept-g-epipolar": {"u": "basics/foundations/g-epipolar.html", "t": "对极几何、三角化与单应", "e": "Epipolar geometry, triangulation & homography", "m": "Foundations · M2 相机与多视几何", "s": "两台相机看同一个点时，该点在第二张图中只可能出现在一条极线上（x'ᵀF x = 0）；有了对应点就能三角化出 3D 位置；空间中的一个平面在两张图之间诱导的映射是一个 3×3 单应。", "n": "对极几何、三角化与单应"}, "concept-g-pinhole": {"u": "basics/foundations/g-pinhole.html", "t": "针孔相机模型：内参、外参、投影与反投影", "e": "Pinhole camera: intrinsics, extrinsics, projection & unprojection", "m": "Foundations · M2 相机与多视几何", "s": "针孔模型先用外参 [R|t] 把世界点变到相机坐标系，再用内参 K 投到像素；反过来，只有像素时只能确定一条射线，像素加上深度才能唯一确定一个 3D 点。", "n": "针孔相机模型"}, "concept-g-rig": {"u": "basics/foundations/g-rig.html", "t": "多相机阵列：标定、同步与卷帘快门", "e": "Multi-camera rigs: calibration, synchronization & rolling shutter", "m": "Foundations · M2 相机与多视几何", "s": "多相机阵列需要让所有相机在三方面对齐：几何上（内外参）、颜色上（曝光、白平衡、响应曲线）、时间上（同一时刻曝光）。", "n": "多相机阵列"}, "concept-g-sfm": {"u": "basics/foundations/g-sfm.html", "t": "运动恢复结构（SfM）与光束法平差", "e": "Structure-from-Motion & bundle adjustment", "m": "Foundations · M2 相机与多视几何", "s": "SfM 只从一组照片出发，同时求出每台相机的内外参和一组稀疏 3D 点：先做特征匹配和几何验证，再逐步注册相机、三角化新点，并反复用光束法平差（BA）最小化重投影误差。", "n": "运动恢复结构（SfM）与光束法平差"}, "concept-i-blending": {"u": "basics/foundations/i-blending.html", "t": "视角相关纹理映射与混合权重（ULR）", "e": "View-dependent texture mapping & blending weights (ULR)", "m": "Foundations · M5 基于图像的渲染（IBR）", "s": "当多个输入相机都看到目标像素对应的表面点时，混合权重决定每个相机贡献多少。", "n": "视角相关纹理映射与混合权重（ULR）"}, "concept-l-attention": {"u": "basics/foundations/l-attention.html", "t": "注意力机制与 Transformer", "e": "Attention & Transformers", "m": "Foundations · M6 深度学习基础（3D 视觉视角）", "s": "注意力用 query 与一组 key 的缩放点积经 softmax 得到权重，再对 value 做加权平均。", "n": "注意力机制与 Transformer"}, "concept-l-cnn": {"u": "basics/foundations/l-cnn.html", "t": "卷积网络、残差块与 U-Net", "e": "CNNs, residual blocks & U-Net", "m": "Foundations · M6 深度学习基础（3D 视觉视角）", "s": "卷积用共享的小核在图像上滑动，提取局部特征；残差连接让深层网络容易训练；U-Net 用编码器下采样、解码器上采样和同尺度跳连，同时获得大感受野和像素级精度。", "n": "卷积网络、残差块与 U-Net"}, "concept-l-diffusion": {"u": "basics/foundations/l-diffusion.html", "t": "扩散模型入门", "e": "Diffusion models primer", "m": "Foundations · M6 深度学习基础（3D 视觉视角）", "s": "扩散模型先把数据逐步加噪成纯高斯噪声，再训练网络一步步去噪，从而学会从复杂分布中采样。", "n": "扩散模型入门"}, "concept-l-encoding": {"u": "basics/foundations/l-encoding.html", "t": "位置编码、傅里叶特征与射线编码", "e": "Positional encoding, Fourier features & ray encodings", "m": "Foundations · M6 深度学习基础（3D 视觉视角）", "s": "神经网络对低维坐标输入天生偏爱平滑函数，这叫频谱偏置。", "n": "位置编码、傅里叶特征与射线编码"}, "concept-l-loss": {"u": "basics/foundations/l-loss.html", "t": "损失函数与训练实践", "e": "Losses & training practice", "m": "Foundations · M6 深度学习基础（3D 视觉视角）", "s": "损失函数决定网络眼中什么是“好图像”：L2 偏向均值（结果偏糊），L1 偏向中位数，SSIM 关注局部结构，LPIPS 用深度特征度量感知差异。", "n": "损失函数与训练实践"}, "concept-n-3dgs": {"u": "basics/foundations/n-3dgs.html", "t": "3D Gaussian Splatting（3D 高斯溅射）", "e": "3D Gaussian Splatting", "m": "Foundations · M7 神经渲染核心", "s": "3DGS 用数百万个带颜色、不透明度和各向异性协方差的 3D 高斯表示场景。", "n": "3D Gaussian Splatting（3D 高斯溅射）"}, "concept-n-generalizable": {"u": "basics/foundations/n-generalizable.html", "t": "可泛化 / 前馈式新视角合成", "e": "Generalizable / feed-forward novel view synthesis", "m": "Foundations · M7 神经渲染核心", "s": "可泛化（前馈式）新视角合成先在大量场景上训练一个网络，推理时只做一次前向：输入几张已标定的邻近视图，直接输出新视角图像，或者输出一个可以渲染的中间表示，全程不做逐场景优化。", "n": "可泛化 / 前馈式新视角合成"}, "concept-r-appearance": {"u": "basics/foundations/r-appearance.html", "t": "反射模型、视角相关外观与光照", "e": "Reflectance, view-dependent appearance & lighting", "m": "Foundations · M4 图形学与渲染基础", "s": "表面颜色等于入射光乘以材质的反射分布（BRDF），再在半球上积分。", "n": "反射模型、视角相关外观与光照"}, "concept-v-metrics": {"u": "basics/foundations/v-metrics.html", "t": "图像与视频质量指标", "e": "Image & video quality metrics", "m": "Foundations · M8 视频、时间一致性、评测与系统", "s": "单帧指标（PSNR、SSIM、LPIPS、FLIP）回答“这一帧像不像真值”；时间与视角指标（warping error、tOF、TCC、STED、SDT/SDV、EPI）回答“误差随时间、随视点是否稳定”。", "n": "图像与视频质量指标"}, "guide-depthsplat": {"u": "works/walkthrough/depthsplat.html", "t": "DepthSplat 导读", "e": "", "m": "Walkthrough", "s": "设想手里有同一个房间的两张照片，拍摄位置相差一两米，相机位姿已经由 SLAM 算好。"}, "wpart-lvsm-exercises": {"u": "works/walkthrough/lvsm-exercises.html", "t": "LVSM · 练习", "e": "", "m": "Walkthrough · LVSM", "s": "6 道由浅入深的动手练习。"}, "wpart-lvsm-experiments": {"u": "works/walkthrough/lvsm-experiments.html", "t": "LVSM · 阅读实验", "e": "", "m": "Walkthrough · LVSM", "s": "论文里 8 组实验分别怎么读、真正说明了什么。"}, "wpart-lvsm-faq": {"u": "works/walkthrough/lvsm-faq.html", "t": "LVSM · 常见问题", "e": "", "m": "Walkthrough · LVSM", "s": "初读时最常问的 11 个问题。"}, "wpart-lvsm-glossary": {"u": "works/walkthrough/lvsm-glossary.html", "t": "LVSM · 论文术语", "e": "", "m": "Walkthrough · LVSM", "s": "读这篇论文会遇到的 29 个术语。"}, "wpart-lvsm-tensor-trace": {"u": "works/walkthrough/lvsm-tensor-trace.html", "t": "LVSM · 张量追踪", "e": "", "m": "Walkthrough · LVSM", "s": "逐阶段列出 16 个关键张量的形状与含义。"}, "wpart-lvsm-tradeoffs": {"u": "works/walkthrough/lvsm-tradeoffs.html", "t": "LVSM · 设计权衡", "e": "", "m": "Walkthrough · LVSM", "s": "7 个关键设计选择：换来了什么，付出了什么。"}}, "page": {"id": "guide-lvsm", "head": {"title": "LVSM 导读", "sub": "LVSM: A Large View Synthesis Model with Minimal 3D Inductive Bias", "meta": ["12 步", {"k": "anchor-lvsm", "t": "LVSM 精读"}], "epigraph": "", "prereqs": [], "lede": "", "minutes": 43}, "body": [{"b": "sec", "h": null, "id": "story"}, {"b": "mtoc", "items": [{"u": "#walk-lvsm-lv1", "t": "LV1 问题设定：N 张带位姿图像 + 目标位姿 → 目标像素，中间不建任何 3D 表示"}, {"u": "#walk-lvsm-lv2", "t": "LV2 逐像素 Plücker 射线 (o×d, d)，以及依赖目标位姿的坐标规范化（scene_scale_factor=1.35）"}, {"u": "#walk-lvsm-lv3", "t": "LV3 Patchify：8×8 块、9 通道 → 576 维 → 768 维 token，每张 256² 图 1024 个 token，不加位置编码"}, {"u": "#walk-lvsm-lv4", "t": "LV4 Decoder-only：(N+1)·1024 个 token 做 24 层全自注意力，输入 token 无法跨目标视角复用"}, {"u": "#walk-lvsm-lv5", "t": "LV5 Encoder-decoder：3072 个可学习 latent 当场景表示，12 层编码 + 12 层解码，解码时 latent 与目标 token 一起更新"}, {"u": "#walk-lvsm-lv6", "t": "LV6 Transformer 块与稳定训练：pre-LN、QK-Norm（每头 RMSNorm）、无 bias、按深度缩放的初始化"}, {"u": "#walk-lvsm-lv7", "t": "LV7 像素头：LayerNorm → Linear(768→192) → Sigmoid，每个 token 直接写出 8×8×3 个像素"}, {"u": "#walk-lvsm-lv8", "t": "LV8 损失：1.0·MSE + 0.5·VGG-19 感知损失（代码默认，LPIPS 权重为 0）"}, {"u": "#walk-lvsm-lv9", "t": "LV9 训练数据与视角采样：RE10K 帧间隔 25–192、两端作输入、8 帧中随机抽 6 个目标（含输入帧本身）"}, {"u": "#walk-lvsm-lv10", "t": "LV10 训练规模：64×A100、总 batch 512、100K 步、峰值学习率 4e-4；单卡小模型仍超过 MVSplat"}, {"u": "#walk-lvsm-lv11", "t": "LV11 推理与评测：6474 个内插场景、零样本改变输入视角数、渲染速度与实时临场的距离"}, {"u": "#walk-lvsm-lv12", "t": "LV12 如何读实验与失败模式：主表、物体级、零样本曲线、小算力、外推与未见区域伪影"}]}, {"b": "p", "t": "先看一个具体任务：给你两张同一房间的照片和它们的相机位姿，要求合成两者之间某个新相机位置看到的画面。这是 RealEstate10K 上常用的两视角新视角合成（NVS）设定。2023–2024 年，这个任务的主流做法都在“显式 3D”上下功夫：pixelSplat 用极线 Transformer 预测每个像素的深度分布，再放出 3D 高斯；MVSplat 建平面扫描代价体找深度；GS-LRM 用大 Transformer 为每个像素回归高斯参数。更早的 IBRNet、ENeRF 则沿目标射线采样、到源图像里取颜色。它们的网络输出都要经过手写的 3D 表示和渲染方程，才变成像素。\n\nLVSM 的作者问了一个很直接的问题：这些 3D 结构真的必要吗？手写的表示和渲染方程是一种很强的归纳偏置。数据少时，它帮助网络少走弯路；但它也规定了网络“只能这样画图”，反光、半透明、细小结构都得被硬塞进这套语言里。语言模型和图像模型的经验是：数据和算力足够时，偏置越少的通用 Transformer 往往走得越远。LVSM 把这个思路搬到了 NVS。\n\n于是它只保留了最少的几何信息：每个像素对应一条相机射线，用 6 维 Plücker 坐标 (o×d, d) 描述。输入图像的 RGB 与射线拼成 9 通道，目标视角没有图像，只有 6 通道的射线图。两者都按 8×8 切成 patch，线性投影成 768 维 token，256×256 的一张图得到 1024 个 token。之后的事情全部交给 Transformer：不加位置编码，不做极线采样，不建代价体，也不输出深度或高斯。网络最后把每个目标 token 直接解码成一块 8×8 的 RGB。网络要自己学会从哪里取信息、怎样处理遮挡、怎样合成颜色。\n\n论文比较了两种组织方式。encoder-decoder 更像传统思路：编码器把输入 token 压进 3072 个可学习的 latent，当作一种“学出来的场景表示”；解码器再用目标射线去查询它。decoder-only 更激进：把输入 token 和目标射线 token 拼成一条序列，直接做 24 层全自注意力，中间没有任何场景表示。结果是更激进的那个更好：RealEstate10K 256² 上 decoder-only 为 29.67 dB，encoder-decoder 为 28.58 dB，而最强的 3DGS 方法 GS-LRM 为 28.10 dB。物体级 512 分辨率下，decoder-only 在 ABO 上比 GS-LRM 高 3.0 dB；在 GSO 上正文写高 2.8 dB，但按表中数字只高 1.8 dB。它还能零样本改变输入张数：用 4 张训练的物体模型，测试时给 1 张到 10 张以上都能用；decoder-only 给得越多越好，encoder-decoder 超过 8 张后反而变差，说明固定长度的 latent 是瓶颈。\n\n这样“裸”的大 Transformer 并不好训练：论文报告普通 Transformer 会因梯度爆炸崩溃，加上 QK-Norm（对每个头的 query、key 做 RMSNorm）才稳定。官方代码里还有 pre-LN、按深度缩小初始化、梯度裁剪，以及“梯度范数超过 5 就跳过这一步”的保险。主模型用 64 张 A100、总 batch 512 训练 100K 步。为了回应“只是算力大”的质疑，作者还做了 1–2 张 GPU 的小算力版本，单卡训练的小模型仍比 MVSplat 高约 1.3 dB。\n\n精读时需要看清它的边界。第一，官方场景级评测中，所有目标视角都夹在两张输入之间，训练采样也是这样，所以结果衡量的是内插，不是外推。第二，decoder-only 的输入 token 会“看到”目标 token，无法缓存，每个目标视角都要把全部 token 重算一遍，计算量随 token 数平方增长；按代码配置估算，256²、两张输入时每个目标约 1.7 TFLOPs，而把同样的做法搬到 1080p 会变成每帧 PFLOP 级。第三，所有像素都由网络生成，在输入没看到的区域，论文自述会出现带固定模式的噪声和闪烁；模型也没有任何时间一致性机制。\n\n这正是它对 3D 临场的意义所在。站内的 Quark 和 Ha et al. 代表另一端：它们用分层深度或 TSDF 显式建几何，再把真实像素混合进来，前者在 1080p/30fps 下运行，后者追求跨视角、跨时间的一致性。LVSM 则说明，在数据充足的内插场景中，去掉几何能换来更高的画质上限，但要付出分辨率、速度和可解释性的代价。之后，Efficient-LVSM 用 KV-cache 降低复杂度，SVSM 重新论证 encoder-decoder 的效率，LagerNVS 把 3D 预训练的 latent 放回去做到实时，NSTM 加入时空记忆。读懂 LVSM，就能看懂这些改进各自在补什么。"}, {"b": "sec", "h": "流水线", "id": "pipeline"}, {"b": "p", "t": "点击方框跳到对应步骤。"}, {"b": "slot", "name": "diagram", "which": "lvsm", "label": "LVSM 流程图", "spec": {"w": 960, "nodes": [{"x": 10, "y": 24, "w": 135, "h": 64, "t": "训练数据", "s": "RE10K / Objaverse", "step": "lv9", "data": true}, {"x": 10, "y": 124, "w": 135, "h": 64, "t": "输入与目标", "s": "N 张图+位姿，目标位姿", "step": "lv1"}, {"x": 167, "y": 124, "w": 135, "h": 64, "t": "Plücker 射线", "s": "逐像素 6 维，坐标归一", "step": "lv2"}, {"x": 323, "y": 124, "w": 135, "h": 64, "t": "Patchify", "s": "8×8 块→768 维", "step": "lv3"}, {"x": 480, "y": 24, "w": 135, "h": 64, "t": "编码器-解码器", "s": "3072 个 latent", "step": "lv5"}, {"x": 480, "y": 124, "w": 135, "h": 64, "t": "Decoder-only", "s": "24 层全自注意力", "step": "lv4"}, {"x": 480, "y": 224, "w": 135, "h": 64, "t": "Transformer 块", "s": "pre-LN + QK-Norm", "step": "lv6"}, {"x": 637, "y": 124, "w": 135, "h": 64, "t": "像素头", "s": "Linear→Sigmoid", "step": "lv7"}, {"x": 637, "y": 224, "w": 135, "h": 64, "t": "实验解读", "s": "零样本视角、消融", "step": "lv12"}, {"x": 793, "y": 24, "w": 135, "h": 64, "t": "训练规模", "s": "64×A100，batch 512", "step": "lv10", "data": true}, {"x": 793, "y": 124, "w": 135, "h": 64, "t": "损失", "s": "MSE + 0.5·感知", "step": "lv8"}, {"x": 793, "y": 224, "w": 135, "h": 64, "t": "评测与速度", "s": "内插协议，FPS", "step": "lv11"}], "edges": [{"d": "M78,88 L78,124"}, {"d": "M145,156 L167,156"}, {"d": "M302,156 L323,156"}, {"d": "M458,156 L480,156"}, {"d": "M458,156 C469,156 469,56 480,56"}, {"d": "M548,224 L548,188"}, {"d": "M615,56 C626,56 626,156 637,156"}, {"d": "M615,156 L637,156"}, {"d": "M772,156 L793,156"}, {"d": "M860,124 L860,88", "fb": true}, {"d": "M704,188 L704,224"}, {"d": "M772,256 L793,256"}, {"d": "M704,188 L704,204 L783,204 L783,306"}], "out": {"x": 783, "y": 324, "text": "目标视角 RGB（256×256）"}, "h": 336}}, {"b": "sec", "h": "读之前先掌握", "id": "before"}, {"b": "refs", "items": [{"k": "concept-g-pinhole", "gloss": "Plücker 射线要从内参和位姿算出来：像素 (u+0.5, v+0.5) 经 K⁻¹ 变成相机系方向，再经 c2w 旋转到世界系并归一化。不熟悉 K、c2w/w2c 的区别，读不懂 compute_rays，也看不懂为什么缩放图像时要同时缩放 fx、fy、cx、cy（lv2、lv9）。"}, {"k": "concept-f-linalg", "gloss": "Plücker 矩 m=o×d 是叉积；理解“沿射线移动原点 m 不变、平移世界坐标系 m 会变”需要一点向量代数。decoder-only 的计算量 24·L·d² 与 4·L²·d 两项也要靠矩阵乘的计数来理解（lv2、lv4）。"}, {"k": "concept-l-encoding", "gloss": "LVSM 不加任何位置编码，Plücker 射线本身就充当位置编码和相机编码。需要先知道位置编码、射线编码在 Transformer 里起什么作用，才能看出这一省略意味着什么（lv2、lv3）。"}, {"k": "concept-l-attention", "gloss": "整个模型就是标准 ViT 式 Transformer：patch token、多头自注意力、pre-LN、MLP。decoder-only 与 encoder-decoder 的差别、QK-Norm 为什么能稳定训练、为什么输入 token 不能缓存，都建立在对自注意力的理解上（lv4–lv6）。"}, {"k": "concept-n-generalizable", "gloss": "LVSM 属于前馈、可泛化 NVS：跨场景训练一次，测试时一次前向出图。它的主要对手 pixelSplat、MVSplat、GS-LRM 和早期的 IBRNet、ENeRF 都在这一类里，知道它们各自保留了哪些 3D 结构，才能理解 LVSM 去掉了什么。"}, {"k": "concept-g-epipolar", "gloss": "GPNR、Du et al.、pixelSplat 都用极线采样或极线注意力把“对应点一定在极线上”写进网络。LVSM 不做极线采样，但网络仍然要隐式学会这种几何关系；理解极线约束，才知道 Transformer 在注意力里需要自己发现什么。"}, {"k": "concept-n-3dgs", "gloss": "最强基线 GS-LRM 与 LVSM 用的是同一类 tokenizer，差别只在输出：逐像素高斯再光栅化，还是直接出像素。了解 3DGS 的参数与光栅化，才能理解两者在质量、速度和“一次重建多次渲染”上的取舍。"}, {"k": "concept-l-loss", "gloss": "官方代码的损失是 MSE 加 0.5 倍 VGG 感知损失（论文场景级 λ=0.5），评测用 LPIPS。理解 MSE 为什么会把不确定区域推向平均值、感知损失怎样补偿，才能读懂论文局限一节的对比：以往 3D 方法在未见区域通常模糊，而 LVSM 常出现带固定模式的噪声和闪烁（lv8、lv12）。"}, {"k": "concept-f-optim", "gloss": "大规模训练的细节占了代码的相当篇幅：AdamW、β2=0.95、warmup 加 cosine、梯度裁剪与跳步、bf16。需要知道这些手段各自解决什么问题（lv6、lv10）。"}, {"k": "concept-v-metrics", "gloss": "主表报告 PSNR、SSIM、LPIPS。要能把 1.57 dB 换算成 MSE 比例，知道 LPIPS 为什么与感知损失相关，也要知道这些逐帧指标完全不衡量时间闪烁（lv11、lv12）。"}]}, {"b": "sec", "h": "LV1 · 问题设定：N 张带位姿图像 + 目标位姿 → 目标像素，中间不建任何 3D 表示", "id": "walk-lvsm-lv1", "sn": {"label": "论文位置", "t": "摘要与引言（“minimal 3D inductive bias”的动机）；方法节开头的问题定义；实验节数据集说明；README.md §0、§3；data/dataset_scene.py（__getitem__）；utils/data_utils.py（ProcessData.fetch_views）"}}, {"b": "p", "t": "输入：N 张 RGB 图像 I_i∈[0,1]^{3×256×256}（场景级默认 N=2，物体级训练 N=4），每张的内参 (f_x, f_y, c_x, c_y) 与相机到世界的位姿 c2w_i∈SE(3)，以及目标相机的内参和位姿。输出：目标视角的 RGB 图像 Î∈[0,1]^{3×256×256}。代码里一个样本以 [B, V, 3, H, W] 的形式进来，由 fetch_views 切成输入和目标两部分。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-n-generalizable"}, {"k": "concept-g-pinhole"}, {"k": "adv-a-geometry-free"}, {"k": "adv-a-ff-3dgs"}, {"k": "adv-a-generalizable-ibr"}]}}, {"b": "p", "t": "LVSM 把 NVS 写成一个函数：Î = F_θ({(I_i, P_i)}_{i=1..N}, P_t)。P 表示相机（内参和位姿），F_θ 是一个 Transformer。与 NeRF、3DGS 不同，这里没有“先重建场景、再渲染”两个阶段，也没有需要逐场景优化的参数（n-generalizable）。与 pixelSplat、MVSplat、GS-LRM 这些前馈方法（a-ff-3dgs）也不同：它们的网络输出的是深度或高斯，还要经过一个固定的渲染器；LVSM 的网络直接输出目标像素，渲染器本身也是学出来的（a-geometry-free）。\n\n几何信息只从一个入口进入：每个像素对应的相机射线（lv2）。网络不知道什么是深度，也不知道什么是极线（g-epipolar），它必须从大量“输入图像—目标图像”对中自己学会：目标射线上的颜色应该去输入图像的哪里找，被挡住了怎么办。\n\n评测设定决定了这个问题到底有多难。场景级 RealEstate10K 沿用 pixelSplat 的划分：两张输入帧来自同一段房产视频，间隔 45–136 帧，3 个目标帧全部夹在两张输入之间（按闭区间，本文用官方评测索引统计得到；其中约 3% 的目标帧就是某张输入帧）。物体级按 GS-LRM 的设置，从 Objaverse 渲染约 73 万个物体做训练，在 ABO、GSO 上用 4 张输入评测。所以论文证明的是“稀疏视角内插”上的能力。对远程临场来说，观看者的头部经常离开相机阵列覆盖的范围，这属于外推，不在评测范围内（lv12）。", "mn": {"label": "类比", "t": "像请一位看过成千上万套房子的室内摄影师：只给他两张照片和“我想站在这里、朝这个方向看”的说明，他凭经验直接画出那张照片，而不是先量尺寸、搭三维模型再渲染。"}}, {"b": "eqs", "eqs": [{"tex": "\\hat{I}_t = F_\\theta\\big(\\{(I_i, K_i, \\mathrm{c2w}_i)\\}_{i=1}^{N},\\ K_t,\\ \\mathrm{c2w}_t\\big)", "explain_zh": "LVSM 的整体映射（按论文描述写成公式）。I_i 是第 i 张输入图像；K_i 是 3×3 内参；c2w_i 是 4×4 相机到世界变换；K_t、c2w_t 是目标相机参数；F_θ 是整个 Transformer（含 tokenizer 和像素头），θ 是全部可学习参数；Î_t 是预测的目标图像。式中没有深度、密度、高斯等中间量。"}, {"tex": "\\theta^\\star = \\arg\\min_\\theta\\ \\mathbb{E}_{\\text{scene},\\,\\{i\\},\\,t}\\Big[\\mathcal{L}\\big(F_\\theta(\\cdot),\\ I_t\\big)\\Big]", "explain_zh": "训练目标：在大量场景、随机选取的输入视角集合 {i} 和目标视角 t 上，最小化预测图与真实目标图 I_t 之间的损失 𝓛（lv8）。测试时 θ 固定，不对新场景做任何优化。"}]}, {"b": "p", "t": "场景级：N=2，分辨率 256×256，训练每个样本 2 个输入 + 6 个目标（configs/LVSM_scene_decoder_only.yaml），测试每个场景 2 个输入 + 3 个目标（README 推理命令）。物体级：训练用 4 个输入视角（据检索），ABO（1,000 个物体）/GSO（1,099 个物体）在 256 与 512 下评测。官方评测索引有效场景 6474 个，输入帧间隔 45–136 帧、中位数 58 帧（本文统计 data/evaluation_index_re10k.json）。", "label": "具体数字"}, {"b": "p", "t": "作者的出发点是：已有方法的 3D 表示（NeRF、三平面、3DGS）和结构（极线、代价体）限制了质量上限和可扩展性，而数据驱动的通用 Transformer 可以学到更灵活的“隐式渲染”。放弃的方案包括：先重建显式表示再渲染（LRM、GS-LRM、pixelSplat、MVSplat），以及保留极线或射线采样的可泛化渲染（GPNR、Du et al.、IBRNet）。为什么仍保留相机位姿作为输入？这是合理的解读：没有位姿，任务本身就是病态的，“目标视角”无从定义；后续的 RayZer 才进一步尝试让网络自己估计位姿。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）“最少 3D 偏置”不等于“没有 3D 信息”：Plücker 射线就是完整的相机几何，网络依然需要准确的位姿。（2）没有中间 3D 表示，就不能“重建一次、渲染很多次”：每个新视角都要重新跑网络（lv4、lv11）。（3）场景级评测全是内插，不能据此推断外推质量。（4）物体级数据是合成渲染，背景干净、视角围绕物体，和真实相机阵列拍人差别很大。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "同样是前馈方法，GS-LRM 输出逐像素高斯，LVSM 直接输出像素。如果远程临场需要把同一帧场景给 3 位观众、每人两只眼睛各渲染一次，两者的计算量结构有什么不同？", "a": "GS-LRM 每帧只需跑一次网络得到高斯，之后 6 个视点都只做便宜的光栅化，网络开销与视点数无关。LVSM decoder-only 每个视点都要把全部输入 token 和目标 token 重新过一遍 24 层 Transformer，网络开销随视点数线性增长，6 个视点就是 6 倍。encoder-decoder 介于两者之间：编码一次，但每个视点仍要跑 12 层解码器。"}]}, {"b": "sec", "h": "LV2 · 逐像素 Plücker 射线 (o×d, d)，以及依赖目标位姿的坐标规范化（scene_scale_factor=1.35）", "id": "walk-lvsm-lv2", "sn": {"label": "论文位置", "t": "方法节 tokenization 部分（“pixel-wise Plücker ray embedding”）；utils/data_utils.py: ProcessData.compute_rays；model/LVSM_scene_decoder_only.py: get_posed_input；data/dataset_scene.py: preprocess_poses"}}, {"b": "p", "t": "输入：每个视角的内参 fxfycxcy [B,V,4] 与 c2w [B,V,4,4]（已规范化）。输出：射线原点 ray_o 与方向 ray_d，各为 [B,V,3,256,256]；拼成 Plücker 嵌入 [o×d, d]，6 通道。输入视角再与 2I−1 拼成 9 通道 [B,V_in,9,256,256]，目标视角只有 6 通道 [B,V_t,6,256,256]。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-g-pinhole"}, {"k": "concept-f-linalg"}, {"k": "concept-l-encoding"}, {"k": "concept-g-rig"}]}}, {"b": "p", "t": "一条 3D 直线需要 4 个自由度来描述，但用“原点 + 方向”写是 6 个数，而且原点可以沿直线任意滑动，不唯一。Plücker 坐标用方向 d 和矩 m=o×d 两个 3 维向量表示直线（f-linalg、l-encoding）：沿射线移动原点，o 变成 o+s·d，而 (o+s·d)×d=o×d，所以 m 不变，表示只取决于直线本身。对网络来说，这意味着“同一条光线”永远得到同一组 6 个数；两条射线是否相交、离得多近，也可以由这 12 个数算出来，网络有机会学会这种关系。\n\n代码中每个像素取中心 (x+0.5, y+0.5)，用内参得到相机系方向 ((x+0.5−c_x)/f_x, (y+0.5−c_y)/f_y, 1)，再乘上 c2w 的旋转并归一化（g-pinhole）；原点 o 是相机中心。注意代码的拼接顺序是 [o×d, d]，与一些资料写的 (d, o×d) 相反，但对后面的线性投影没有影响。\n\n一个容易忽略的点是：Plücker 矩依赖世界坐标系的原点和尺度。若把世界原点平移 t，矩变成 (o+t)×d = o×d + t×d；若整体缩放 s 倍，矩也跟着乘 s。所以喂给网络之前必须把坐标系“摆正”。官方代码的 preprocess_poses 这样做：取所有被选帧的平均相机中心为原点，用平均前向、平均向下方向建正交坐标轴，再把所有平移除以“最大平移分量 × 1.35”。问题在于，推理时“所有被选帧”包括 3 个目标帧，也就是说目标位姿参与了坐标规范化，同一组输入的 token 会随请求的目标而变（lv11）。", "mn": {"label": "类比", "t": "Plücker 坐标像一根激光束的“身份证”：写明它指向哪里（d），以及它离坐标原点偏了多远、往哪边偏（m）。拿着激光笔前后移动但不改变光束，身份证不变；可一旦换了城市原点（坐标系平移），身份证上的偏移栏就要重写。"}}, {"b": "eqs", "eqs": [{"tex": "\\mathbf{d}_{uv} = \\frac{R\\,K^{-1}[\\,u+0.5,\\ v+0.5,\\ 1\\,]^{\\top}}{\\big\\lVert R\\,K^{-1}[\\,u+0.5,\\ v+0.5,\\ 1\\,]^{\\top}\\big\\rVert},\\qquad \\mathbf{o} = \\mathbf{t}", "explain_zh": "按 compute_rays 改写。(u, v) 是整数像素坐标，+0.5 取像素中心；K 是内参；R、t 是 c2w 的旋转和平移，t 就是相机中心；d_uv 是单位方向，同一相机所有像素共享原点 o。"}, {"tex": "\\mathbf{p}_{uv} = \\big(\\mathbf{o}\\times\\mathbf{d}_{uv},\\ \\mathbf{d}_{uv}\\big)\\in\\mathbb{R}^{6},\\qquad (\\mathbf{o}+s\\,\\mathbf{d})\\times\\mathbf{d} = \\mathbf{o}\\times\\mathbf{d}", "explain_zh": "代码中的 Plücker 嵌入（get_posed_input 的 default_plucker 分支，矩在前）。s 为任意实数；右式说明沿射线平移原点不改变矩，因为 d×d=0。"}, {"tex": "(\\mathbf{o}+\\mathbf{t}_0)\\times\\mathbf{d} = \\mathbf{o}\\times\\mathbf{d} + \\mathbf{t}_0\\times\\mathbf{d},\\qquad (\\lambda\\mathbf{o})\\times\\mathbf{d} = \\lambda\\,(\\mathbf{o}\\times\\mathbf{d})", "explain_zh": "Plücker 矩对世界坐标系的依赖：原点平移 t_0 会给矩加上 t_0×d，尺度 λ 会让矩乘 λ。所以输入网络前必须规范化坐标系和尺度。"}, {"tex": "\\mathrm{c2w}'_i = T_{\\text{avg}}^{-1}\\,\\mathrm{c2w}_i,\\qquad \\mathbf{t}'_i \\leftarrow \\frac{\\mathbf{t}'_i}{1.35\\cdot\\max_{j,k}\\lvert t'_{j,k}\\rvert}", "explain_zh": "按 preprocess_poses 改写。T_avg 是由所有被选帧的平均中心、平均前向（z 轴）和平均向下方向（y 轴）正交化得到的“平均相机”；max 取所有帧、所有 3 个平移分量绝对值的最大值；1.35 是 scene_scale_factor。规范化后最大平移分量为 1/1.35≈0.74。"}]}, {"b": "p", "t": "每像素 6 通道；输入视角 9 通道（RGB 先映射到 [−1,1]）。scene_scale_factor=1.35（配置第 29 行）。数值例：相机中心 o=(0.5, 0, 0)，方向 d=(0, 0, 1)，则 o×d=(0·1−0·0, 0·0−0.5·1, 0.5·0−0·0)=(0, −0.5, 0)，Plücker 嵌入为 (0, −0.5, 0, 0, 0, 1)。若把原点改到 o'=o+2d=(0.5, 0, 2)，矩仍为 (0, −0.5, 0)。", "label": "具体数字"}, {"b": "p", "t": "论文选择 Plücker 射线，是因为它以最少的先验把完整的相机几何（内参和外参）编码到每个像素上，而且可以和图像按像素对齐拼接，同一个 patchify 就能处理（GS-LRM 也这样做）。不需要显式深度采样，也不假设场景结构。没有采用的方案：只输入相机矩阵（全局 token，没有逐像素信息）、NeRF 式的沿射线采样点位置编码（需要深度范围与采样）、Quark 式的相对射线编码（依赖目标视锥的近远平面）。代码还保留了两个未启用的变体：custom_plucker 用 [d, 射线上离原点最近的点]，aug_plucker 用三者拼接，说明作者试过其他参数化；这些变体的效果论文中是否报告，未能核对。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）Plücker 嵌入是绝对坐标下的量，不是相对编码，所以坐标规范化是模型的一部分，不能省。（2）推理时规范化用到了目标位姿；部署时若只用输入相机规范化，会与训练分布有偏差，需要自己验证或微调。（3）尺度用最大平移分量（L∞）而不是平均距离，单个离群相机会改变整体尺度。（4）Plücker 只编码几何，不编码图像分辨率或宽高比；换宽高比时 patch 网格和射线分布都会变，README 转述论文说性能会下降。论文的例子是 512×512 训练、512×960 测试：中央正常，左右两侧变模糊，因为训练图都是中心裁剪的方图，长边两侧的射线分布超出了训练范围。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "两台相机中心都在 o=(0,0,0)、朝向不同。它们的所有像素的 Plücker 矩是多少？网络靠什么区分这两台相机的射线？", "a": "o=0 时 o×d=0，所有像素的矩都是 0，只剩方向 d 不同，网络只能靠 d 区分。这也说明为什么要把坐标原点放在平均相机中心：如果某台相机恰好在原点，它的矩信息就全部为 0，射线“离原点多远”这一维信息完全丢失；把原点放在所有相机的平均位置，大多数相机的矩都非零。"}]}, {"b": "sec", "h": "LV3 · Patchify：8×8 块、9 通道 → 576 维 → 768 维 token，每张 256² 图 1024 个 token，不加位置编码", "id": "walk-lvsm-lv3", "sn": {"label": "论文位置", "t": "方法节 tokenization 部分（按 ViT 的 patchify 线性层）；model/LVSM_scene_decoder_only.py: _create_tokenizer、_init_tokenizers；configs/*.yaml: image_tokenizer / target_pose_tokenizer"}}, {"b": "p", "t": "输入：posed input [B,V_in,9,256,256] 与目标射线图 [B,V_t,6,256,256]。输出：输入 token [B·V_in,1024,768]，reshape 成 [B, V_in·1024, 768]；目标 token [B·V_t,1024,768]。两个 tokenizer 权重独立，都是 Rearrange + 无 bias 的 Linear。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-l-attention"}, {"k": "concept-l-encoding"}, {"k": "concept-f-image"}, {"k": "adv-a-geometry-free"}]}}, {"b": "p", "t": "这一步完全照搬 ViT（l-attention）：把图像切成不重叠的 8×8 小块，每块把 8·8 个像素的所有通道拉平成一个向量，再乘一个矩阵投到 768 维。对输入视角，一块有 8·8·9=576 个数（RGB 加 6 维射线）；对目标视角，没有颜色，一块只有 8·8·6=384 个数。256×256 的图被切成 32×32=1024 块，也就是 1024 个 token。\n\n有两点值得注意。第一，没有位置编码（l-encoding）。一般 ViT 要给每个 token 加一个“我是第几块”的位置向量，否则自注意力分不清顺序。LVSM 不需要：每个 token 里已经含有 64 个像素的 Plücker 射线，射线本身就说明了“我在哪台相机、看向哪里”，这比网格位置更有用，而且对任意相机都成立。第二，没有 CNN。论文的实验结论是，patch 线性投影比先用 CNN 提特征更好；这与“尽量少加偏置、把表达能力留给 Transformer”的思路一致。\n\n对目标视角来说，这 1024 个 token 就是“查询”：每个 token 问的是“这 64 条射线看到的颜色是什么”。它们与输入 token 进入同一个 Transformer，在注意力中向输入 token 取信息，最后由像素头把答案写成 64 个像素（lv7）。patch 大小决定了序列长度和每个 token 要承载的像素数：patch 16 时 token 数减为 256，训练更快，但每个 token 要输出 768 个值，README 说质量会下降。", "mn": {"label": "类比", "t": "像把一张照片剪成 1024 张邮票，每张邮票背面除了图案，还印着“这张邮票上 64 个点分别是从哪个位置、朝哪个方向拍的”。目标视角只有一叠只印了背面、正面空白的邮票，等着网络填图。"}}, {"b": "eqs", "eqs": [{"tex": "\\mathbf{x}_{j} = W_{\\text{in}}\\,\\mathrm{vec}\\big(P_j\\big),\\qquad P_j\\in\\mathbb{R}^{8\\times 8\\times 9},\\ W_{\\text{in}}\\in\\mathbb{R}^{768\\times 576}", "explain_zh": "输入 token。P_j 是第 j 个 8×8 块（9 通道：2I−1 的 RGB 加 6 维 Plücker）；vec 按 (ph, pw, c) 的顺序拉平（Rearrange 的写法）；W_in 无 bias。j=1…1024。"}, {"tex": "\\mathbf{q}_{j} = W_{\\text{tgt}}\\,\\mathrm{vec}\\big(R_j\\big),\\qquad R_j\\in\\mathbb{R}^{8\\times 8\\times 6},\\ W_{\\text{tgt}}\\in\\mathbb{R}^{768\\times 384}", "explain_zh": "目标 token。R_j 是目标视角第 j 块的 Plücker 射线；W_tgt 与 W_in 是两组独立参数。"}, {"tex": "n_{\\text{tok}} = \\frac{H}{p}\\cdot\\frac{W}{p} = \\frac{256}{8}\\cdot\\frac{256}{8} = 1024", "explain_zh": "每个视角的 token 数。H、W 是图像高宽，p 是 patch 边长。token 数与像素数成正比，这是后面计算量随分辨率快速增长的根源。"}]}, {"b": "p", "t": "输入 tokenizer 参数 576×768=442,368，目标 tokenizer 384×768=294,912（本文实例化计数）。每视角 1024 个 token；B=8、V_in=2 时输入 token 张量为 [16,1024,768]。若 patch=16，每视角 256 个 token，每个 token 覆盖 256 像素。512² 图像在 patch=8 时为 4096 个 token/视角。", "label": "具体数字"}, {"b": "p", "t": "论文给出的理由：patch 线性投影比 CNN 特征提取效果更好（物体级 GSO 架构消融中，encoder-decoder 基准 28.07 dB，换成 CNN tokenizer 为 27.59 dB），并且与 ViT、GS-LRM 的 tokenizer 一致，方便缩放。不加位置编码，是因为逐像素射线已经提供了位置与相机信息（这一点代码可证：没有任何 pos_embed）。没有采用的方案：SRT 式 CNN 编码器；预训练的 DINO 等特征；学习式 2D 位置嵌入。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）输入 token 和目标 token 用两套不同的线性层，维度也不同（576 对 384），不能共享。（2）代码的 Rearrange 要求 H、W 能被 8 整除，dataset_scene 因此把宽度取整到 8 的倍数。（3）“不加位置编码”只在有逐像素射线时成立：如果把 Plücker 通道置零，网络就分不清 token 的空间位置。（4）patch 越大越省计算，但每个 token 需要输出的像素越多，细节越难保留。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "如果把一张输入图的 1024 个 token 随机打乱顺序再送进 Transformer，decoder-only LVSM 的输出会变吗？为什么？", "a": "理论上不会变（忽略数值误差）。没有位置编码时，自注意力和逐 token 的 MLP 对 token 顺序是置换等变的；每个 token 的“位置”信息完全在它自己的 Plücker 通道里，打乱顺序不影响这些内容。目标 token 的输出只依赖于集合中的内容，所以结果相同。这也说明 LVSM 把输入当成一个带射线标签的 patch 集合，而不是一张有网格结构的图。"}]}, {"b": "sec", "h": "LV4 · Decoder-only：(N+1)·1024 个 token 做 24 层全自注意力，输入 token 无法跨目标视角复用", "id": "walk-lvsm-lv4", "sn": {"label": "论文位置", "t": "方法节 decoder-only 架构；架构总览图（图注写“LVSM first patchifies the posed input images into tokens”）；model/LVSM_scene_decoder_only.py: forward（第 192–231 行）、render_video（第 355–399 行）"}}, {"b": "p", "t": "输入：输入 token [B, N·1024, 768]、目标 token [B·V_t, 1024, 768]。先把输入 token 按目标数复制成 [B·V_t, N·1024, 768]，与目标 token 拼成 [B·V_t, (N+1)·1024, 768]，过一个 LayerNorm 和 24 个 Transformer 块。输出：丢掉前 N·1024 个位置，保留 [B·V_t, 1024, 768] 的目标 token。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-l-attention"}, {"k": "concept-f-linalg"}, {"k": "concept-n-generalizable"}, {"k": "adv-a-geometry-free"}]}}, {"b": "p", "t": "decoder-only 的做法非常“粗暴”：把一个目标视角需要的所有信息，也就是 N 张输入图的全部 token 加上这个目标视角的 1024 个射线 token，拼成一条序列，交给 24 层标准 Transformer 做全自注意力（l-attention）。每一层里，每个目标 token 都能直接看到所有输入 token，网络可以在注意力里自己找对应点、判断遮挡、混合颜色（这就是 a-geometry-free 的核心）。没有中间场景表示，也就没有信息瓶颈。\n\n名字里的“decoder-only”借自语言模型，但这里没有因果 mask：注意力是双向的，输入 token 也能看到目标 token。这带来一个重要后果：输入 token 在第 2 层以后的表示已经“掺进”了当前目标的信息，换一个目标视角就不同了，所以不能像语言模型的 KV-cache 那样把输入部分算一次、反复使用。代码也确实是这样做的：forward 里对每个目标视角 repeat 一份输入 token；render_video 每 4 个目标视角一批，每批都重新 repeat、重新跑 24 层。\n\n计算量由序列长度 L=(N+1)·1024 决定。每层的线性部分约 24·L·d² FLOPs（QKV、输出投影和 4 倍宽 MLP），注意力约 4·L²·d。N=2 时 L=3072，24 层合计线性部分约 1.04 TFLOPs、注意力约 0.70 TFLOPs，总计约 1.74 TFLOPs/目标视角（本文按代码配置估算）。N 从 2 增到 8，L 增到 9216，注意力项增长 9 倍，总量约为 9.4 TFLOPs。这正是论文 Fig. 8 中 decoder-only 渲染速度随输入视角数下降的原因，也是它在零样本增加视角时质量持续上升的代价。", "mn": {"label": "类比", "t": "像开一个圆桌会议：每要画一张新视角图，就把两张输入照片的 2048 位“证人”和 1024 位“提问者”全部请进会议室，让所有人自由交谈 24 轮。换一张目标图，就得重新开一次会，因为上一次会议里证人的发言已经被上一批提问者影响过了。"}}, {"b": "eqs", "eqs": [{"tex": "X^{(0)} = \\mathrm{LN}\\big([\\,T^{(1)}_{\\text{in}};\\ \\dots;\\ T^{(N)}_{\\text{in}};\\ T_{\\text{tgt}}\\,]\\big)\\in\\mathbb{R}^{(N+1)\\cdot 1024\\times 768}", "explain_zh": "序列拼接。T_in^{(i)} 是第 i 张输入图的 1024 个 token；T_tgt 是目标视角的 1024 个射线 token；[ ; ] 表示沿序列维拼接；LN 是进入 Transformer 前的 LayerNorm（transformer_input_layernorm，无 bias）。"}, {"tex": "X^{(l)} = \\mathrm{Block}_l\\big(X^{(l-1)}\\big),\\quad l=1,\\dots,24;\\qquad Y = X^{(24)}_{[\\,N\\cdot 1024\\,:\\,]}", "explain_zh": "24 个标准 Transformer 块（lv6），注意力无 mask。Y 取序列最后 1024 个位置，即目标 token 的输出，送入像素头（lv7）；前 N·1024 个位置的输出被丢弃。"}, {"tex": "C_{\\text{DO}}(N) \\approx 24\\,\\big(24\\,L\\,d^{2} + 4\\,L^{2}\\,d\\big),\\qquad L=(N+1)\\cdot 1024,\\ d=768", "explain_zh": "按代码配置估算的每个目标视角的 FLOPs（2×MAC，只计矩阵乘）。24 L d² 包括 QKV 投影 3d²、输出投影 d²、MLP 8d²，各乘 2；4 L² d 包括 QKᵀ 和注意力乘 V 各 2 L² d。N=2 时约 1.74×10¹²。"}]}, {"b": "p", "t": "24 层，d=768，12 个头×64 维，MLP 3072（configs 与 model/transformer.py）。每个目标视角的序列长度与估算计算量：N=1 为 2048 个 token、约 1.0 TFLOPs；N=2 为 3072、约 1.74；N=4 为 5120、约 3.67；N=8 为 9216、约 9.39；N=16 为 17408、约 28.3（本文估算）。训练时 B=8、V_t=6，一步前向要处理 48 条长度 3072 的序列。", "label": "具体数字"}, {"b": "p", "t": "论文的主张是：不经过中间表示，模型的偏置最少、质量最好，而且随输入视角增多能持续变好（零样本从 1 张到 10 张以上）。这与 SRT 以来“先编码成场景表示”的主流做法相反。放弃的方案：encoder-decoder（lv5，质量低、视角多时饱和）、带 mask 的单向注意力（能缓存输入，但论文没有采用；后续 Efficient-LVSM 用解耦注意力实现了缓存）。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）这里的“decoder-only”没有因果 mask，与 GPT 式 decoder-only 不同。（2）不能缓存输入 token：每个目标视角、每只眼睛都要重跑全部 token。（3）多个目标视角之间不交换信息：它们在 batch 维上独立，所以同一场景相邻的两个目标视角并没有被约束为一致，一致性完全靠网络“恰好”学到。（4）计算量随 N 超线性增长，“视角越多越好”在实时系统里受算力约束。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "如果给 decoder-only LVSM 的注意力加一个 mask，让输入 token 只能看输入 token、目标 token 可以看所有 token，推理时能省下什么？需要重新训练吗？", "a": "加了这个 mask 后，输入 token 的表示与目标无关，每一层的输入部分 K、V 可以只算一次，缓存起来给所有目标视角和所有帧内视点复用；每个目标只需计算自己 1024 个 token 的注意力（对 N·1024+1024 个键）和 MLP，成本近似随 N 线性增长而不是平方增长。但这改变了模型的计算图，原权重是在全双向注意力下训练的，直接加 mask 会造成分布偏移，需要重新训练或至少微调。Efficient-LVSM 正是沿这个方向重新设计并训练的。"}]}, {"b": "sec", "h": "LV5 · Encoder-decoder：3072 个可学习 latent 当场景表示，12 层编码 + 12 层解码，解码时 latent 与目标 token 一起更新", "id": "walk-lvsm-lv5", "sn": {"label": "论文位置", "t": "方法节 encoder-decoder 架构；讨论节关于渲染速度的 Fig. 8；configs/LVSM_scene_encoder_decoder.yaml（encoder_n_layer、decoder_n_layer、n_latent_vectors）；model/LVSM_scene_encoder_decoder.py: _init_transformer（第 83–89 行）、forward（第 221–265 行）"}}, {"b": "p", "t": "编码器输入：3072 个可学习 latent [B,3072,768] 与输入 token [B,N·1024,768] 拼接，长度 3072+N·1024；经 12 层后只保留 latent，得到场景表示 Z [B,3072,768]。解码器输入：Z 按目标数复制，与目标 token 拼成 [B·V_t, 1024+3072, 768]，过 LayerNorm 和 12 层；输出保留前 1024 个目标位置。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-l-attention"}, {"k": "concept-n-generalizable"}, {"k": "adv-a-geometry-free"}, {"k": "adv-a-telepresence-sys"}]}}, {"b": "p", "t": "这是更接近 SRT 的思路（a-geometry-free）：先把 N 张图“读”进一组固定数量的向量，再按需查询。编码器里，3072 个 latent 与输入 token 一起做全自注意力，latent 从输入里吸收信息；12 层后丢掉输入 token，只留 latent。latent 的数量与 N 无关，所以不管输入多少张，场景表示都是 3072×768 的矩阵。配置注释写的是 3×32×32，即恰好等于 3 张 256² 图的 token 数。\n\n解码器不是只用 cross-attention 去“读”这组 latent，而是把目标 token 和 latent 拼在一起做自注意力，latent 也会被更新（只是输出时丢掉）。论文的物体级消融（GSO）中，这种“联合更新”的基准为 28.07 dB；解码时不更新 latent 降到 26.61 dB，改成纯 cross-attention 解码器降到 24.60 dB。可以这样理解：每个目标视角都能按自己的需要重新整理一遍场景表示。\n\n它的好处在于能摊销：编码只做一次，之后每个目标视角只跑 12 层解码器。它的问题有两个。一是 latent 是信息瓶颈：输入变多时，3072 个向量装不下，论文的零样本实验中超过 8 张输入后质量下降，和 GS-LRM 的表现相似。二是按代码配置，解码序列有 4096 个 token（1024 个目标加 3072 个 latent），比 N=2 时 decoder-only 的 3072 还长，只是层数少一半，每个目标约 1.31 TFLOPs，比 decoder-only 的 1.74 只省约 25%。所以在“2 张输入、1 个目标”这种最常见的设定下，它并不便宜多少；它的速度优势要在输入多、目标多时才明显（lv11）。", "mn": {"label": "类比", "t": "像先请一位记录员把两张照片的内容整理成固定 3072 行的笔记（编码），之后谁想看哪个角度，就拿着问题去翻笔记，而且翻的时候可以在笔记上做批注（解码时 latent 也更新）。笔记本的页数固定，照片太多时就记不下了。"}}, {"b": "eqs", "eqs": [{"tex": "[\\,Z;\\ \\cdot\\,] = \\mathrm{Enc}_{12}\\big([\\,Z_0;\\ T^{(1)}_{\\text{in}};\\ \\dots;\\ T^{(N)}_{\\text{in}}\\,]\\big),\\qquad Z_0\\in\\mathbb{R}^{3072\\times 768}", "explain_zh": "编码器。Z_0 是可学习的初始 latent（截断正态，std 0.02）；Enc_12 是 12 个 Transformer 块；输出中只取前 3072 个位置作为场景表示 Z，输入 token 的输出被丢弃。注意代码中编码器前没有额外的 LayerNorm。"}, {"tex": "[\\,Y;\\ \\cdot\\,] = \\mathrm{Dec}_{12}\\big(\\mathrm{LN}([\\,T_{\\text{tgt}};\\ Z\\,])\\big),\\qquad Y\\in\\mathbb{R}^{1024\\times 768}", "explain_zh": "解码器。T_tgt 是目标射线 token；[T_tgt; Z] 长 4096；Dec_12 是 12 个全自注意力块，Z 在其中也被更新；输出只取前 1024 个位置（目标 token）。"}, {"tex": "C_{\\text{ED}}(N, M) \\approx C_{\\text{enc}}(3072+1024N) + M\\cdot C_{\\text{dec}}(4096)", "explain_zh": "按代码配置估算的每帧计算量，M 是需要渲染的目标视角数（例如观看者的眼睛数）。N=2 时 C_enc≈1.84 TFLOPs，C_dec≈1.31 TFLOPs，与 N 无关（本文估算，2×MAC）。与之对比，decoder-only 为 M·C_DO(N)。"}]}, {"b": "p", "t": "latent 3072 个（配置注释 3x32x32），参数 3072×768=2,359,296；encoder 12 层 + decoder 12 层，总参数 173,154,816（本文实例化计数）。RealEstate10K：28.58/0.893/0.114（论文）或 28.60（README 权重）。M=2（双目）、N=2 时：encoder-decoder 约 1.84+2×1.31=4.46 TFLOPs，decoder-only 约 2×1.74=3.48 TFLOPs，前者反而更多；M=8、N=8 时：encoder-decoder 约 6.59+8×1.31=17.1，decoder-only 约 8×9.39=75.1（本文估算）。", "label": "具体数字"}, {"b": "p", "t": "作者把它作为“有中间表示”的代表来对照：它的好处是推理快（固定长度 latent，编码可摊销），适合需要渲染很多视角的应用。它的质量略低于 decoder-only；在 RealEstate10K 和 ABO 上略好于 GS-LRM（GSO 512 上反而低约 1.2 dB），大体说明即使有场景表示，“学出来的 latent”也不输“手写的高斯”。放弃的方案：SRT 式只用 cross-attention 解码（GSO 消融中低约 3.5 dB）；把 latent 做成与 N 成比例的长度（那就失去了固定长度表示的意义）。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）latent 在解码器里也被更新，所以“场景表示”其实是每个目标视角各自的一份，不是真正共享不变的。（2）按代码配置，N=2 时 encoder-decoder 的单目标解码开销只比 decoder-only 少约 25%，不要默认它“快得多”；论文的速度优势在输入视角多时最明显。（3）3072 个 latent 是瓶颈，输入超过 8 张质量下降。（4）编码器前没有 LayerNorm，解码器前有一个，这是代码细节，复现时要对齐。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "为什么说 encoder-decoder LVSM 在输入超过 8 张时变差，而 decoder-only 不会？请从信息流的角度解释。", "a": "encoder-decoder 中，目标 token 只能通过 3072 个 latent 获取输入信息，latent 的容量固定。输入越多，需要压进去的信息越多，超过容量后就要丢信息，而且训练时只见过 4 张输入，latent 的“写入方式”可能也不适应更多输入。decoder-only 的目标 token 直接对所有输入 token 做注意力，没有容量上限，输入越多，可用的信息越多。代价是 decoder-only 的计算量随 N 超线性增长。"}]}, {"b": "sec", "h": "LV6 · Transformer 块与稳定训练：pre-LN、QK-Norm（每头 RMSNorm）、无 bias、按深度缩放的初始化", "id": "walk-lvsm-lv6", "sn": {"label": "论文位置", "t": "方法节关于训练稳定性的说明（QK-Norm）；训练细节（bf16、梯度裁剪）；model/transformer.py: RMSNorm（第 29–41 行）、QK_Norm_SelfAttention（第 84–157 行）、QK_Norm_TransformerBlock（第 268–312 行）；model/LVSM_scene_decoder_only.py: _init_transformer（第 78–103 行）；train.py 第 135–204 行"}}, {"b": "p", "t": "输入/输出：[B', L, 768] → [B', L, 768]。每块先 LayerNorm 再做 12 头自注意力（q、k 各经一次 64 维 RMSNorm），残差相加；再 LayerNorm、MLP（768→3072→768，GELU），残差相加。所有 Linear 与 LayerNorm 都没有 bias。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-l-attention"}, {"k": "concept-f-optim"}, {"k": "concept-l-loss"}]}}, {"b": "p", "t": "这一步看起来平淡，却是论文能训练成功的关键。论文报告：用普通 Transformer 层训练会因梯度爆炸而崩溃，加上 QK-Norm 后才稳定（f-optim、l-attention）。\n\nQK-Norm 的原理很直接。注意力 logit 是 q·k/√64。如果某些 token 的 q 或 k 在训练中越长越大，logit 会变得极大，softmax 退化成 one-hot，梯度也会随之剧烈波动。代码对每个头的 q、k 各做一次 RMSNorm：先把 64 维向量除以它的均方根，使其长度固定为 √64=8，再乘一个可学习的逐维增益 g。这样 logit 的大小被增益 g 控制，不再随激活值的尺度失控。\n\n其余几个细节也都服务于稳定。pre-LN（先归一化再进子层）让残差通路保持恒等映射，梯度能直接流到浅层。按深度缩放初始化：第 l 层的权重标准差为 0.02/√(2l)，越深的层初始输出越小，一开始每层只对残差做很小的修改。去掉 bias 是大模型中常见的简化。训练循环里还有三道保险：bf16 自动混合精度；梯度裁剪到范数 1.0；若裁剪前范数超过 5.0（论文也写明了这条规则），或者 loss 出现 NaN/Inf（代码额外加的），直接跳过这一步更新（train.py）。这些保险的存在说明，在这个规模上训练不稳定是真实存在的工程问题。\n\n注意力本身调用 xformers 的 flash attention，不会显式存下 L×L 的注意力矩阵，所以显存随 L 线性增长，计算量仍随 L² 增长。", "mn": {"label": "类比", "t": "QK-Norm 像给每位发言者配了固定音量的麦克风，只允许用一个旋钮（增益 g）微调音量。没有它时，某个人越说越大声，会压过所有人，会议（softmax）就只听得见他一个。"}}, {"b": "eqs", "eqs": [{"tex": "\\mathrm{RMSNorm}(\\mathbf{x}) = \\mathbf{g}\\odot\\frac{\\mathbf{x}}{\\sqrt{\\tfrac{1}{64}\\sum_{k=1}^{64}x_k^{2} + \\epsilon}},\\qquad \\epsilon=10^{-5}", "explain_zh": "代码中的 RMSNorm（对每个头的 64 维向量）。x 是某个 token 在某个头上的 q 或 k；g 是可学习的 64 维增益，初始为 1；⊙ 是逐元素乘。与 LayerNorm 不同，它不减均值。"}, {"tex": "\\mathrm{Attn}(Q,K,V) = \\mathrm{softmax}\\!\\Big(\\frac{\\hat{Q}\\hat{K}^{\\top}}{\\sqrt{64}}\\Big)V,\\qquad \\hat{Q}=\\mathrm{RMSNorm}_q(Q),\\ \\hat{K}=\\mathrm{RMSNorm}_k(K)", "explain_zh": "带 QK-Norm 的单头注意力。当 g=1 时，每个 q̂、k̂ 的长度为 8，于是 |q̂·k̂|/8 ≤ 8，logit 被限制在 [−8, 8] 之内；训练中 g 会变化，logit 的上限由 g 决定。"}, {"tex": "X' = X + \\mathrm{Attn}\\big(\\mathrm{LN}(X)\\big),\\qquad X'' = X' + W_2\\,\\mathrm{GELU}\\big(W_1\\,\\mathrm{LN}(X')\\big)", "explain_zh": "pre-LN Transformer 块。W_1∈ℝ^{3072×768}、W_2∈ℝ^{768×3072}，都无 bias；LN 无 bias；Attn 包含 QKV 投影 W_qkv∈ℝ^{2304×768} 与输出投影 W_o∈ℝ^{768×768}。"}, {"tex": "\\sigma_l = \\frac{0.02}{\\sqrt{2\\,l}},\\qquad l = 1,\\dots,24", "explain_zh": "代码中的 depth_init：第 l 块内所有 Linear 权重按 N(0, σ_l²) 初始化（idx 从 0 开始，所以代码写作 √(2(idx+1))）。第 1 层 σ≈0.0141，第 24 层 σ≈0.0029。"}]}, {"b": "p", "t": "每块参数 7,079,552（QKV 1,769,472 + 输出投影 589,824 + MLP 4,718,592 + 两个 LN 1,536 + QK-Norm 128）。优化：AdamW，β=(0.9, 0.95)，weight decay 0.05（一维参数不衰减），梯度裁剪 1.0，跳步阈值 5.0（allowed_gradnorm_factor=5），bf16，TF32 开启，逐层 gradient checkpointing（configs 与 train.py）。", "label": "具体数字"}, {"b": "p", "t": "论文给出的直接理由是训练稳定性：没有 QK-Norm 会崩溃。论文引用的是 Henry et al.（2020）提出的 Query-Key Normalization；此前 ViT-22B 等大规模训练也用类似的 q、k 归一化防止注意力 logit 发散。论文还说明 Transformer 层沿用 GS-LRM 的设计，只额外加了 QK-Norm。β2=0.95（小于常见的 0.999）让二阶矩估计更快适应梯度尺度变化，也是大模型训练的常见选择；论文是否专门讨论了这一点，未能核对。放弃的方案：post-LN、只靠更长的 warmup 或更小的学习率来压不稳定。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）QK-Norm 的 RMSNorm 是按头（64 维）做的，不是对整个 768 维做。（2）“去掉 bias”包括 LayerNorm 的 bias（nn.LayerNorm(bias=False)，需要较新的 PyTorch）。（3）跳步保险意味着实际参数更新次数可能少于 100K，代码分别记录 fwdbwd_pass_step 和 param_update_step。（4）train.py 在 model.no_sync() 里做 backward，注释写“no sync grads for efficiency”；但按 PyTorch 文档，forward 在 no_sync 之外时梯度仍会同步，所以这段代码无害，只是注释会误导人。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "如果某个 token 的 q 向量在训练中被放大 100 倍，普通注意力和带 QK-Norm 的注意力分别会发生什么？", "a": "普通注意力中，这个 token 对所有 key 的 logit 都放大 100 倍，softmax 几乎变成 one-hot，只关注一个 key，梯度在接近饱和的区域变得很小或很不稳定，容易出现尖峰甚至发散。带 QK-Norm 时，q 先被除以自己的均方根，放大 100 倍后归一化结果完全相同，logit 不变；只有可学习增益 g 能改变 logit 的尺度，而 g 的变化是平缓、受优化器控制的。"}]}, {"b": "sec", "h": "LV7 · 像素头：LayerNorm → Linear(768→192) → Sigmoid，每个 token 直接写出 8×8×3 个像素", "id": "walk-lvsm-lv7", "sn": {"label": "论文位置", "t": "方法节输出部分（“regress ... RGB values”）；model/LVSM_scene_decoder_only.py: image_token_decoder（第 66–74 行）与 forward 中的 rearrange（第 231–244 行）"}}, {"b": "p", "t": "输入：目标 token [B·V_t, 1024, 768]。输出：[B·V_t, 1024, 192] 经 Sigmoid 得到 [0,1] 内的像素值，再 rearrange 成 [B, V_t, 3, 256, 256]。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-i-blending"}, {"k": "concept-r-appearance"}, {"k": "concept-l-cnn"}, {"k": "adv-a-geometry-free"}]}}, {"b": "p", "t": "输出端和输入端对称：每个目标 token 负责自己那块 8×8 的像素，用一个线性层直接写出 8·8·3=192 个数，再经 Sigmoid 压到 [0,1]。没有 CNN 上采样器，也没有“从输入图像取色”的 IBR 步骤（i-blending）；图像中的每一个像素值都是网络生成的。\n\n这与站内另外两篇重点论文形成鲜明对比。Quark 的网络在 288×512 的低分辨率下求解几何和混合权重，最后按权重从全分辨率输入照片里取色；Ha et al. 用 U-Net 预测每个视角的混合权重，颜色同样来自真实像素。它们的高频细节是“拷贝”来的，所以能在低算力下输出 1080p。LVSM 的高频细节必须“画”出来：一个 768 维向量要编码 64 个像素的全部颜色，所以它只能在 token 数足够多、每个 token 覆盖的像素足够少时保持清晰。这也是 patch 大小不能随便调大的原因（lv3）。\n\n“全部生成”的好处是可以表达 IBR 难以表达的外观，例如随视角变化的高光：网络不必受“输出是输入颜色凸组合”的约束。坏处是：在输入没看到的区域，网络没有真实像素可用。按 MSE 的理论，最优输出是多种可能性的平均（模糊）；论文实际观察到的却是带固定模式的噪声和闪烁伪影（lv8、lv12）。而且网络不会告诉你哪里它不确定，没有 alpha 或置信度输出。", "mn": {"label": "类比", "t": "Quark 和 Ha et al. 像拼贴画家，从真实照片上剪下碎片来拼；LVSM 像写实画家，看完照片后每一笔都自己画。写实画家能画出照片里没有的反光，但遇到没看清的地方只能凭习惯落笔，常常留下一片带固定花纹的噪点。"}}, {"b": "eqs", "eqs": [{"tex": "\\hat{\\mathbf{y}}_j = \\sigma\\big(W_o\\,\\mathrm{LN}(\\mathbf{y}_j)\\big)\\in[0,1]^{192},\\qquad W_o\\in\\mathbb{R}^{192\\times 768}", "explain_zh": "第 j 个目标 token 的输出。y_j 是 Transformer 最后一层的输出向量；LN 无 bias；σ 是 Sigmoid；192=8·8·3。"}, {"tex": "\\hat{I}\\big[c,\\ 8a+p_1,\\ 8b+p_2\\big] = \\hat{\\mathbf{y}}_{32a+b}\\big[\\,(p_1\\cdot 8+p_2)\\cdot 3 + c\\,\\big]", "explain_zh": "反 patchify（按代码的 rearrange “(h w) (p1 p2 c) -> c (h p1) (w p2)” 写出）。a、b∈{0,…,31} 是 patch 的行列号，p_1、p_2∈{0,…,7} 是块内坐标，c∈{0,1,2} 是颜色通道。"}]}, {"b": "p", "t": "像素头参数 768（LN 权重）+ 768×192=147,456，合计 148,224（本文实例化计数）。每个目标视角 1024 个 token × 192 = 196,608 个输出值 = 3×256×256。", "label": "具体数字"}, {"b": "p", "t": "直接回归像素与“最少 3D 偏置”的主张一致：不假设颜色必须来自某张输入图。线性头足够简单，让表达能力集中在 Transformer 里。放弃的方案：IBR 混合权重（Quark、IBRNet、Ha et al.）；CNN 或 U-Net 解码器；扩散式生成解码。论文没有专门比较这些输出方式（据我们能核对到的内容）。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）每个 token 独立写出自己的 8×8 块，块与块之间没有重叠或平滑，块边界的连续性完全依赖注意力学到的上下文；训练不足时可能出现块状伪影。（2）Sigmoid 让输出很难精确到 0 或 1，纯黑纯白区域会略有偏差。（3）没有 alpha 或置信度输出，下游无法知道哪里是“猜”的。（4）输出分辨率被 patch 网格锁定：想输出 512² 就要 4096 个目标 token，计算量随之增长。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "同样在 256² 下，LVSM 每个目标 token 要写出 192 个像素值；Quark 的网络在 288×512 上只输出每层深度、σ 和 8 个混合权重。为什么 Quark 可以用小得多的网络输出 1080p，而 LVSM 不行？", "a": "Quark 的高频纹理直接从全分辨率输入照片中按权重取样，网络只需在低分辨率上决定“去哪取、按什么比例混合”，这些量在空间上平滑，低分辨率加上采样就足够。LVSM 没有取色通道，所有高频细节都必须由网络生成并编码在 token 里，输出分辨率越高，需要的 token 越多，而注意力开销随 token 数平方增长。"}]}, {"b": "sec", "h": "LV8 · 损失：1.0·MSE + 0.5·VGG-19 感知损失（代码默认，LPIPS 权重为 0）", "id": "walk-lvsm-lv8", "sn": {"label": "论文位置", "t": "方法节训练目标；model/loss.py: PerceptualLoss（第 16–119 行）、LossComputer（第 121–199 行）；configs/LVSM_scene_decoder_only.yaml 第 38–40 行（encoder-decoder 配置中行号后移一行）"}}, {"b": "p", "t": "输入：预测图 Î 与真值 I，[B, V_t, 3, 256, 256]，取值 [0,1]。输出：标量损失，以及日志用的 PSNR、l2、perceptual 等。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-l-loss"}, {"k": "concept-v-metrics"}, {"k": "concept-l-diffusion"}, {"k": "adv-a-diffusion-3d"}]}}, {"b": "p", "t": "代码中的损失由两项组成（l-loss）。第一项是 MSE，逐像素的均方误差，它直接对应评测用的 PSNR。第二项是感知损失，权重 0.5：把两张图送进一个冻结的 VGG-19，比较 5 个阶段的特征图之间的 L1 距离，再加上像素级 L1，各项按固定系数加权后除以 255。实现来自 Crowdsampling-the-Plenoptic-Function 与 Long-LRM 的代码（loss.py 注释），VGG 权重是 MatConvNet 版的 ImageNet 预训练模型，max-pool 换成了 avg-pool。LPIPS 模块也写了，但默认权重为 0，只在评测时用 LPIPS（VGG 版）打分。\n\n为什么要加感知损失？只用 MSE 时，网络在不确定的地方会输出所有可能答案的平均值：例如被遮挡的墙面后面可能是门也可能是柜子，平均出来就是一片灰糊。感知损失惩罚特征层面的差异，鼓励输出更锐利、纹理更像真实图像（v-metrics）。但它不能消除根本问题：这是确定性回归，没有从多种可能中“挑一个”的机制。论文局限一节的观察是：以往基于 3D 的确定性模型在未见区域通常产生模糊，LVSM 则常出现带固定模式的噪声和闪烁；两者都不同于扩散模型那样生成一个具体但可能错误的内容（l-diffusion、a-diffusion-3d），作者也把引入生成式方法列为改进方向。为什么 LVSM 不是变糊而是出噪声，论文没有解释；一个合理的解读是感知损失惩罚“糊”，而逐 token 的线性像素头又容易输出固定的纹理模式。\n\n训练目标里没有深度、法线或任何几何项，也没有时间项。监督全部来自目标视角的真实图像。", "mn": {"label": "类比", "t": "MSE 像老师只按每个像素的对错扣分，学生遇到没把握的题就写一个“平均答案”；感知损失像老师还会看整体“像不像”，写成一团浆糊也要扣分。但只要题目本身没有唯一答案，学生还是会倾向于写一个折中的答案。"}}, {"b": "eqs", "eqs": [{"tex": "\\mathcal{L} = 1.0\\cdot\\mathrm{MSE}(\\hat{I}, I) + 0.5\\cdot\\mathcal{L}_{\\text{perc}}(\\hat{I}, I) + 0\\cdot\\mathrm{LPIPS}(\\hat{I}, I)", "explain_zh": "代码默认配置（l2_loss_weight=1.0，perceptual_loss_weight=0.5，lpips_loss_weight=0.0）。Î 为预测图，I 为真值。论文写作 MSE + λ·Perceptual（感知损失引用 Johnson et al., 2016），场景级 λ=0.5、物体级 λ=1.0；代码默认与场景级一致。"}, {"tex": "\\mathcal{L}_{\\text{perc}} = \\frac{1}{255}\\Big(\\lVert\\tilde{x}-\\tilde{y}\\rVert_1 + \\sum_{k=1}^{5} c_k\\,\\lVert\\phi_k(\\tilde{x})-\\phi_k(\\tilde{y})\\rVert_1\\Big),\\quad \\tilde{x}=255\\,\\hat{I}-\\boldsymbol{\\mu}", "explain_zh": "按 loss.py 改写。μ=(123.68, 116.779, 103.939) 是 ImageNet 均值；ỹ 同理由真值得到；φ_k 是 VGG-19 前 5 个阶段的输出（relu1_2、relu2_2、relu3_2、relu4_2、relu5_2，avg-pool 版）；c=(1/2.6, 1/4.8, 1/3.7, 1/5.6, 10/1.5)；‖·‖_1 取平均绝对值。"}, {"tex": "\\mathrm{PSNR} = -10\\log_{10}\\mathrm{MSE}", "explain_zh": "像素取值 [0,1] 时的 PSNR，代码在训练日志与评测中都这样算。MSE 每降到原来的 10^{−0.1}≈0.79 倍，PSNR 提高 1 dB。"}]}, {"b": "p", "t": "权重 1.0 / 0.5 / 0（配置）。数值例：若 MSE=0.00108，则 PSNR=−10·log10(0.00108)≈29.67 dB；decoder-only 相对 GS-LRM 的 +1.57 dB 对应 MSE 降到约 0.70 倍。", "label": "具体数字"}, {"b": "p", "t": "MSE 直接优化 PSNR，感知损失弥补 MSE 带来的模糊，这是 LRM 系列的常见组合（论文场景级 λ=0.5、物体级 λ=1.0）。代码选择自定义的 VGG 感知损失而不是 LPIPS，一个合理的解读是：LPIPS 同时也是评测指标，直接优化它有“对着考题训练”的嫌疑；论文是否这样解释，未能核对。放弃的方案：对抗损失、扩散式生成损失（能减少模糊，但会引入幻觉，也更难训练）。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）评测的 LPIPS 与训练的感知损失都基于 VGG 特征，两者相关，LPIPS 的提升部分来自这一点。（2）感知损失只能改变、不能消除回归模型在未见区域的问题；论文报告的失败形态是带固定模式的噪声和闪烁，而不是模糊。（3）loss.py 在初始化时从 vlfeat.org 下载 VGG 权重，并调用 torch.distributed，单机无分布式时需要自己改。（4）没有任何几何或时间监督，模型学到的“几何”只能从它的渲染结果间接判断。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "某个区域在两张输入里都被遮挡，真实内容可能是红色或蓝色，各占一半概率。只用 MSE 训练时，网络在这里的最优输出是什么？加上感知损失后会怎样？", "a": "只用 MSE 时，最优输出是期望值，也就是红蓝的平均（偏紫的颜色），每种情况下都“错一半”，看起来是一种不存在的模糊颜色。感知损失惩罚特征差异，会推动输出带有更清晰的纹理和边缘，但由于它仍是确定性的逐样本回归，最优解仍倾向于某种折中，而不会像生成模型那样随机采样出“红”或“蓝”中的一个。这说明确定性回归在未见区域给不出“某一个”合理答案。按 MSE 理论这里应当变糊；论文实际观察到的是带固定模式的噪声和闪烁，说明感知损失和网络结构改变了失败的具体形态，但没有消除问题。"}]}, {"b": "sec", "h": "LV9 · 训练数据与视角采样：RE10K 帧间隔 25–192、两端作输入、8 帧中随机抽 6 个目标（含输入帧本身）", "id": "walk-lvsm-lv9", "sn": {"label": "论文位置", "t": "实验节数据集说明（RealEstate10K 沿用 pixelSplat 划分；Objaverse 按 GS-LRM 设置渲染）；data/dataset_scene.py: view_selector（第 133–149 行）、preprocess_frames（第 54–95 行）；utils/data_utils.py: fetch_views（第 84–152 行）；configs/LVSM_scene_decoder_only.yaml 第 46–62 行；process_data.py"}}, {"b": "p", "t": "输入：一段 RealEstate10K 视频的全部帧及每帧的内参与 w2c。输出：一个训练样本，包含 8 帧 256×256 图像 [8,3,256,256]、规范化后的 c2w [8,4,4] 和内参 [8,4]；随后被切成 2 个输入（第 0、1 帧，即两端帧）和 6 个目标（从 8 帧中随机抽取）。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-g-sfm"}, {"k": "concept-g-pinhole"}, {"k": "concept-n-generalizable"}, {"k": "concept-v-metrics"}]}}, {"b": "p", "t": "场景级数据来自 RealEstate10K：约 8 万段房地产视频片段，来自约 1 万个 YouTube 视频，室内外都有，相机位姿由原数据集用 SLAM 加光束法平差估计（g-sfm）。LVSM 使用 pixelSplat 发布的预处理版本（360×640），process_data.py 把它拆成逐帧 PNG 和 JSON 元数据。\n\n视角采样（view_selector）是理解模型能力边界的关键。每次随机选一个帧间隔 d∈[25, 192]（片段太短时上限取片段长度减 1），随机选起点，把起点帧和终点帧作为两个输入，再从两者之间随机抽 6 帧，共 8 帧。然后 fetch_views 取前 2 帧（两端帧）作输入；因为 target_has_input=True，6 个目标从全部 8 帧中随机抽，可能包括两个输入帧本身。\n\n这带来两个推论。第一，训练中所有目标在时间上都夹在两个输入之间，相机轨迹是连续的手持或平移运动，所以模型学的主要是内插。第二，按超几何分布，平均每个样本 6 个目标里有 1.5 个就是输入帧，只有约 3.6% 的样本完全不含输入帧；这部分监督等于教网络“复制输入”，是一个比新视角合成容易得多的任务。论文是否提到这一设置，未能核对。\n\n图像预处理：高度缩放到 256，宽度按比例并取整到 8 的倍数（360×640 → 256×456），再中心裁成 256×256，内参同步缩放和平移；也就是说，每张图约 44% 的水平视野被裁掉了。物体级数据按 GS-LRM 的设置在 Objaverse 上渲染约 73 万个物体、每个 32 个随机视角，训练时用 4 个输入视角；这部分数据和代码没有开源。", "mn": {"label": "类比", "t": "像教学生画“两张照片之间的中间帧”：每道练习题都从一段视频里截头截尾两帧当题目，答案从中间抽；而且约四分之一的答案其实就是题目本身。学生因此非常擅长内插，但从没练过“站到两张照片外面去画”。"}}, {"b": "eqs", "eqs": [{"tex": "d\\sim\\mathcal{U}\\{25,\\dots,\\min(192,\\ T-1)\\},\\quad s\\sim\\mathcal{U}\\{0,\\dots,T-d-1\\},\\quad \\text{inputs}=\\{s,\\ s+d\\}", "explain_zh": "按 view_selector 改写。T 是片段帧数；d 是两个输入帧的间隔；s 是起点。其余 6 帧从开区间 (s, s+d) 中无放回随机抽取。"}, {"tex": "\\mathbb{E}[\\#\\text{inputs among targets}] = 6\\cdot\\frac{2}{8} = 1.5,\\qquad P(\\text{none}) = \\frac{\\binom{6}{6}}{\\binom{8}{6}} = \\frac{1}{28}\\approx 3.6\\%", "explain_zh": "target_has_input=True 时的超几何分布计算：从 8 帧（其中 2 帧是输入）中无放回抽 6 个目标。P(两个输入都被抽中)=C(6,4)/C(8,6)=15/28≈54%。"}, {"tex": "\\begin{aligned}(f_x, c_x) &\\leftarrow r_x\\,(f_x, c_x) - (0,\\ \\Delta_x),\\\\ (f_y, c_y) &\\leftarrow r_y\\,(f_y, c_y) - (0,\\ \\Delta_y)\\end{aligned}", "explain_zh": "缩放与裁剪对内参的影响（dataset_scene.py 第 79–85 行）。r_x=456/640、r_y=256/360 是缩放比；Δ_x=(456−256)/2=100、Δ_y=0 是中心裁剪的偏移。主点平移，焦距不变。"}]}, {"b": "p", "t": "num_views=8，num_input_views=2，num_target_views=6，min_frame_dist=25，max_frame_dist=192（配置）。RealEstate10K 约 8 万段片段（据检索）。原图 360×640 → 256×456 → 裁成 256×256，保留约 56% 的宽度。物体级约 73 万个物体 × 32 个视角，4 个输入（据检索）。", "label": "具体数字"}, {"b": "p", "t": "沿用 pixelSplat 的数据和评测划分，才能与 pixelSplat、MVSplat、GS-LRM 公平比较；帧间隔的范围决定了训练基线宽度的分布。把两端帧当输入、中间帧当目标，与评测索引的结构一致（评测时目标也全在两输入之间）。target_has_input=True 的动机代码没有说明，一个合理的解读是：它让每个目标都有监督信号，并附带一个“重建输入”的正则。没有采用的方案：随机选输入位置（会引入外推样本）、按相机基线而不是帧号采样。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）训练和评测都只覆盖内插，“对新场景泛化”不等于“对新视角位置泛化”。（2）约 25% 的目标监督是复制输入，训练日志里的 PSNR 预计会高于评测 PSNR（本文推断，未实测）。（3）中心裁剪丢掉了两侧视野，模型从没见过 16:9 宽画幅，直接用在宽画幅阵列上需要微调（README 转述论文局限）。（4）坐标规范化用的是这 8 帧的全部位姿，其中包括目标（见 lv2）。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "如果把 target_has_input 改成 False，训练会有什么变化？为什么推理时官方命令把它设成了 False？", "a": "改成 False 后，目标取 8 帧中的最后 6 帧（sort 后的索引 2–7），全部是非输入帧，监督全部是真正的新视角，任务更难，训练 PSNR 会下降，但少了“复制输入”这一部分容易的监督。推理时设为 False，是因为评测要求目标严格按照评测索引取 context 之外的 target 帧（dataset 把 context 放在前、target 放在后），不能随机抽到输入帧，否则指标会虚高。"}]}, {"b": "sec", "h": "LV10 · 训练规模：64×A100、总 batch 512、100K 步、峰值学习率 4e-4；单卡小模型仍超过 MVSplat", "id": "walk-lvsm-lv10", "sn": {"label": "论文位置", "t": "实验节训练细节（GPU 数、batch、学习率、步数）；附录或讨论节中的小算力实验；README.md §2（原始与有限资源训练命令）；configs/*.yaml；utils/training_utils.py: create_optimizer、create_lr_scheduler；train.py"}}, {"b": "p", "t": "输入：约 8 万段场景（或约 73 万个物体）。输出：训练好的权重。论文设置：64 张 A100（8 节点×8 卡），每卡 batch 8，总 batch 512；场景级 100K 步，物体级 80K 步；cosine 学习率，峰值 4e-4，warmup 2500 步（官方配置写 3000）；256 阶段场景级约 3 天、物体级 4–7 天，另有 512 微调（总 batch 128，2.5–3 天）。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-f-optim"}, {"k": "concept-l-loss"}, {"k": "concept-n-generalizable"}, {"k": "adv-a-geometry-free"}]}}, {"b": "p", "t": "LVSM 的“大”主要体现在训练规模上，而不是参数量上：约 1.71 亿参数，约为 ViT-Base（约 8600 万）的两倍，但每一步要处理 512 个场景 × 6 个目标 = 3072 条长度为 3072 的序列。按代码配置粗算（decoder-only，每个目标约 1.74 TFLOPs 前向），一步的前向约 5.3 PFLOPs，加上反向（约 2 倍）和 gradient checkpointing 的重算（约 1 倍），约 21 PFLOPs；100K 步合计约 2×10²¹ FLOPs。64 张 A100 的 bf16 峰值合计约 2×10¹⁶ FLOP/s，满载也要约 1.2 天；论文附录给出场景级 256 阶段约 3 天，对应约 40% 的算力利用率（这是本文的估算，未计入 VGG 感知损失）。\n\n优化器是 AdamW（f-optim）：β=(0.9, 0.95)，weight decay 0.05，一维参数（LayerNorm、RMSNorm 的增益）不做衰减。学习率先线性 warmup，再按 cosine 在剩余步数内降到 0。论文写 warmup 2500 步，官方配置写 3000 步，这是代码与论文的一处小差异。\n\n小算力实验是这篇论文说服力的重要来源。批评者可能会说：LVSM 更好只是因为用了 64 张卡。作者因此在 1–2 张 A100 上训练缩小版：6 层、batch 64 的 LVSM-small 在单张 A100 80G 上训练 7 天，RealEstate10K 达到 27.66/0.870/0.129，比“此前最好的单卡训练模型” MVSplat（26.39）高约 1.3 dB；12 层、batch 64 的版本在 2 张 GPU 上训练 7 天，达到 28.56/0.889/0.112。第三方复现仓库 open-lvsm 援引的“12 层 28.61、6 层 27.62”来自论文的模型大小消融（8 卡、总 batch 64），和上面两个小算力结果是不同的实验。", "mn": {"label": "类比", "t": "像培养一名画师：正式版是 64 位老师同时带、每轮看 512 套房子、练 10 万轮；小算力版是一位老师带、每轮看 64 套房子。小算力版画得不如正式版，但已经比只用尺子和透视法（显式几何）作画的同学好。"}}, {"b": "eqs", "eqs": [{"tex": "\\eta(t) = \\begin{cases}\\eta_{\\max}\\,\\dfrac{t}{T_w}, & t<T_w\\\\[4pt] \\dfrac{\\eta_{\\max}}{2}\\Big(1+\\cos\\dfrac{\\pi\\,(t-T_w)}{T-T_w}\\Big), & t\\ge T_w\\end{cases}", "explain_zh": "cosine 学习率日程（transformers 的实现）。η_max=4×10⁻⁴；T_w 是 warmup 步数（论文 2500，配置 3000）；T 是总步数（场景级 100K）；t 是当前参数更新步。"}, {"tex": "C_{\\text{step}} \\approx 4\\cdot B\\cdot V_t\\cdot C_{\\text{DO}}(2) = 4\\times 512\\times 6\\times 1.74\\,\\text{TFLOPs}\\approx 21\\,\\text{PFLOPs}", "explain_zh": "按代码配置估算的每步训练计算量。B=512 个场景，V_t=6 个目标；因子 4 = 前向 1 + 反向约 2 + checkpointing 重算约 1；C_DO(2) 见 lv4。乘以 100K 步约 2.1×10²¹ FLOPs。"}, {"tex": "T_{\\text{train}} \\approx \\frac{2.1\\times10^{21}}{64\\times 312\\times10^{12}\\times \\mathrm{MFU}}", "explain_zh": "训练时间估算。312 TFLOPS 是 A100 的 bf16 稠密峰值；MFU 是实际算力利用率。MFU=1 时约 1.07×10⁵ s（约 1.2 天），MFU=0.35 时约 3.5 天。论文报告场景级 256 阶段约 3 天，对应 MFU≈0.4。"}]}, {"b": "p", "t": "论文（检索）：64×A100，每卡 8，总 batch 512；峰值学习率 4e-4，warmup 2500；256 阶段物体级 80K 步、场景级 100K 步，场景级约 3 天，物体级 encoder-decoder 约 4 天、decoder-only 约 7 天；512 微调物体级 10K 步（约 2.5 天）、场景级 20K 步（约 3 天），总 batch 128，学习率更小。配置：β1 0.9，β2 0.95，weight decay 0.05，warmup 3000，train_steps 100000，梯度裁剪 1.0。小算力（检索）：6 层 LVSM-small 单卡 A100 80G 7 天 27.66/0.870/0.129；12 层 2 卡 7 天 28.56/0.889/0.112（batch 都是 64）。README 有限资源命令：8 卡，12 层，每卡 16，总 batch 128。", "label": "具体数字"}, {"b": "p", "t": "作者的核心论点是“少偏置的模型能从数据和算力中获益更多”，所以既展示了大规模训练的上限，也用小算力实验排除“只是算力更大”的解释。β2=0.95、warmup 加 cosine、较大的 weight decay 都是大 Transformer 训练的常见配置。训练课程很简单：先在 256 下训练，再在 512 下微调（总 batch 降到 128、学习率更小），没有更复杂的课程设计。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）主表对比的算力并不对等：pixelSplat、MVSplat 的训练成本远低于 64 张 A100 训练数天。看小算力结果更公平。（2）warmup 步数论文与配置不一致（2500 对 3000），复现时以配置为准，影响很小。（3）有效 batch 应按“场景数 × 目标数”理解：512×6=3072 个目标图像/步；后续 SVSM 专门把 B·V_T 定义为有效 batch 来研究缩放规律。（4）open-lvsm 援引的 12 层 28.61、6 层 27.62 来自模型大小消融（8 卡、总 batch 64），27.66（6 层单卡）和 28.56（12 层 2 卡）来自小算力实验，两组设置不同，引用时要注明出处。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "把 patch 从 8 改成 16，按 lv4 的公式估算 decoder-only（N=2）每个目标的计算量会变成原来的多少？为什么 README 说“更快但质量更低”？", "a": "每视角 token 数从 1024 降到 256，序列长度 L 从 3072 降到 768，是原来的 1/4。线性部分约与 L 成正比，变为 1/4；注意力部分与 L² 成正比，变为 1/16。原来线性约 1.04、注意力约 0.70 TFLOPs，现在约 0.26+0.04=0.30 TFLOPs，约为原来的 17%。但每个 token 要输出 16×16×3=768 个像素值，且只有一个 768 维向量来承载 256 个像素的细节，高频信息更难保留，所以质量下降。"}]}, {"b": "sec", "h": "LV11 · 推理与评测：6474 个内插场景、零样本改变输入视角数、渲染速度与实时临场的距离", "id": "walk-lvsm-lv11", "sn": {"label": "论文位置", "t": "实验节评测协议；零样本输入视角数实验图；Fig. 8（256×256 下渲染 FPS 随输入视角数变化）；README.md §3；inference.py；utils/metric_utils.py；data/evaluation_index_re10k.json"}}, {"b": "p", "t": "输入：评测索引中每个场景的 2 个 context 帧和 3 个 target 帧（num_views=5，target_has_input=False）。输出：每个目标的预测图，以及逐图 PSNR、SSIM、LPIPS，先在场景内平均、再在 6474 个场景间平均；可选渲染输入位姿之间的插值视频。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-v-metrics"}, {"k": "concept-n-generalizable"}, {"k": "adv-a-telepresence-sys"}, {"k": "adv-a-geometry-free"}]}}, {"b": "p", "t": "评测协议（v-metrics）：官方评测索引与 pixelSplat、MVSplat、DepthSplat 仓库中的文件逐字节相同，有 7194 个条目，其中 720 个为空，有效 6474 个场景。每个场景 2 个输入帧相隔 45–136 帧（中位数 58），3 个目标帧全部落在两个输入帧之间（按闭区间，本文统计）；其中 583 个目标帧（3.0%，涉及 575 个场景）与某个输入帧是同一帧，只需复制输入。所以主表数字衡量的是“两张图之间的内插”。指标逐图计算：PSNR 先 clamp 到 [0,1]；SSIM 用 skimage，11×11 高斯窗；LPIPS 用 VGG 版本。\n\n零样本改变输入视角数：据检索，物体级模型用 4 张输入训练，测试时给 1 张到 10 张以上。decoder-only 给得越多越好，encoder-decoder 与 GS-LRM 一样在超过 8 张后下降。之所以能零样本改 N，是因为 decoder-only 的序列长度可以随意变化，而且每个 token 都自带射线，模型不依赖“第几张图”这种顺序信息（lv3）。\n\n速度与实时性（a-telepresence-sys）：论文 Fig. 8 画出了 256×256 下渲染 FPS 随输入视角数的变化，图注说明“渲染”只指解码过程（encoder-decoder 不含编码时间）；encoder-decoder 几乎不随输入数变化，decoder-only 随视角增多变慢。SVSM 论文的速度表（单个目标视角）给出了一组数：encoder-decoder 在 2/4/8 个输入时约 53.7/52.9/52.7 FPS，decoder-only 为 37.9/19.5/8.6 FPS（测速 GPU 未能核对）。Efficient-LVSM 的效率表中 LVSM decoder-only 为 109.37 ms（测量设置未能核对）。对临场系统而言，这些数字要乘以视点数：双目头显每帧要渲染 2 个视角，decoder-only 每个视角都要重跑全部 token。按本文估算，256²、2 张输入时每帧约 3.5 TFLOPs；若把 1080p 直接切成 8×8 patch、用 4 张输入，每只眼约 2.0 PFLOPs，即使 A100 以 bf16 峰值满载也要 6 s 以上，比 30 fps 所需的 33 ms 慢约 200 倍，双目还要再翻一倍。", "mn": {"label": "类比", "t": "考试题目全是“在两张照片之间补一帧”，模型在这类题上拿了高分；但远程临场的观众会走到照片外面去看，而且要求每秒 30–90 帧、每只眼睛各一张，这张考卷并没有考这些。"}}, {"b": "eqs", "eqs": [{"tex": "\\overline{\\mathrm{PSNR}} = \\frac{1}{S}\\sum_{s=1}^{S}\\frac{1}{3}\\sum_{t=1}^{3}\\Big(-10\\log_{10}\\mathrm{MSE}\\big(\\hat{I}_{s,t}, I_{s,t}\\big)\\Big),\\qquad S=6474", "explain_zh": "按 metric_utils 的实现写出的平均方式：先对每个场景的 3 个目标取平均，再对场景取平均。Î_{s,t}、I_{s,t} 是第 s 个场景第 t 个目标的预测与真值。注意这是 PSNR 的平均，不是 MSE 平均后再换算。"}, {"tex": "C_{\\text{frame}} = M\\cdot C_{\\text{DO}}(N)\\quad\\text{vs.}\\quad C_{\\text{enc}}(N) + M\\cdot C_{\\text{dec}}", "explain_zh": "每帧计算量与视点数 M 的关系。M=2（双目）、N=2、256² 时，decoder-only 约 3.5 TFLOPs，encoder-decoder 约 4.5 TFLOPs；M=8、N=8 时分别约 75 和 17 TFLOPs（本文估算）。"}, {"tex": "n_{\\text{tok}}^{\\text{1080p}} = \\frac{1920}{8}\\cdot\\frac{1080}{8} = 32400,\\qquad C_{\\text{DO}}^{\\text{1080p}}(N{=}4)\\approx 2.0\\times10^{15}\\ \\text{FLOPs}", "explain_zh": "把同样的 patch 设置搬到 1080p 时的估算：每视角 32,400 个 token，5 个视角共 162,000 个 token，注意力项占绝对主导。即使 A100 以 312 TFLOPS 满载，一帧也要 6 s 以上。"}]}, {"b": "p", "t": "评测：6474 个场景，每个 2 输入 + 3 目标，输入间隔 45–136 帧（中位数 58），目标 100% 位于两输入之间（闭区间），其中 583 个与输入帧相同（本文统计）。README 推理命令：8 卡，每卡 batch 4，num_views 5。理论计算量（本文估算，2×MAC）：256² decoder-only，N=2 为 1.74、N=4 为 3.67、N=8 为 9.39 TFLOPs/目标；encoder-decoder 解码 1.31 TFLOPs/目标。第三方速度数据：SVSM 表中 decoder-only 在 2/4/8 个输入时 37.9/19.5/8.6 FPS，encoder-decoder 53.7/52.9/52.7 FPS；Efficient-LVSM 表中 LVSM decoder-only 109.37 ms，Efficient-LVSM 24.78 ms（测量条件均未能核对）。本文在 4 核 CPU、fp32 上跑通 decoder-only 一次前向（2 输入、3 目标）约 32 s，仅用于验证形状。", "label": "具体数字"}, {"b": "p", "t": "沿用 pixelSplat 的评测索引，是为了与已有方法直接比较数字；零样本改变 N 的实验用来展示“少偏置 + 无瓶颈”的好处。论文用 Fig. 8 展示两种结构的速度差异，并据此把 encoder-decoder 定位为“更快、质量略低”的选择。论文没有报告外推评测、端到端延迟、显存或双目渲染的开销（据我们能核对到的内容）。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）主表只衡量内插，外推质量没有数字；而且约 3% 的目标帧就是输入帧本身。（2）inference.py 用 DistributedSampler（默认打乱，并补齐到卡数的整数倍）加 drop_last=True。按 README 的 8 卡、每卡 batch 4 推算，6474 个场景中约 16 个不会被评测，另有 6 个补齐样本会被重复评测；结果文件夹按数据集下标命名，重复场景会覆盖同一个文件夹。影响很小，但严格说并不是全部 6474 个场景的平均。（3）视频渲染只在输入位姿之间插值，演示视频也不能反映外推能力。（4）按图注，Fig. 8 的“渲染”只指解码过程：encoder-decoder 不含编码时间，也不含数据读取和坐标规范化；换算成临场系统的帧率时，还要乘以视点数，动态场景下还要加上每帧的编码。（5）代码里有一个默认关闭的 dynamic_input_view_num 选项，训练时可随机用 2–4 张输入；论文的零样本结论不依赖它。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "设计一个外推评测：只改评测索引，不改模型。你会怎样改？预期结果如何？", "a": "对每个场景，保持两个输入帧不变，把目标帧改成落在输入范围之外，例如输入为 (s, s+d)，目标取 s+d+10、s+d+20、s+d+30（需在片段长度内），也可以对称地取 s 之前的帧。生成新的 json，替换 view_idx_file_path 后运行 inference.py。预期 PSNR 明显低于内插设定，并且随外推距离增加而下降，画面边缘在输入没有覆盖的区域出现模糊或带固定模式的噪声；decoder-only 与 encoder-decoder 的差距可能缩小，因为两者都没有这些区域的信息。"}]}, {"b": "sec", "h": "LV12 · 如何读实验与失败模式：主表、物体级、零样本曲线、小算力、外推与未见区域伪影", "id": "walk-lvsm-lv12", "sn": {"label": "论文位置", "t": "主结果表（物体级 ABO/GSO 与场景级 RealEstate10K）；零样本输入视角数图；Fig. 8；模型大小消融与架构消融表；QK-Norm 的说明；局限一节；README.md 权重表与局限引用"}}, {"b": "p", "t": "输入：论文的主要表格与图、官方 README 的权重表。输出：判断 LVSM 证明了什么、没证明什么，以及它会怎样失败。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-v-metrics"}, {"k": "adv-a-geometry-free"}, {"k": "adv-a-ff-3dgs"}, {"k": "adv-a-telepresence-sys"}, {"k": "adv-a-temporal-video"}]}}, {"b": "p", "t": "读主表（v-metrics）：场景级 RealEstate10K 256²，decoder-only 29.67/0.906/0.098，encoder-decoder 28.58/0.893/0.114，GS-LRM 28.10/0.892/0.114，MVSplat 26.39，pixelSplat 26.09，Du et al. 24.78，GPNR 24.11，pixelNeRF 20.43。decoder-only 比 GS-LRM 高 1.57 dB，MSE 约降到 0.70 倍；encoder-decoder 只高 0.48 dB，LPIPS 持平。物体级 512：ABO 上 GS-LRM 29.09、decoder-only 32.10（+3.0 dB）；GSO 上 GS-LRM 30.52、decoder-only 32.36，按表只高 1.84 dB，而正文写 2.8 dB，两者对不上，引用时以表为准。encoder-decoder 在 ABO 512 上为 29.81（略高于 GS-LRM），在 GSO 512 上为 29.32（反而低于 GS-LRM）。物体级 256 下，decoder-only 比 GS-LRM 高 3.5 dB（ABO）和约 2.1 dB（GSO）。物体级提升比场景级大（合理的解读：合成物体数据量大、视角覆盖均匀）。\n\n读零样本曲线：看两条线的走势。decoder-only 随输入增多单调上升，encoder-decoder 在 8 张以后下降，说明瓶颈在固定长度的 latent。读 Fig. 8：同一张图上，decoder-only 的解码速度随输入增多下降，这就是“质量随视角上升”的价格。\n\n读小算力结果与消融：单卡训练的 6 层 LVSM-small 比 MVSplat 高约 1.3 dB，这比主表更能说明“去掉 3D 偏置”本身的价值。模型大小消融（场景级，8 卡、总 batch 64）中，decoder-only 从 6、12、18 到 24 层依次为 27.62、28.61、28.77、28.89 dB，收益逐渐变小。架构消融（物体级 GSO，encoder-decoder 基准 28.07 dB）中，CNN tokenizer 为 27.59，解码时不更新 latent 为 26.61，纯 cross-attention 解码器为 24.60。QK-Norm 只有定性结论：不加会训练崩溃。\n\n失败模式（a-geometry-free）：（1）外推与未见区域：论文自述以往 3D 方法在这些区域通常模糊，LVSM 则常出现带固定模式的噪声和闪烁。（2）分辨率与宽高比：512×512 训练、512×960 测试时，中央正常、左右两侧变模糊。（3）视角多时 encoder-decoder 退化。（4）没有时间一致性评测。临场系统最关心的恰好是（1）和（4）。", "mn": {"label": "类比", "t": "读这篇论文的表格，像看一位短跑选手的成绩单：100 米（内插、256²）破了纪录；但远程临场要跑的是马拉松（高分辨率、长时间、观众自由走动），成绩单上没有这一项。"}}, {"b": "eqs", "eqs": [{"tex": "\\frac{\\mathrm{MSE}_{\\text{LVSM}}}{\\mathrm{MSE}_{\\text{GS-LRM}}} = 10^{-\\Delta\\mathrm{PSNR}/10} = 10^{-0.157}\\approx 0.70", "explain_zh": "把 PSNR 差换算成 MSE 比例。ΔPSNR=29.67−28.10=1.57 dB。严格说，平均 PSNR 的差不完全等于平均 MSE 的比例，这里是近似换算。"}, {"tex": "\\hat{I}^{\\star}(\\mathbf{x}) = \\mathbb{E}\\big[I(\\mathbf{x})\\,\\big|\\,\\{I_i, P_i\\}, P_t\\big]", "explain_zh": "MSE 训练下确定性模型的最优输出是条件期望。x 是像素位置；当输入不足以确定 I(x) 时（外推、去遮挡），条件分布有多个模态，期望值就是它们的平均，理论上表现为模糊。论文实际观察到 LVSM 在未见区域更常出现带固定模式的噪声和闪烁，说明网络并没有收敛到这个理论最优（合理的解读：感知损失和逐 token 的像素头改变了失败形态）。"}]}, {"b": "p", "t": "RealEstate10K：29.67/0.906/0.098（decoder-only），28.58/0.893/0.114（encoder-decoder；README 权重 28.60），GS-LRM 28.10/0.892/0.114，MVSplat 26.39/0.869/0.128，pixelSplat 26.09/0.863/0.136，Du et al. 24.78/0.820/0.213，GPNR 24.11/0.793/0.255，pixelNeRF 20.43/0.589/0.550。ABO 512：Triplane-LRM 27.50/0.896/0.093，GS-LRM 29.09/0.925/0.085，encoder-decoder 29.81，decoder-only 32.10/0.938/0.045。GSO 512：Triplane-LRM 26.54/0.893/0.064，GS-LRM 30.52/0.952/0.050，encoder-decoder 29.32/0.933/0.052，decoder-only 32.36/0.962/0.028（正文称 +2.8 dB，表中为 +1.84 dB）。256 物体级：LGM 20.79/21.44，GS-LRM 28.98/29.59，decoder-only 32.47/31.71（ABO/GSO）。消融：decoder-only 6/12/18/24 层 27.62/28.61/28.77/28.89（8 卡、总 batch 64）；GSO 架构消融 28.07（基准）、27.59（CNN tokenizer）、26.61（不更新 latent）、24.60（纯 cross-attention）。后续工作（RealEstate10K）：Efficient-LVSM 29.86，SVSM 30.01，LagerNVS 31.39。", "label": "具体数字"}, {"b": "p", "t": "论文的实验逻辑是：先在物体和场景两级证明质量上限，再用零样本视角数实验说明“少偏置”的泛化优势，用 Fig. 8 说明两种结构的速度取舍，最后用小算力实验排除“只是算力更大”的解释。缺少的对照包括：IBR 一支（IBRNet、ENeRF）、外推评测、时间一致性指标、真实人物数据。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）pixelSplat 在其仓库中有新旧两组数字：LVSM 表用 26.09，MVSplat 论文用 25.89，比较时要看清。（2）物体级与场景级的提升幅度不同，不能互相外推。（3）README 的 encoder-decoder 权重为 28.60，论文为 28.58，这是重实现与原版的微小差异。（4）不要把“零样本支持更多输入视角”理解成“可以直接接入 16 台相机”：计算量会随之超线性增长，而且论文只在物体级做了这个实验。（5）GSO 512 的正文增幅（2.8 dB）与表中数字（1.84 dB）不一致；2.8 恰好是 32.36 与 GS-LRM 256 分辨率结果 29.59 之差，可能是正文笔误（本文推测）。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "有人说：“LVSM 在 RealEstate10K 上比 GS-LRM 高 1.57 dB，所以显式 3D 表示已经没用了。”请从实验设计的角度指出这个结论的三个问题。", "a": "第一，评测只覆盖内插，显式表示在外推、多视点复用和几何一致性上的优势没有被测到。第二，比较的是画质，没有比较速度：GS-LRM 生成一次高斯后可以廉价地渲染任意多个视点，LVSM 每个视点都要重跑大网络，对需要实时、多视点的应用这是决定性差别。第三，后续工作显示几何并非无用：LagerNVS 把 3D 预训练的 latent 放回去，在 RealEstate10K 上达到 31.39 dB，并且在 512² 下实时。更准确的结论是：手写的显式表示不是必需的，但几何先验以合适的形式注入仍然有价值。"}]}, {"b": "sec", "h": "配套文章", "id": "parts"}, {"b": "toc", "groups": [{"items": [{"k": "wpart-lvsm-tensor-trace", "t": "LVSM · 张量追踪", "en": "", "s": "逐阶段列出 16 个关键张量的形状与含义。"}, {"k": "wpart-lvsm-experiments", "t": "LVSM · 阅读实验", "en": "", "s": "论文里 8 组实验分别怎么读、真正说明了什么。"}, {"k": "wpart-lvsm-tradeoffs", "t": "LVSM · 设计权衡", "en": "", "s": "7 个关键设计选择：换来了什么，付出了什么。"}, {"k": "wpart-lvsm-faq", "t": "LVSM · 常见问题", "en": "", "s": "初读时最常问的 11 个问题。"}, {"k": "wpart-lvsm-exercises", "t": "LVSM · 练习", "en": "", "s": "6 道由浅入深的动手练习。"}, {"k": "wpart-lvsm-glossary", "t": "LVSM · 论文术语", "en": "", "s": "读这篇论文会遇到的 29 个术语。"}]}]}], "toc": true, "series": {"prev": {"k": "guide-depthsplat"}, "up": {"u": "works/walkthrough/index.html", "t": "Walkthrough 目录"}}}}</script>
+<script>
+(function () {
+  "use strict";
+  // ================= lib: DOM, text and math helpers shared by every page =================
+  // A page script defines rich(text) (inline cross-links); paras() and eqList() call it.
+  var DATA;
+  try { DATA = JSON.parse(document.getElementById("data").textContent); } catch (e) { DATA = {}; }
+  var meta = DATA.meta || {};
+
+  // ---------- DOM helpers: all text goes through textContent; external links are https-only ----------
+  function safeUrl(u) { if (typeof u !== "string") return null; var s = u.trim(); return /^https:\/\/[^\s"'<>]+$/i.test(s) ? s : null; }
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "class") n.className = v;
+      else if (k === "text") n.textContent = String(v);
+      else if (k === "href") { var u = safeUrl(v); if (u) { n.setAttribute("href", u); n.setAttribute("target", "_blank"); n.setAttribute("rel", "noopener noreferrer"); } }
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c === null || c === undefined || c === false) return; n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return n;
+  }
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function sv(tag, attrs, kids) {
+    var n = document.createElementNS(SVGNS, tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "text") n.textContent = String(v);
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c) n.appendChild(c); });
+    return n;
+  }
+  function arr(x) { return Array.isArray(x) ? x : []; }
+  function str(x) { return typeof x === "string" ? x : (x === null || x === undefined ? "" : String(x)); }
+  function paras(text) { return str(text).split(/\n\s*\n/).map(function (t) { return t.trim(); }).filter(Boolean).map(function (t) { return el("p", null, rich(t)); }); }
+  function link(title, url) { return safeUrl(url) ? el("a", { href: url, text: title }) : el("span", { text: title }); }
+  function ul(items, map) { return el("ul", { class: "plain" }, arr(items).map(function (x) { return el("li", null, [map ? map(x) : str(x)]); })); }
+  function fmtCit(n) { n = Number(n); if (!(n >= 0)) return "—"; if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k"; return String(n); }
+
+  // ---------- math (MathJax, typeset lazily) ----------
+  var mathReady = false, mathQueue = [];
+  function mathUsable() { return !!(window.MathJax && typeof window.MathJax.typesetPromise === "function"); }
+  function flushMath() { mathReady = true; var q = mathQueue.slice(); mathQueue = []; q.forEach(typeset); }
+  window.__atlasMathReady = flushMath;
+  // MathJax may finish loading before this script runs (cached/async), so also poll for it.
+  var mathPoll = setInterval(function () { if (mathUsable()) { clearInterval(mathPoll); flushMath(); } }, 200);
+  setTimeout(function () { clearInterval(mathPoll); }, 30000);
+  function typeset(node) {
+    if (!node) return;
+    if (!mathReady && mathUsable()) mathReady = true;
+    if (!mathReady || !mathUsable()) { mathQueue.push(node); return; }
+    try { window.MathJax.typesetPromise([node]).catch(function () { /* leave raw TeX visible */ }); } catch (e) { /* leave raw TeX visible */ }
+  }
+  function eqList(eqs) {
+    eqs = arr(eqs).filter(function (q) { return q && str(q.tex).trim(); });
+    if (!eqs.length) return null;
+    return el("div", { class: "eqs" }, eqs.map(function (q) {
+      return el("div", { class: "eq" }, [el("div", { class: "math-block", text: "\\[" + str(q.tex) + "\\]" }), q.explain_zh ? el("p", null, rich(q.explain_zh)) : null]);
+    }));
+  }
+  document.addEventListener("toggle", function (e) { var t = e.target; if (t && t.tagName === "DETAILS" && t.open) typeset(t); }, true);
+
+  // ================= frame (Tufte site): links, notes, hover previews, top bar, theme =================
+  var SITE = DATA.site || {};
+  var ROOT = str(SITE.root);
+  var XREF = DATA.xref || {};
+  function hasX(key) { return Object.prototype.hasOwnProperty.call(XREF, key); }
+  // Custom page parts (search tools, diagrams, charts) register here; blocks.js calls them for {"b": "slot"} blocks.
+  var SLOTS = {};
+
+  // ---------- internal links: urls are relative to the site root; pages sit at different depths ----------
+  var SAFE_PATH = /^[A-Za-z0-9][A-Za-z0-9._\/-]*(\?[A-Za-z0-9=&._-]+)?(#[A-Za-z0-9._-]+)?$/;
+  function relHref(u) {
+    u = str(u);
+    if (/^#[A-Za-z0-9._-]+$/.test(u)) return u;
+    if (!SAFE_PATH.test(u)) return null;
+    var cut = u.indexOf("#"), path = cut < 0 ? u : u.slice(0, cut);
+    if (path === SITE.path) return cut < 0 ? "#" : u.slice(cut);
+    return ROOT + u;
+  }
+  function pageLink(u, text, cls) {
+    var h = relHref(u);
+    if (!h) return el("span", { class: cls || null, text: text });
+    var a = el("a", { class: cls || null, text: text });
+    a.setAttribute("href", h);
+    return a;
+  }
+  // A link to a known entry (concept, topic, paper, step...). data-xref drives the hover preview.
+  function xlink(key, text, cls) {
+    if (!hasX(key)) return text ? document.createTextNode(text) : null;
+    var x = XREF[key], a = pageLink(x.u, text || x.n || x.t, cls);
+    a.setAttribute("data-xref", key);
+    return a;
+  }
+
+  // Concept / topic ids mentioned in prose ("见 g-pinhole") become links labelled with the entry's short name.
+  var ID_RE = /(a-[a-z0-9]+(?:-[a-z0-9]+)*|[fgdrilnv]-[a-z0-9]+)/g;
+  var CJK = /[　-〿㐀-鿿＀-￯]/;
+  function rich(text) {
+    var s = str(text), out = [], last = 0, m;
+    ID_RE.lastIndex = 0;
+    while ((m = ID_RE.exec(s)) !== null) {
+      var id = m[1], prev = m.index > 0 ? s.charAt(m.index - 1) : "", next = s.charAt(m.index + id.length);
+      var key = hasX("concept-" + id) ? "concept-" + id : (hasX("adv-" + id) ? "adv-" + id : null);
+      if (!key || /[A-Za-z0-9_\-]/.test(prev) || /[A-Za-z0-9_]/.test(next)) continue;
+      // The prose spaces ids off from Chinese text; a Chinese label needs no such space.
+      var before = s.slice(last, m.index);
+      if (/ $/.test(before) && CJK.test(before.charAt(before.length - 2))) before = before.slice(0, -1);
+      if (before) out.push(document.createTextNode(before));
+      out.push(xlink(key, null, "xref"));
+      last = m.index + id.length;
+      if (s.charAt(last) === " " && CJK.test(s.charAt(last + 1))) last++;
+    }
+    if (last < s.length) out.push(document.createTextNode(s.slice(last)));
+    return out;
+  }
+  function lines(text) { return str(text).split(/\n+/).map(function (t) { return t.trim(); }).filter(Boolean).map(function (t) { return el("p", null, rich(t)); }); }
+
+  // ---------- side notes (numbered) and margin notes (unnumbered); on phones they fold behind a toggle ----------
+  var noteSeq = 0;
+  function sidenote(kids) {
+    var id = "sn-" + (++noteSeq);
+    return el("span", { class: "note-wrap" }, [
+      el("label", { for: id, class: "margin-toggle sidenote-number", "aria-label": "旁注" }),
+      el("input", { type: "checkbox", id: id, class: "margin-toggle" }),
+      el("span", { class: "sidenote" }, kids)
+    ]);
+  }
+  function marginnote(kids) {
+    var id = "mn-" + (++noteSeq);
+    return el("span", { class: "note-wrap" }, [
+      el("label", { for: id, class: "margin-toggle", "aria-label": "边注", text: "⊕" }),
+      el("input", { type: "checkbox", id: id, class: "margin-toggle" }),
+      el("span", { class: "marginnote" }, kids)
+    ]);
+  }
+  function noteLabel(text) { return el("span", { class: "note-label", text: text }); }
+
+  // ---------- article scaffolding ----------
+  var main = document.getElementById("main");
+  var art = main.querySelector("article");
+  function section(id, title, kids) {
+    var s = el("section", { id: id }, [title ? el("h2", { text: title }) : null].concat(kids));
+    art.appendChild(s);
+    return s;
+  }
+  function articleHead(o) {
+    var crumbs = el("nav", { class: "crumbs", "aria-label": "位置" });
+    arr(SITE.crumbs).forEach(function (c, i) {
+      if (i) crumbs.appendChild(el("span", { class: "sep", text: "›", "aria-hidden": "true" }));
+      crumbs.appendChild(c[1] ? pageLink(c[1], c[0]) : el("span", { text: c[0] }));
+    });
+    art.appendChild(el("header", { class: "art-head" }, [
+      crumbs,
+      el("h1", { text: o.title }),
+      o.subtitle ? el("p", { class: "subtitle", text: o.subtitle }) : null,
+      o.meta ? el("p", { class: "meta" }, o.meta) : null
+    ]));
+    if (o.epigraph) art.appendChild(el("div", { class: "epigraph" }, [el("blockquote", null, [el("p", null, rich(o.epigraph))])]));
+  }
+  // Previous / next in the series, each with its hover preview.
+  function seriesNav(prevKey, nextKey, indexUrl, indexLabel) {
+    var nav = el("nav", { class: "series", "aria-label": "同系列" });
+    nav.appendChild(el("div", { class: "prev" }, prevKey && hasX(prevKey) ? [el("small", { text: "上一篇" }), xlink(prevKey)] : []));
+    nav.appendChild(el("div", { class: "up" }, indexUrl ? [pageLink(indexUrl, indexLabel)] : []));
+    nav.appendChild(el("div", { class: "next" }, nextKey && hasX(nextKey) ? [el("small", { text: "下一篇" }), xlink(nextKey)] : []));
+    art.appendChild(nav);
+  }
+
+  // ---------- hover preview for internal links: mouse (after 300 ms) or keyboard focus; never on touch ----------
+  var tip = null, tipTimer = 0, tipFor = null;
+  function hideTip() {
+    clearTimeout(tipTimer);
+    if (tip) tip.hidden = true;
+    if (tipFor) { tipFor.removeAttribute("aria-describedby"); tipFor = null; }
+  }
+  function showTip(a) {
+    var key = a.getAttribute("data-xref");
+    if (!hasX(key)) return;
+    var x = XREF[key];
+    if (!tip) { tip = el("div", { class: "xtip", id: "xtip", role: "tooltip" }); document.body.appendChild(tip); }
+    tip.textContent = "";
+    if (x.m) tip.appendChild(el("div", { class: "xt-m", text: x.m }));
+    tip.appendChild(el("div", { class: "xt-t", text: x.t }));
+    if (x.e) tip.appendChild(el("div", { class: "xt-e", text: x.e }));
+    if (x.s) tip.appendChild(el("p", { class: "xt-s", text: x.s }));
+    tip.hidden = false;
+    var r = a.getClientRects()[0] || a.getBoundingClientRect(), vw = document.documentElement.clientWidth;
+    var w = tip.offsetWidth, h = tip.offsetHeight;
+    var left = Math.max(8, Math.min(r.left, vw - w - 8));
+    var top = r.bottom + 6;
+    if (top + h > window.innerHeight - 8 && r.top - h - 6 > 8) top = r.top - h - 6;
+    tip.style.left = Math.round(left + window.pageXOffset) + "px";
+    tip.style.top = Math.round(top + window.pageYOffset) + "px";
+    a.setAttribute("aria-describedby", "xtip");
+    tipFor = a;
+  }
+  function xrefTarget(e) { return e.target && e.target.closest ? e.target.closest("a[data-xref]") : null; }
+  document.addEventListener("pointerover", function (e) {
+    var a = xrefTarget(e);
+    if (!a || e.pointerType !== "mouse" || a === tipFor) return;
+    clearTimeout(tipTimer);
+    tipTimer = setTimeout(function () { showTip(a); }, 300);
+  });
+  document.addEventListener("pointerout", function (e) {
+    var a = xrefTarget(e);
+    if (!a || (e.relatedTarget && a.contains(e.relatedTarget))) return;
+    hideTip();
+  });
+  document.addEventListener("focusin", function (e) {
+    var a = xrefTarget(e);
+    if (a && a.matches(":focus-visible")) showTip(a);
+  });
+  document.addEventListener("focusout", function (e) { if (xrefTarget(e)) hideTip(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") hideTip(); });
+  window.addEventListener("scroll", function () { if (tipFor && !tipFor.matches(":focus-visible")) hideTip(); }, { passive: true });
+
+  // ---------- top bar: four menus with dropdowns (hover or click on desktop, a folding list on phones) ----------
+  var wide = window.matchMedia("(min-width: 761px)");
+  function setOpen(li, open) {
+    var btn = li.querySelector(".menu-btn");
+    if (open) Array.prototype.forEach.call(li.parentNode.children, function (o) { if (o !== li) setOpen(o, false); });
+    li.classList.toggle("open", open);
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (!open) li._hover = false;
+  }
+  function buildTopbar() {
+    var bar = document.getElementById("topbar");
+    var menus = el("ul", { class: "menus", id: "menus" });
+    arr(SITE.nav).forEach(function (m) {
+      var id = "menu-" + m.key;
+      var btn = el("button", { type: "button", class: "menu-btn", "aria-expanded": "false", "aria-controls": id, text: m.label });
+      var list = el("ul", { class: "drop", id: id }, arr(m.items).map(function (it) {
+        var a = pageLink(it[1], it[0]);
+        if (it[1] === SITE.navItem) a.classList.add("cur");
+        if (it[1] === SITE.path) a.setAttribute("aria-current", "page");
+        return el("li", null, [a]);
+      }));
+      var li = el("li", { class: "menu" + (m.key === SITE.navCur ? " cur" : "") }, [btn, list]);
+      btn.addEventListener("click", function () {
+        // A click on a menu the mouse already opened keeps it open instead of closing it again.
+        if (li._hover) { li._hover = false; return; }
+        setOpen(li, !li.classList.contains("open"));
+      });
+      btn.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowDown") { e.preventDefault(); setOpen(li, true); var f = list.querySelector("a"); if (f) f.focus(); }
+      });
+      li.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse" && wide.matches) { setOpen(li, true); li._hover = true; } });
+      li.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse" && wide.matches) setOpen(li, false); });
+      li.addEventListener("focusout", function (e) { if (wide.matches && !li.contains(e.relatedTarget)) setOpen(li, false); });
+      li.addEventListener("keydown", function (e) { if (e.key === "Escape" && li.classList.contains("open")) { setOpen(li, false); btn.focus(); } });
+      menus.appendChild(li);
+    });
+    var burger = el("button", { type: "button", class: "burger", "aria-expanded": "false", "aria-controls": "menus", text: "Menu" });
+    burger.addEventListener("click", function () {
+      var open = !bar.classList.contains("nav-open");
+      bar.classList.toggle("nav-open", open);
+      burger.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    var themeBtn = el("button", { type: "button", class: "theme-btn" });
+    function darkNow() {
+      var t = document.documentElement.getAttribute("data-theme");
+      return t ? t === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+    function paintThemeBtn() {
+      var dark = darkNow();
+      themeBtn.textContent = dark ? "Light" : "Dark";
+      themeBtn.setAttribute("aria-label", dark ? "切换到浅色" : "切换到深色");
+    }
+    themeBtn.addEventListener("click", function () {
+      var next = darkNow() ? "light" : "dark";
+      var system = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      // Choosing what the system already shows drops the override, so the page follows the system again.
+      if (next === system) document.documentElement.removeAttribute("data-theme");
+      else document.documentElement.setAttribute("data-theme", next);
+      try { if (next === system) localStorage.removeItem("atlas-theme"); else localStorage.setItem("atlas-theme", next); } catch (e) { /* storage unavailable */ }
+      paintThemeBtn();
+    });
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintThemeBtn);
+    paintThemeBtn();
+    bar.appendChild(el("div", { class: "bar-in" }, [pageLink("index.html", SITE.brand || "", "brand"), el("nav", { class: "site-nav", "aria-label": "站点导航" }, [menus]), themeBtn, burger]));
+    document.addEventListener("click", function (e) {
+      if (!bar.contains(e.target)) Array.prototype.forEach.call(menus.children, function (li) { setOpen(li, false); });
+    });
+  }
+
+  function finishPage() {
+    buildTopbar();
+    var foot = document.getElementById("site-foot");
+    if (foot) foot.appendChild(el("p", null, [pageLink("index.html", SITE.brand || ""), SITE.date ? " · 内容截至 " + SITE.date : ""]));
+    typeset(main);
+    // Deep links (#id): the page is rendered by script, so jump once it exists and again after fonts settle.
+    var h = window.location.hash ? window.location.hash.slice(1) : "";
+    if (h && /^[A-Za-z0-9._~-]+$/.test(h) && document.getElementById(h)) {
+      var moved = false;
+      ["wheel", "touchstart", "keydown", "mousedown"].forEach(function (ev) { window.addEventListener(ev, function () { moved = true; }, { once: true, passive: true }); });
+      var settle = function () { var t = document.getElementById(h); if (t && !moved) t.scrollIntoView({ block: "start" }); };
+      settle();
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { window.requestAnimationFrame(settle); });
+      [400, 1200, 2500].forEach(function (ms) { setTimeout(settle, ms); });
+    }
+  }
+
+  // ================= slot: walkthrough pipeline diagram (nodes link to the steps on the same page) =================
+  function diagramQuark() {
+    return {
+      w: 960, h: 300,
+      nodes: [
+        { x: 10, y: 118, w: 132, h: 64, t: "输入视角 × M", s: "RGB + 相机，M = 8", k: "q1" },
+        { x: 162, y: 118, w: 140, h: 64, t: "编码", s: "特征金字塔 + 射线编码 γ", k: "q2" },
+        { x: 322, y: 118, w: 132, h: 64, t: "初始化 LDM", s: "24 层 × 36×64", k: "q4" },
+        { x: 322, y: 212, w: 132, h: 58, t: "LDM 参数化", s: "等视差锚点 + 视差带", k: "q3", data: true },
+        { x: 496, y: 64, w: 118, h: 58, t: "Render", s: "LDM → 输入视角 Ĩ", k: "q5" },
+        { x: 640, y: 64, w: 118, h: 58, t: "Update", s: "对比 Ĩ 与观测 → Δ", k: "q6" },
+        { x: 568, y: 160, w: 118, h: 58, t: "Fuse", s: "One-to-many attention", k: "q7" },
+        { x: 800, y: 64, w: 150, h: 64, t: "上采样后激活", s: "3.75× 到 1080p", k: "q9" },
+        { x: 800, y: 170, w: 150, h: 64, t: "IBR 混合 + over", s: "全分辨率像素凸组合", k: "q10" }
+      ],
+      loop: { x: 480, y: 26, w: 294, h: 250, label: "Update & Fuse × 5（由粗到细）", noteK: "q8", note: "每步分辨率 ×2，Layer Collapse 层数 ÷2" },
+      edges: [
+        { d: "M142,150 L162,150" }, { d: "M302,150 L322,150" },
+        { d: "M388,212 L388,182" },
+        { d: "M454,150 C470,150 470,93 496,93" },
+        { d: "M614,93 L640,93" },
+        { d: "M699,122 C699,150 686,189 686,189" },
+        { d: "M568,189 C520,189 530,122 540,122", fb: true },
+        { d: "M774,96 L800,96" },
+        { d: "M875,128 L875,170" },
+        { d: "M875,234 L875,268" }
+      ],
+      out: { x: 875, y: 285, text: "新视角图像（1080p，≈30 ms/帧）" }
+    };
+  }
+  function diagramHa() {
+    return {
+      w: 960, h: 330,
+      nodes: [
+        { x: 10, y: 128, w: 136, h: 64, t: "K 个 RGB-D 视角", s: "t 时刻，K = 4", k: "h1" },
+        { x: 10, y: 236, w: 136, h: 58, t: "深度来源", s: "RAFT-Stereo / 传感器", k: "h2", data: true },
+        { x: 176, y: 26, w: 164, h: 64, t: "逐视角前向 splat", s: "像素大小的不透明高斯", k: "h3" },
+        { x: 372, y: 26, w: 150, h: 64, t: "Iₖ, αₖ, Dₖ", s: "K 份目标视角图像", k: "h3", data: true },
+        { x: 176, y: 128, w: 110, h: 64, t: "差分掩码 M", s: "哪里在动", k: "h4" },
+        { x: 304, y: 128, w: 110, h: 64, t: "深度 EMA", s: "只滤静止区域", k: "h5" },
+        { x: 432, y: 128, w: 140, h: 64, t: "图像空间 TSDF", s: "sₖ 截断 τ，加权", k: "h6" },
+        { x: 590, y: 128, w: 128, h: 64, t: "光线步进", s: "零交叉 → 深度 𝒟ᵗ", k: "h8" },
+        { x: 432, y: 240, w: 140, h: 58, t: "上一帧深度 𝒟ᵗ⁻¹", s: "时间反馈 ω_tmp", k: "h9" },
+        { x: 752, y: 60, w: 160, h: 72, t: "几何引导混合 U-Net", s: "9K+1 通道输入", k: "h10" },
+        { x: 752, y: 190, w: 160, h: 64, t: "wₖ、w_BG、I_BG", s: "混合出最终图像", k: "h11" }
+      ],
+      edges: [
+        { d: "M78,236 L78,192" },
+        { d: "M146,146 C160,146 160,58 176,58" },
+        { d: "M146,160 L176,160" },
+        { d: "M340,58 L372,58" },
+        { d: "M286,160 L304,160" }, { d: "M414,160 L432,160" }, { d: "M572,160 L590,160" },
+        { d: "M502,240 L502,192" },
+        { d: "M654,192 C654,270 600,269 572,269", fb: true },
+        { d: "M522,58 C640,58 700,84 752,84" },
+        { d: "M718,160 C735,160 735,112 752,112" },
+        { d: "M832,132 L832,190" },
+        { d: "M832,254 L832,292" }
+      ],
+      out: { x: 832, y: 312, text: "输出图像 ℐᵗ（≈40–100 ms/帧，不含立体深度）" },
+      notes: [{ x: 600, y: 300, text: "虚线：下一帧回灌" }]
+    };
+  }
+  function drawDiagram(spec, anchorKey, title) {
+    var svg = sv("svg", { class: "diagram", viewBox: "0 0 " + spec.w + " " + spec.h, role: "img", "aria-label": title });
+    svg.appendChild(sv("defs", null, [
+      sv("marker", { id: "ah-" + anchorKey, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" }, [sv("path", { d: "M0,0 L10,5 L0,10 z", class: "dhead" })]),
+      sv("marker", { id: "ahf-" + anchorKey, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" }, [sv("path", { d: "M0,0 L10,5 L0,10 z", class: "dhead fb" })])
+    ]));
+    function step(k, kids) {
+      var a = sv("a", { class: "dnode", "aria-label": "跳到步骤 " + k.toUpperCase() }, kids);
+      a.setAttribute("href", "#walk-" + anchorKey + "-" + k);
+      return a;
+    }
+    if (spec.loop) {
+      var lp = spec.loop;
+      svg.appendChild(sv("rect", { class: "dloop", x: lp.x, y: lp.y, width: lp.w, height: lp.h, rx: 4 }));
+      svg.appendChild(sv("text", { class: "dlabel", x: lp.x + 14, y: lp.y + 22, text: lp.label }));
+      svg.appendChild(step(lp.noteK, [sv("text", { class: "dnote", x: lp.x + 14, y: lp.y + lp.h - 14, text: "▸ " + lp.note + "（" + lp.noteK + "）" })]));
+    }
+    spec.edges.forEach(function (e) { svg.appendChild(sv("path", { class: "dedge" + (e.fb ? " fb" : ""), d: e.d, "marker-end": "url(#" + (e.fb ? "ahf-" : "ah-") + anchorKey + ")" })); });
+    spec.nodes.forEach(function (n) {
+      n.k = n.k || n.step;
+      svg.appendChild(step(n.k, [
+        sv("rect", { class: n.data ? "data" : null, x: n.x, y: n.y, width: n.w, height: n.h, rx: 3 }),
+        sv("text", { class: "k", x: n.x + 10, y: n.y + 16, text: n.k }),
+        sv("text", { class: "t", x: n.x + 10, y: n.y + 35, text: n.t }),
+        sv("text", { class: "s", x: n.x + 10, y: n.y + 52, text: n.s })
+      ]));
+    });
+    if (spec.out) svg.appendChild(sv("text", { class: "dnote", x: spec.out.x, y: spec.out.y, "text-anchor": "middle", text: spec.out.text }));
+    arr(spec.notes).forEach(function (n) { svg.appendChild(sv("text", { class: "dnote", x: n.x, y: n.y, text: n.text })); });
+    return svg;
+  }
+  SLOTS.diagram = function (b) {
+    // Laid-out specs come with the page (routes.layout_diagram); the first two deep reads keep their hand-drawn ones.
+    if (b.spec && /^[a-z0-9]+$/.test(str(b.which))) {
+      return el("figure", { class: "fullwidth diagram-fig" }, [el("div", { class: "diagram-wrap" }, [drawDiagram(b.spec, b.which, str(b.label))])]);
+    }
+    var which = b.which === "ha" ? "ha" : "quark";
+    var spec = which === "quark" ? diagramQuark() : diagramHa();
+    return el("figure", { class: "fullwidth diagram-fig" }, [el("div", { class: "diagram-wrap" }, [drawDiagram(spec, which, (which === "quark" ? "Quark" : "Ha et al.") + " 流程图")])]);
+  };
+
+  // ================= article: a page composed as blocks in routes.py =================
+  (function () {
+    var PG = DATA.page || {};
+    var H = PG.head || {};
+    if (PG.id) art.id = PG.id;
+
+    // A link dict from routes.py: {k} an entry with hover preview, {u, t} a page of this site, {url, t} an external page.
+    function part(x) {
+      if (x === null || x === undefined) return null;
+      if (typeof x === "string") return x;
+      if (x.k) return xlink(x.k, x.t || null);
+      if (x.u) return pageLink(x.u, x.t || x.u);
+      if (x.url) return link(x.t || x.url, x.url);
+      return x.t ? str(x.t) : null;
+    }
+    function noteNodes(n) {
+      var kids = [noteLabel(n.label)];
+      if (n.t) kids = kids.concat(rich(n.t));
+      arr(n.links).forEach(function (l, i) { if (i) kids.push(el("br")); kids.push(part(l)); });
+      return kids;
+    }
+    function runIn(label) { return el("b", { class: "run-in", text: label + "：" }); }
+    function multiline(text) {
+      var out = [];
+      str(text).split("\n").forEach(function (line, i) { if (i) out.push(el("br")); out = out.concat(rich(line)); });
+      return out;
+    }
+
+    // ---------- head ----------
+    var meta = [];
+    if (arr(H.prereqs).length) {
+      meta.push(marginnote([noteLabel("阅读前需要")].concat(arr(H.prereqs).map(function (p, i) {
+        var a = part(p);
+        return i ? el("span", null, ["；", a]) : a;
+      }))));
+    }
+    var sep = false;
+    arr(H.meta).concat(H.minutes > 1 ? ["约 " + H.minutes + " 分钟"] : []).forEach(function (x) {
+      var n = part(x);
+      if (!n || (typeof n === "string" && !n.trim())) return;
+      if (sep) meta.push(" · ");
+      meta.push(n);
+      sep = !(typeof x === "string" && /：$/.test(x));
+    });
+    articleHead({ title: H.title, subtitle: H.sub, meta: meta.length ? meta : null, epigraph: H.epigraph });
+    if (str(H.lede).trim()) art.appendChild(el("div", { class: "lede" }, paras(H.lede)));
+
+    // ---------- blocks ----------
+    function heading(tag, b) {
+      var title = b.url && safeUrl(b.url) ? link(b.t, b.url) : (b.k ? part({ k: b.k, t: b.t }) : str(b.t));
+      var h = el(tag, { id: b.id || null }, [title]);
+      if (b.sn) h.appendChild(sidenote(noteNodes(b.sn)));
+      if (b.en) h.appendChild(el("span", { class: "en", text: b.en }));
+      if (b.tag) h.appendChild(el("span", { class: "used", text: b.tag }));
+      return h;
+    }
+    function withNotes(nodes, b) {
+      if (nodes.length && b.mn) nodes[0].insertBefore(marginnote(noteNodes(b.mn)), nodes[0].firstChild);
+      if (nodes.length && b.label) nodes[0].insertBefore(runIn(b.label), nodes[0].firstChild);
+      return nodes;
+    }
+    function listItem(x) {
+      if (typeof x === "string") return el("li", null, rich(x));
+      return el("li", null, (x.label ? [runIn(x.label)] : []).concat(rich(x.t)));
+    }
+    function refsList(items, cls) {
+      var left = items.some(function (x) { return x.left; });
+      return el("ul", { class: "refs " + (cls || "") + (left ? "" : " noleft") }, items.map(function (x) {
+        var body = [x.k || x.u || x.url ? part(x) : el("span", { class: "plain-t", text: x.t })];
+        if (x.tag) body.push(el("span", { class: "used", text: x.tag }));
+        if (x.sub) body.push(el("div", { class: "en", text: x.sub }));
+        if (str(x.gloss).trim()) body.push(el("div", { class: "gloss" }, multiline(x.gloss)));
+        var kids = left ? [el("span", { class: /^\d{4}$/.test(str(x.left)) ? "yr" : "kind", text: str(x.left) })] : [];
+        return el("li", { id: x.id || null }, kids.concat([el("div", null, body)]));
+      }));
+    }
+    var TY = { book: "教材", course: "课程", paper: "论文", tutorial: "教程", code: "代码", video: "视频", blog: "文章" };
+    function tocGroups(groups, level) {
+      var out = [];
+      arr(groups).forEach(function (g) {
+        if (g.h) out.push(el(level, { class: "toc-h" }, [g.k || g.u ? part({ k: g.k, u: g.u, t: g.h }) : g.h]));
+        if (str(g.lede).trim()) out.push(el("p", { class: "toc-lede" }, rich(g.lede)));
+        out.push(el("ol", { class: "toc" }, arr(g.items).map(function (it) {
+          return el("li", null, [
+            el("div", { class: "toc-t" }, [part({ k: it.k, u: it.u, t: it.t }), it.en ? el("span", { class: "en", text: it.en }) : null,
+              it.meta ? el("span", { class: "toc-meta", text: it.meta }) : null]),
+            str(it.s).trim() ? el("p", { class: "toc-s", text: it.s }) : null
+          ]);
+        })));
+      });
+      return out;
+    }
+    function cell(tag, c) { return el(tag, null, c && typeof c === "object" ? [part(c)] : rich(c)); }
+
+    var box = null;
+    function cur() { if (!box) { box = el("section"); art.appendChild(box); } return box; }
+    function render(b) {
+      switch (b.b) {
+        case "p": return withNotes(paras(b.t), b);
+        case "lines": return withNotes(lines(b.t), b);
+        case "h3": return [heading("h3", b)];
+        case "note": return [el("p", { class: "note", text: b.t })];
+        case "ul": case "ol": return [el(b.b, null, arr(b.items).map(listItem))];
+        case "eqs": return [eqList(b.eqs)];
+        case "qa": return [el("p", { class: "quiz-h", text: "自测" }), el("ol", { class: "quiz" }, arr(b.items).map(function (q) {
+          return el("li", null, [el("p", null, rich(q.q)), el("details", null, [el("summary", { text: "答案" }), el("p", null, rich(q.a))])]);
+        }))];
+        case "res": return [refsList(arr(b.items).map(function (r) {
+          return { left: TY[r.type] || r.type || "", url: r.url, t: r.title, gloss: r.note_zh };
+        }))];
+        case "refs": return [refsList(arr(b.items), b.cls)];
+        case "toc": return tocGroups(b.groups, cur().querySelector("h2") ? "h3" : "h2");
+        case "table": return [el("div", { class: "table-wrap" + (b.wide ? " fullwidth" : "") }, [el("table", { class: "booktabs" + (b.cls ? " " + b.cls : "") }, [
+          el("thead", null, [el("tr", null, arr(b.head).map(function (h) { return el("th", { text: h }); }))]),
+          el("tbody", null, arr(b.rows).map(function (r) { return el("tr", null, arr(r).map(function (c) { return cell("td", c); })); }))
+        ])])];
+        case "timeline": return [el("ul", { class: "refs timeline" }, arr(b.items).map(function (x) {
+          return el("li", null, [el("span", { class: "yr", text: str(x[0]) }), el("div", null, rich(x[1]))]);
+        }))];
+        case "kv": return [el("table", { class: "kv" }, [el("tbody", null, arr(b.items).map(function (x) {
+          return el("tr", null, [el("th", { text: x[0] }), el("td", null, rich(x[1]))]);
+        }))])];
+        case "mtoc": return [marginToc(b.items)];
+        case "slot": return typeof SLOTS[b.name] === "function" ? [SLOTS[b.name](b)] : [];
+        default: return [];
+      }
+    }
+    // Long articles: a table of contents at the top of the margin (a folding list on phones).
+    function marginToc(items) {
+      var d = el("details", { class: "mtoc" }, [el("summary", { text: "本文目录" }), el("ol", null, arr(items).map(function (x) { return el("li", null, [part(x)]); }))]);
+      var wide = window.matchMedia("(min-width: 761px)");
+      d.open = wide.matches;
+      return d;
+    }
+    arr(PG.body).forEach(function (b) {
+      if (b.b === "sec") {
+        box = el("section", { id: b.id || null });
+        if (b.h) box.appendChild(heading("h2", { t: b.h, sn: b.sn }));
+        art.appendChild(box);
+        return;
+      }
+      render(b).forEach(function (n) { if (n) cur().appendChild(n); });
+    });
+
+    var S = PG.series || {};
+    if (S.prev || S.next || S.up) {
+      var nav = el("nav", { class: "series", "aria-label": "同系列" });
+      nav.appendChild(el("div", { class: "prev" }, S.prev ? [el("small", { text: "上一篇" }), part(S.prev)] : []));
+      nav.appendChild(el("div", { class: "up" }, S.up ? [part(S.up)] : []));
+      nav.appendChild(el("div", { class: "next" }, S.next ? [el("small", { text: "下一篇" }), part(S.next)] : []));
+      art.appendChild(nav);
+    }
+  })();
+
+  finishPage();
+})();
+</script>
+</body>
+</html>

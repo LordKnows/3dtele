@@ -1,0 +1,970 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ENeRF 导读 · 3D Telepresence: a field guide</title>
+<meta name="description" content="设想一个圆形摄影棚：二十来台相机围着一个正在做动作的人同步拍摄（ZJU-MoCap 就是这样采集的）。">
+<meta name="color-scheme" content="light dark">
+
+<script>
+  // Apply a saved light/dark choice before first paint; without one the page follows the system setting.
+  try { var t = localStorage.getItem("atlas-theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) { /* storage unavailable */ }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Serif+SC:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/lxgwwenkai-regular.css">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]] },
+    options: { skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code", "input", "select", "button"] },
+    svg: { fontCache: "global" },
+    startup: {
+      typeset: false,
+      ready: function () {
+        window.MathJax.startup.defaultReady();
+        if (typeof window.__atlasMathReady === "function") window.__atlasMathReady();
+      }
+    }
+  };
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js"></script>
+<style>
+/* Tufte-style layout for Chinese long-form pages, after tufte-css (MIT, (c) 2014 Dave Liepmann; see LICENSE-tufte-css).
+   ET Book: MIT, (c) 2015 Dmitry Krasny, Bonnie Scranton, Edward Tufte (fonts/et-book/LICENSE).
+   ../../ is the page's path to the site root. */
+
+/* ---------- fonts: ET Book for Latin (self-hosted), Noto Serif SC for Chinese text, LXGW WenKai for notes ---------- */
+/* ET Book leaves curly quotes, dashes and ellipses to the Chinese font so they keep full width in Chinese prose,
+   and single guillemets (› ‹), which it lacks. */
+@font-face { font-family: "et-book"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-roman-line-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book"; font-weight: 400; font-style: italic; font-display: swap;
+  src: url("../../fonts/et-book/et-book-display-italic-old-style-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book"; font-weight: 700; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-bold-line-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+/* Notes pair Latin italic with upright Kai (the "italic ↔ 楷体" rule): the italic cut is registered as an upright
+   family so the browser never slants the Chinese glyphs. */
+@font-face { font-family: "et-book-note"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-display-italic-old-style-figures.woff") format("woff");
+  unicode-range: U+0000-2013, U+2015-2017, U+201A-201B, U+201E-2025, U+2027-2038, U+203B-FFFF; }
+@font-face { font-family: "et-book-osf"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../../fonts/et-book/et-book-roman-old-style-figures.woff") format("woff"); }
+
+:root {
+  --bg: #fffff8;
+  --ink: #111111;
+  --ink-2: #3c3c36;
+  --muted: #74746a;
+  --rule: #d8d6c8;
+  --rule-2: #b9b6a4;
+  --accent: #a8322d;
+  --serif: "et-book", "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", Palatino, Georgia, serif;
+  --note: "et-book-note", "LXGW WenKai", "Kaiti SC", "STKaiti", "KaiTi", "et-book", serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --side: clamp(12rem, 21vw, 17rem);
+  --gap: 2.75rem;
+  --main: calc(100% - var(--side) - var(--gap));
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161614; --ink: #e2e0d6; --ink-2: #c3c1b6; --muted: #979589; --rule: #34332e; --rule-2: #4d4b44; --accent: #e8836f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161614; --ink: #e2e0d6; --ink-2: #c3c1b6; --muted: #979589; --rule: #34332e; --rule-2: #4d4b44; --accent: #e8836f;
+  color-scheme: dark;
+}
+
+/* ---------- base ---------- */
+* { box-sizing: border-box; }
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--serif); font-size: 1.15625rem; line-height: 1.85;
+  font-kerning: normal; font-variant-numeric: lining-nums;
+  /* Space between Chinese and Latin text where the source has none; squeeze adjacent CJK punctuation
+     (text-spacing-trim applies the fonts' halt / chws features). Browsers without them keep the source spacing. */
+  text-autospace: normal; text-spacing-trim: normal;
+  overflow-wrap: break-word;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+[hidden] { display: none !important; }
+a { color: inherit; text-decoration-line: underline; text-decoration-thickness: 1px; text-underline-offset: .18em; text-decoration-color: var(--rule-2); }
+a:hover { color: var(--accent); text-decoration-color: currentColor; }
+a:focus-visible, button:focus-visible, summary:focus-visible, label:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.skip { position: absolute; left: -999px; top: 0; }
+.skip:focus { left: 1rem; top: .5rem; background: var(--bg); padding: .2rem .5rem; z-index: 60; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+p { margin: 0; }
+p + p { margin-top: .9em; }
+
+/* ---------- top bar ---------- */
+.topbar { border-bottom: 1px solid var(--rule); }
+.bar-in { max-width: 67rem; margin: 0 auto; padding: 0 1.5rem; display: flex; align-items: center; gap: 2.2rem; min-height: 3.1rem; }
+.brand { font-size: 1rem; text-decoration: none; letter-spacing: .02em; white-space: nowrap; }
+.site-nav { flex: 1; }
+.menus { list-style: none; margin: 0; padding: 0; display: flex; gap: 1.6rem; }
+.menu { position: relative; }
+.menu-btn, .theme-btn, .burger {
+  font-family: "et-book", var(--serif); font-variant-caps: all-small-caps; letter-spacing: .08em; font-size: 1.12rem;
+  color: var(--ink-2); line-height: 3.1rem;
+}
+.menu-btn:hover, .theme-btn:hover, .burger:hover, .menu.open > .menu-btn { color: var(--accent); }
+.menu.cur > .menu-btn { color: var(--ink); box-shadow: inset 0 -1px 0 var(--ink); }
+.drop {
+  display: none; position: absolute; left: -1rem; top: 100%; z-index: 40; min-width: 13rem;
+  list-style: none; margin: 0; padding: .45rem 0; background: var(--bg); border: 1px solid var(--rule);
+}
+.menu.open > .drop { display: block; }
+.drop a { display: block; padding: .15rem 1rem; text-decoration: none; font-size: 1.02rem; color: var(--ink-2); white-space: nowrap; }
+.drop a:hover, .drop a:focus-visible { color: var(--accent); }
+.drop a.cur { color: var(--ink); }
+.drop a.cur::before { content: "›"; position: absolute; margin-left: -.7rem; color: var(--accent); }
+.theme-btn { margin-left: auto; }
+.burger { display: none; }
+
+/* ---------- article column + margin ---------- */
+main { display: block; }
+.art { max-width: 67rem; margin: 0 auto; padding: 2.6rem 1.5rem 3rem; counter-reset: sidenote-counter; }
+.art > *, .art section > * { width: var(--main); }
+.art > section { width: 100%; }
+.art .fullwidth { width: 100%; }
+section { padding-top: .6rem; }
+
+.crumbs { font-size: .86rem; color: var(--muted); letter-spacing: .01em; }
+.crumbs a { color: var(--muted); text-decoration: none; }
+.crumbs a:hover { color: var(--accent); }
+.crumbs .sep { margin: 0 .45em; color: var(--rule-2); }
+h1, h2, h3 { font-family: var(--serif); color: var(--ink); text-wrap: balance; }
+h1 { font-size: 2.3rem; font-weight: 400; line-height: 1.3; margin: .9rem 0 0; letter-spacing: .01em; }
+.subtitle { font-family: "et-book", var(--note); font-style: italic; font-size: 1.45rem; line-height: 1.3; color: var(--ink-2); margin-top: .35rem; }
+.meta { font-size: .92rem; color: var(--muted); margin-top: 1.1rem; }
+.meta a { color: var(--muted); }
+h2 { font-size: 1.42rem; font-weight: 600; line-height: 1.4; margin: 2.6rem 0 .9rem; }
+h3 { font-size: 1.12rem; font-weight: 600; line-height: 1.5; margin: 1.8rem 0 .5rem; }
+h3 .used { font-family: var(--note); font-weight: 400; font-size: .86rem; color: var(--muted); margin-left: .6em; }
+
+.epigraph { margin: 2.2rem 0 .6rem; }
+.epigraph blockquote { margin: 0; padding: 0 0 0 1.6rem; border-left: 1px solid var(--rule-2); }
+.epigraph p { font-family: var(--note); font-size: 1.12rem; line-height: 1.85; color: var(--ink-2); }
+
+.art ol, .art ul { margin: .6rem 0 0; padding-left: 1.6em; }
+.art li + li { margin-top: .45rem; }
+li::marker { font-family: "et-book-osf", var(--serif); color: var(--muted); }
+
+/* Equations: display math in the text column, scrolling sideways on narrow screens. */
+.eqs { display: block; }
+.eq + .eq { margin-top: 1.6rem; }
+.math-block { overflow-x: auto; overflow-y: hidden; margin: .4rem 0 .6rem; padding: .2rem 0; font-size: 1rem; }
+.math-block mjx-container { margin: 0 !important; }
+
+/* ---------- side notes & margin notes (floated into the right margin) ---------- */
+.sidenote, .marginnote {
+  float: right; clear: right; position: relative;
+  width: var(--side); margin-right: calc(-1 * (var(--side) + var(--gap))); margin-top: .3rem; margin-bottom: .6rem;
+  font-family: var(--note); font-size: .88rem; line-height: 1.6; color: var(--ink-2); text-align: left;
+  font-style: normal; font-weight: 400; letter-spacing: 0;
+}
+h3 .sidenote { margin-top: .2rem; }
+.sidenote-number { counter-increment: sidenote-counter; }
+.sidenote-number::after, .sidenote::before { font-family: "et-book-osf", var(--serif); position: relative; vertical-align: baseline; }
+.sidenote-number::after { content: counter(sidenote-counter); font-size: .75rem; top: -.55em; left: .08em; color: var(--ink-2); }
+.sidenote::before { content: counter(sidenote-counter) " "; font-size: .8rem; top: -.4em; }
+.note-label { font-family: var(--serif); font-weight: 600; font-size: .82rem; color: var(--muted); margin-right: .5em; }
+.marginnote .note-label { display: block; margin: 0 0 .1rem; }
+input.margin-toggle { display: none; }
+label.sidenote-number { display: inline; cursor: default; }
+label.margin-toggle:not(.sidenote-number) { display: none; }
+
+/* ---------- quiz, further reading, series ---------- */
+.quiz details { margin-top: .3rem; }
+.quiz summary { font-family: var(--note); font-size: .92rem; color: var(--muted); cursor: pointer; list-style: none; display: inline-block; }
+.quiz summary::-webkit-details-marker { display: none; }
+.quiz summary::before { content: "+ "; font-family: "et-book", var(--serif); }
+.quiz details[open] summary::before { content: "− "; }
+.quiz summary:hover { color: var(--accent); }
+.quiz details > p { margin-top: .3rem; padding-left: 1rem; border-left: 1px solid var(--rule); color: var(--ink-2); }
+
+/* Reference lists: a narrow label column (kind / year) and a hanging text column. */
+.art ul.refs { list-style: none; padding-left: 0; }
+.refs li { display: grid; grid-template-columns: 2.8rem minmax(0, 1fr); column-gap: .5rem; line-height: 1.6; }
+.refs li > :not(.kind):not(.yr) { grid-column: 2; }
+.refs .kind, .refs .yr { grid-column: 1; font-family: var(--note); font-size: .86rem; color: var(--muted); padding-top: .12rem; }
+.refs .yr { font-family: "et-book-osf", var(--serif); font-size: .95rem; padding-top: .05rem; }
+.refs .en { font-family: "et-book", var(--serif); font-style: italic; color: var(--muted); font-size: .92rem; line-height: 1.5; }
+.refs .gloss { font-family: var(--note); font-size: .88rem; color: var(--ink-2); margin-top: .1rem; }
+.art .refs li + li { margin-top: .75rem; }
+.art .papers li + li { margin-top: .35rem; }
+/* Without a label column the list is a plain stack (no grid, so nothing can land in a phantom second column). */
+.refs.noleft li { display: block; }
+.refs.wide-kind li { grid-template-columns: 6.2rem minmax(0, 1fr); }
+.refs .used { font-family: var(--note); font-size: .82rem; color: var(--muted); margin-left: .5em; }
+.refs.terms .plain-t { font-weight: 600; }
+.refs.terms .en { display: inline; margin-left: .6em; }
+.timeline li { line-height: 1.7; }
+.art .timeline li + li { margin-top: .4rem; }
+
+/* ---------- blocks: lede, run-in labels, notes ---------- */
+.lede { margin-top: 1.6rem; color: var(--ink-2); }
+.run-in { font-weight: 600; color: var(--ink); }
+p.note { font-family: var(--note); font-size: .9rem; color: var(--muted); margin-top: .1rem; }
+h2 .en, h3 .en { font-family: "et-book", var(--serif); font-style: italic; font-weight: 400; color: var(--muted); margin-left: .6em; font-size: .92em; }
+h2 a, h3 a { text-decoration-color: var(--rule); }
+.quiz-h { font-family: var(--note); font-size: .88rem; color: var(--muted); margin-top: 1.4rem; }
+.quiz-h + ol.quiz { margin-top: .2rem; }
+
+/* Index pages: a table of contents instead of a card grid. */
+.art ol.toc { list-style: none; padding-left: 0; margin-top: .4rem; }
+.art ol.toc > li + li { margin-top: .85rem; }
+.toc-t { line-height: 1.55; }
+.toc-t .en { font-family: "et-book", var(--serif); font-style: italic; color: var(--muted); margin-left: .6em; font-size: .95em; }
+.toc-meta { font-family: var(--note); font-size: .82rem; color: var(--muted); margin-left: .7em; white-space: nowrap; }
+.toc-s { font-family: var(--note); font-size: .9rem; line-height: 1.65; color: var(--ink-2); margin-top: .1rem; }
+.toc-lede { font-family: var(--note); color: var(--ink-2); font-size: .95rem; }
+h2.toc-h, h3.toc-h { margin-bottom: .3rem; }
+
+/* Tables: booktabs rules (top, under the header, bottom), no vertical lines, no fills. */
+.table-wrap { overflow-x: auto; margin: 1rem 0; }
+table.booktabs { border-collapse: collapse; width: 100%; font-size: .9rem; line-height: 1.6; border-top: 1.5px solid var(--ink); border-bottom: 1.5px solid var(--ink); }
+table.booktabs th { text-align: left; font-weight: 600; padding: .45rem .7rem .35rem 0; border-bottom: 1px solid var(--ink); white-space: nowrap; vertical-align: bottom; }
+table.booktabs td { padding: .45rem .9rem .45rem 0; vertical-align: top; border-top: 1px solid var(--rule); }
+table.booktabs tbody tr:first-child td { border-top: 0; }
+table.rank td { white-space: nowrap; font-variant-numeric: tabular-nums; }
+table.rank td:nth-child(2) { white-space: normal; }
+.art table.kv { border-collapse: collapse; margin: .6rem 0; font-size: .95rem; width: auto; }
+table.kv th { text-align: left; font-weight: 400; color: var(--muted); padding: .25rem 1.2rem .25rem 0; vertical-align: top; min-width: 5em; max-width: 12em; font-family: var(--note); }
+table.kv td { padding: .25rem 0; vertical-align: top; }
+
+/* Long articles: the table of contents sits at the top of the margin. */
+/* It sits in a full-width section, so it floats into the margin without a negative offset. */
+details.mtoc {
+  float: right; clear: right; width: var(--side); margin-right: 0; margin-bottom: 1rem;
+  font-family: var(--note); font-size: .86rem; line-height: 1.55; color: var(--ink-2);
+}
+details.mtoc summary { font-family: var(--serif); font-weight: 600; font-size: .82rem; color: var(--muted); list-style: none; cursor: default; }
+details.mtoc summary::-webkit-details-marker { display: none; }
+.art details.mtoc ol { list-style: none; padding: 0; margin: .3rem 0 0; }
+.art details.mtoc li + li { margin-top: .25rem; }
+details.mtoc a { text-decoration: none; }
+details.mtoc a:hover { text-decoration: underline; }
+
+/* Tools: search and filters with underlined inputs. */
+.tool { margin-top: 1rem; }
+.filters { display: flex; flex-wrap: wrap; gap: .6rem 1.6rem; align-items: baseline; font-family: var(--note); font-size: .92rem; color: var(--muted); }
+.filters label { display: inline-flex; gap: .5rem; align-items: baseline; }
+.filters input, .filters select {
+  font: inherit; color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid var(--rule-2); border-radius: 0;
+  padding: .15rem .1rem; min-width: 7rem;
+}
+.filters input[type="search"] { min-width: 14rem; }
+.filters select { max-width: 16rem; }
+.filters input:focus, .filters select:focus { outline: none; border-bottom-color: var(--accent); }
+.filters select option { background: var(--bg); color: var(--ink); }
+.filters .count { margin-left: auto; font-family: var(--mono); font-size: .8rem; }
+table.gl td.en { font-family: "et-book", var(--serif); width: 20%; }
+table.gl .abbr { color: var(--muted); }
+table.gl td.zh { white-space: nowrap; }
+table.gl td.def { color: var(--ink-2); min-width: 20rem; }
+table.gl td.c { font-size: .85rem; min-width: 9rem; padding-right: 0; }
+table.gl tr:target td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+table.db td.y { font-family: "et-book-osf", var(--serif); white-space: nowrap; }
+table.db td.t { min-width: 16rem; }
+table.db td.t small { display: block; color: var(--muted); font-size: .8rem; line-height: 1.45; margin-top: .15rem; }
+table.db td.tags { min-width: 7rem; font-family: var(--note); font-size: .8rem; color: var(--muted); }
+table.db td.tags span { display: block; }
+table.db .tier.milestone { color: var(--ink); font-weight: 600; }
+table.db td.s { min-width: 18rem; color: var(--ink-2); }
+table.db td.n { min-width: 12rem; font-size: .82rem; color: var(--ink-2); }
+
+/* Figures: the pipeline diagram and the timeline of classic papers, drawn in ink with one accent for interaction. */
+figure { margin: 1.4rem 0; }
+svg a { text-decoration: none; }
+.diagram-wrap, .lanes-wrap { position: relative; overflow-x: auto; }
+svg.diagram { width: 100%; min-width: 760px; height: auto; display: block; font-family: var(--note); }
+svg.diagram .dnode rect { fill: var(--bg); stroke: var(--ink-2); stroke-width: 1; }
+svg.diagram .dnode rect.data { stroke-dasharray: 4 3; }
+svg.diagram .dnode:hover rect, svg.diagram .dnode:focus rect { stroke: var(--accent); stroke-width: 1.5; }
+svg.diagram .dnode:focus { outline: none; }
+svg.diagram text { fill: var(--ink); }
+svg.diagram text.k { font-family: var(--mono); font-size: 10px; fill: var(--muted); }
+svg.diagram text.t { font-family: var(--serif); font-size: 13px; font-weight: 600; }
+svg.diagram text.s { font-size: 11px; fill: var(--ink-2); }
+svg.diagram .dedge { fill: none; stroke: var(--ink-2); stroke-width: 1; }
+svg.diagram .dedge.fb { stroke-dasharray: 4 3; }
+svg.diagram .dhead { fill: var(--ink-2); }
+svg.diagram .dloop { fill: none; stroke: var(--rule-2); stroke-dasharray: 2 3; }
+svg.diagram .dlabel { font-size: 12px; fill: var(--muted); }
+svg.diagram .dnote { font-size: 11px; fill: var(--muted); }
+svg.diagram a.dnode:hover .dnote { fill: var(--accent); }
+svg.lanes { width: 100%; min-width: 720px; height: auto; display: block; font-family: var(--note); }
+svg.lanes .grid { stroke: var(--rule); stroke-width: 1; }
+svg.lanes .axis { font-family: "et-book-osf", var(--serif); font-size: 12px; fill: var(--muted); }
+svg.lanes .lane-l { font-size: 12px; fill: var(--ink-2); }
+svg.lanes .brk { stroke: var(--muted); fill: none; }
+svg.lanes .hit { fill: transparent; }
+svg .dot { fill: var(--ink); }
+svg .dot.hollow { fill: var(--bg); stroke: var(--ink-2); stroke-width: 1.2; }
+svg.lanes a.m:hover .dot, svg.lanes a.m:focus .dot { fill: var(--accent); stroke: var(--accent); }
+svg.lanes a.m:focus { outline: none; }
+.vtip { position: absolute; z-index: 20; max-width: 20rem; padding: .45rem .7rem; background: var(--bg); border: 1px solid var(--rule-2); font-family: var(--note); font-size: .82rem; line-height: 1.5; pointer-events: none; }
+.vtip b { display: block; font-family: "et-book", var(--serif); font-weight: 400; font-size: .92rem; }
+.vtip small { display: block; color: var(--muted); }
+.vtip span { color: var(--accent); }
+figcaption { font-family: var(--note); font-size: .85rem; color: var(--muted); margin-top: .4rem; }
+figcaption svg { vertical-align: -1px; }
+
+.series { display: grid; grid-template-columns: 1fr auto 1fr; gap: 1rem; align-items: end; margin-top: 3.2rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: .98rem; }
+.series small { display: block; font-family: var(--note); font-size: .8rem; color: var(--muted); }
+.series .up { text-align: center; font-size: .88rem; }
+.series .up a { color: var(--muted); }
+.series .next { text-align: right; }
+
+.site-foot { max-width: 67rem; margin: 0 auto; padding: 1.2rem 1.5rem 2.5rem; font-size: .82rem; color: var(--muted); }
+.site-foot a { color: var(--muted); text-decoration: none; }
+
+/* ---------- hover preview ---------- */
+.xtip {
+  position: absolute; z-index: 50; max-width: min(22rem, calc(100vw - 16px)); padding: .55rem .8rem .6rem;
+  background: var(--bg); border: 1px solid var(--rule-2); color: var(--ink);
+  font-family: var(--note); font-size: .88rem; line-height: 1.6; pointer-events: none;
+}
+.xt-m { font-size: .76rem; color: var(--muted); }
+.xt-t { font-family: var(--serif); font-weight: 600; font-size: .95rem; line-height: 1.45; margin-top: .1rem; }
+.xt-e { font-family: "et-book", var(--serif); font-style: italic; color: var(--ink-2); line-height: 1.4; }
+.xt-s { margin-top: .35rem; color: var(--ink-2); }
+
+/* ---------- narrow screens: one column; notes fold behind their number or ⊕ ---------- */
+@media (max-width: 760px) {
+  body { font-size: 1.0625rem; line-height: 1.8; }
+  .bar-in { gap: 1rem; padding: 0 1rem; flex-wrap: wrap; }
+  .site-nav { order: 5; flex-basis: 100%; display: none; }
+  .topbar.nav-open .site-nav { display: block; }
+  .menus { flex-direction: column; gap: 0; padding-bottom: .6rem; }
+  .menu-btn { line-height: 2.4rem; width: 100%; text-align: left; }
+  .menu-btn::after { content: " +"; }
+  .menu.open > .menu-btn::after { content: " −"; }
+  .menu.cur > .menu-btn { box-shadow: none; }
+  .drop { position: static; border: 0; padding: 0 0 .4rem .9rem; min-width: 0; }
+  .drop a { padding: .2rem 0; white-space: normal; }
+  .burger { display: inline; }
+  .theme-btn { margin-left: auto; }
+  .art { padding: 1.6rem 1rem 2.4rem; }
+  .art > *, .art section > * { width: 100%; }
+  h1 { font-size: 1.85rem; }
+  .subtitle { font-size: 1.22rem; }
+  .epigraph blockquote { padding-left: 1rem; }
+  .epigraph p { font-size: 1.05rem; }
+  label.margin-toggle:not(.sidenote-number) { display: inline; cursor: pointer; color: var(--muted); font-family: "et-book", var(--serif); padding: 0 .15em; }
+  label.sidenote-number { cursor: pointer; }
+  .sidenote, .marginnote { display: none; }
+  .margin-toggle:checked + .sidenote, .margin-toggle:checked + .marginnote {
+    display: block; float: left; clear: both; width: 100%; margin: .6rem 0; padding-left: .8rem; border-left: 1px solid var(--rule-2);
+  }
+  .series { grid-template-columns: 1fr 1fr; }
+  .series .up { display: none; }
+  details.mtoc { float: none; width: 100%; margin: 0 0 1.2rem; padding-left: .8rem; border-left: 1px solid var(--rule-2); }
+  details.mtoc summary { cursor: pointer; }
+  details.mtoc summary::after { content: " +"; }
+  details.mtoc[open] summary::after { content: " −"; }
+  .filters { flex-direction: column; align-items: stretch; gap: .5rem; }
+  .filters label { justify-content: space-between; }
+  .filters input[type="search"], .filters input, .filters select { min-width: 0; flex: 1; }
+  .filters .count { margin-left: 0; }
+  .toc-meta { display: block; margin-left: 0; }
+  table.kv, table.kv tbody, table.kv tr, table.kv th, table.kv td { display: block; max-width: none; }
+  table.kv th { padding: .5rem 0 0; }
+}
+@media print {
+  .topbar, .site-foot, .series { display: none; }
+}
+
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<header class="topbar" id="topbar"></header>
+<main id="main"><article class="art"></article></main>
+<footer class="site-foot" id="site-foot"></footer>
+<script type="application/json" id="data">{"site": {"brand": "3D Telepresence: a field guide", "root": "../../", "path": "works/walkthrough/enerf.html", "nav": [{"key": "overview", "label": "Overview", "items": [["Introduction", "index.html"], ["Methodology", "overview/methodology.html"], ["How to use", "overview/how-to-use.html"]]}, {"key": "basics", "label": "Basics", "items": [["Routes", "basics/routes/index.html"], ["Foundations", "basics/foundations/index.html"], ["Advanced topics", "basics/advanced/index.html"], ["Classics", "basics/classics/index.html"], ["Glossary", "basics/glossary.html"]]}, {"key": "works", "label": "Works", "items": [["Papers", "works/papers/index.html"], ["Walkthrough", "works/walkthrough/index.html"], ["Field map", "works/field-map.html"], ["Sub areas", "works/areas/index.html"]]}, {"key": "future", "label": "Future", "items": [["Directions", "future/index.html"], ["Trends & Challenges", "future/trends.html"]]}], "navCur": "works", "navItem": "works/walkthrough/index.html", "crumbs": [["Works", ""], ["Walkthrough", "works/walkthrough/index.html"]], "date": "2026-09-28"}, "xref": {"adv-a-dynamic-4d": {"u": "basics/advanced/a-dynamic-4d.html", "t": "动态 NeRF、4D 高斯与流式重建", "e": "Dynamic NeRF, 4D Gaussians & streaming reconstruction", "m": "Advanced topics", "s": "动态场景的新视角合成要同时控制两个变量：看的视点和看的时刻。"}, "adv-a-generalizable-ibr": {"u": "basics/advanced/a-generalizable-ibr.html", "t": "可泛化 NeRF 与学习式 IBR", "e": "Generalizable NeRF & learned IBR", "m": "Advanced topics", "s": "逐场景的 NeRF 需要几十上百张图和数小时的优化；传统 IBR（如 ULR，见 i-blending）速度快，但依赖稠密的视角或准确的代理几何。"}, "adv-a-human-capture": {"u": "basics/advanced/a-human-capture.html", "t": "人体表演捕捉与数字人", "e": "Human performance capture & avatars", "m": "Advanced topics", "s": "三维临场要传递的核心是人：面部表情、目光、手势、头发和衣服。"}, "adv-a-learned-mvs": {"u": "basics/advanced/a-learned-mvs.html", "t": "学习式多视角立体与代价体", "e": "Learned MVS & cost volumes", "m": "Advanced topics", "s": "多视角立体（MVS）的任务是：已知 N 张图像的内外参（通常来自 SfM/COLMAP，见 g-sfm），为某个参考视角估计稠密深度图，再把多张深度图融合成点…"}, "adv-a-nerf-fast": {"u": "basics/advanced/a-nerf-fast.html", "t": "NeRF 的加速与抗锯齿", "e": "Fast & anti-aliased NeRFs", "m": "Advanced topics", "s": "原版 NeRF 把整个场景存进一个 8 层、每层 256 通道的 MLP。"}, "adv-a-telepresence-sys": {"u": "basics/advanced/a-telepresence-sys.html", "t": "三维临场系统设计", "e": "3D telepresence system design", "m": "Advanced topics", "s": "三维临场（3D telepresence）要把远端参与者的外观和几何实时“搬”过来，并按本地观看者双眼的位置正确显示，使观看者获得立体视差、运动视差和目光接触。"}, "anchor-enerf": {"u": "works/papers/enerf.html", "t": "ENeRF 精读", "e": "Efficient Neural Radiance Fields for Interactive Free-viewpoint Video", "m": "Papers · 论文精读", "s": "ENeRF 是浙大 ZJU3DV 提出的可泛化神经辐射场（不做逐场景优化，一个网络用于所有场景），目标是让多相机拍摄的动态人物视频可以交互式地自由换视角观看。"}, "concept-d-mvs": {"u": "basics/foundations/d-mvs.html", "t": "多视角立体（MVS）与平面扫描", "e": "Multi-view stereo & plane sweep", "m": "Foundations · M3 深度估计与三维重建", "s": "把双目推广到 N 个视角：先假设一组深度（一叠平面），把所有视角 warp 到参考视角或目标视角，看哪个深度上各视角的颜色或特征最一致。", "n": "多视角立体（MVS）与平面扫描"}, "concept-f-image": {"u": "basics/foundations/f-image.html", "t": "数字图像：颜色、采样、插值与金字塔", "e": "Digital images: color, sampling, interpolation & pyramids", "m": "Foundations · M1 数学与图像基础", "s": "图像是对连续光场的离散采样。", "n": "数字图像"}, "concept-f-optim": {"u": "basics/foundations/f-optim.html", "t": "优化、鲁棒估计与梯度下降", "e": "Optimization, robust estimation & gradient descent", "m": "Foundations · M1 数学与图像基础", "s": "相机标定、光束法平差、立体匹配、网络训练，乃至 Quark 的网络结构本身，做的都是同一件事：定义一个误差，然后沿着让误差变小的方向迭代。", "n": "优化、鲁棒估计与梯度下降"}, "concept-f-prob": {"u": "basics/foundations/f-prob.html", "t": "概率、加权平均与递归滤波", "e": "Probability, weighted averaging & recursive filtering", "m": "Foundations · M1 数学与图像基础", "s": "多视角、多帧得到的深度都带有噪声，要把它们合成一个更可靠的估计，最好的办法是按置信度（方差的倒数）加权平均；把同样的想法用在时间轴上，就得到指数滑动平均（EMA）和卡尔曼滤波。", "n": "概率、加权平均与递归滤波"}, "concept-g-depth": {"u": "basics/foundations/g-depth.html", "t": "深度、视差与逆深度采样", "e": "Depth, disparity & inverse-depth sampling", "m": "Foundations · M2 相机与多视几何", "s": "双目中深度与视差成反比（Z = f·b/d），所以固定的像素匹配误差会变成随 Z² 增长的深度误差。", "n": "深度、视差与逆深度采样"}, "concept-g-epipolar": {"u": "basics/foundations/g-epipolar.html", "t": "对极几何、三角化与单应", "e": "Epipolar geometry, triangulation & homography", "m": "Foundations · M2 相机与多视几何", "s": "两台相机看同一个点时，该点在第二张图中只可能出现在一条极线上（x'ᵀF x = 0）；有了对应点就能三角化出 3D 位置；空间中的一个平面在两张图之间诱导的映射是一个 3×3 单应。", "n": "对极几何、三角化与单应"}, "concept-g-pinhole": {"u": "basics/foundations/g-pinhole.html", "t": "针孔相机模型：内参、外参、投影与反投影", "e": "Pinhole camera: intrinsics, extrinsics, projection & unprojection", "m": "Foundations · M2 相机与多视几何", "s": "针孔模型先用外参 [R|t] 把世界点变到相机坐标系，再用内参 K 投到像素；反过来，只有像素时只能确定一条射线，像素加上深度才能唯一确定一个 3D 点。", "n": "针孔相机模型"}, "concept-g-rig": {"u": "basics/foundations/g-rig.html", "t": "多相机阵列：标定、同步与卷帘快门", "e": "Multi-camera rigs: calibration, synchronization & rolling shutter", "m": "Foundations · M2 相机与多视几何", "s": "多相机阵列需要让所有相机在三方面对齐：几何上（内外参）、颜色上（曝光、白平衡、响应曲线）、时间上（同一时刻曝光）。", "n": "多相机阵列"}, "concept-i-blending": {"u": "basics/foundations/i-blending.html", "t": "视角相关纹理映射与混合权重（ULR）", "e": "View-dependent texture mapping & blending weights (ULR)", "m": "Foundations · M5 基于图像的渲染（IBR）", "s": "当多个输入相机都看到目标像素对应的表面点时，混合权重决定每个相机贡献多少。", "n": "视角相关纹理映射与混合权重（ULR）"}, "concept-i-lightfield": {"u": "basics/foundations/i-lightfield.html", "t": "全光函数、光场与 Lumigraph", "e": "Plenoptic function, light fields & the Lumigraph", "m": "Foundations · M5 基于图像的渲染（IBR）", "s": "一张照片是全光函数的一个二维切片。", "n": "全光函数、光场与 Lumigraph"}, "concept-i-psv": {"u": "basics/foundations/i-psv.html", "t": "平面扫描体与学习式视图合成", "e": "Plane-sweep volumes & learned view synthesis", "m": "Foundations · M5 基于图像的渲染（IBR）", "s": "平面扫描体（PSV）的做法是：把每张输入图按一组假设的深度平面重投影到目标相机（或参考相机），堆叠成“深度 × 高 × 宽 × 视角”的张量。", "n": "平面扫描体与学习式视图合成"}, "concept-i-warping": {"u": "basics/foundations/i-warping.html", "t": "基于深度的渲染：前向/后向 warping、空洞与飞点", "e": "Depth-image-based rendering: forward/backward warping, holes & flying pixels", "m": "Foundations · M5 基于图像的渲染（IBR）", "s": "有了逐像素深度，就能把一张图“搬”到新视角。", "n": "基于深度的渲染"}, "concept-l-cnn": {"u": "basics/foundations/l-cnn.html", "t": "卷积网络、残差块与 U-Net", "e": "CNNs, residual blocks & U-Net", "m": "Foundations · M6 深度学习基础（3D 视觉视角）", "s": "卷积用共享的小核在图像上滑动，提取局部特征；残差连接让深层网络容易训练；U-Net 用编码器下采样、解码器上采样和同尺度跳连，同时获得大感受野和像素级精度。", "n": "卷积网络、残差块与 U-Net"}, "concept-l-encoding": {"u": "basics/foundations/l-encoding.html", "t": "位置编码、傅里叶特征与射线编码", "e": "Positional encoding, Fourier features & ray encodings", "m": "Foundations · M6 深度学习基础（3D 视觉视角）", "s": "神经网络对低维坐标输入天生偏爱平滑函数，这叫频谱偏置。", "n": "位置编码、傅里叶特征与射线编码"}, "concept-l-loss": {"u": "basics/foundations/l-loss.html", "t": "损失函数与训练实践", "e": "Losses & training practice", "m": "Foundations · M6 深度学习基础（3D 视觉视角）", "s": "损失函数决定网络眼中什么是“好图像”：L2 偏向均值（结果偏糊），L1 偏向中位数，SSIM 关注局部结构，LPIPS 用深度特征度量感知差异。", "n": "损失函数与训练实践"}, "concept-n-dynamic": {"u": "basics/foundations/n-dynamic.html", "t": "动态场景与 4D 表示", "e": "Dynamic scenes & 4D representations", "m": "Foundations · M7 神经渲染核心", "s": "动态场景方法首先要回答“时间怎么表示”。", "n": "动态场景与 4D 表示"}, "concept-n-generalizable": {"u": "basics/foundations/n-generalizable.html", "t": "可泛化 / 前馈式新视角合成", "e": "Generalizable / feed-forward novel view synthesis", "m": "Foundations · M7 神经渲染核心", "s": "可泛化（前馈式）新视角合成先在大量场景上训练一个网络，推理时只做一次前向：输入几张已标定的邻近视图，直接输出新视角图像，或者输出一个可以渲染的中间表示，全程不做逐场景优化。", "n": "可泛化 / 前馈式新视角合成"}, "concept-n-nerf": {"u": "basics/foundations/n-nerf.html", "t": "神经辐射场（NeRF）", "e": "Neural Radiance Fields", "m": "Foundations · M7 神经渲染核心", "s": "NeRF 用一个 MLP 把三维点和观察方向映射成体密度和颜色，再用可微的体渲染沿射线积分成像素，针对每个场景用几十到上百张照片做梯度下降来拟合。", "n": "神经辐射场（NeRF）"}, "concept-r-alpha": {"u": "basics/foundations/r-alpha.html", "t": "Alpha 合成与 over 算子", "e": "Alpha compositing & the over operator", "m": "Foundations · M4 图形学与渲染基础", "s": "alpha 表示一个像素被前景覆盖的比例。", "n": "Alpha 合成与 over 算子"}, "concept-r-appearance": {"u": "basics/foundations/r-appearance.html", "t": "反射模型、视角相关外观与光照", "e": "Reflectance, view-dependent appearance & lighting", "m": "Foundations · M4 图形学与渲染基础", "s": "表面颜色等于入射光乘以材质的反射分布（BRDF），再在半球上积分。", "n": "反射模型、视角相关外观与光照"}, "concept-r-raymarch": {"u": "basics/foundations/r-raymarch.html", "t": "光线步进、球面追踪与隐式表面求交", "e": "Ray marching, sphere tracing & implicit surface intersection", "m": "Foundations · M4 图形学与渲染基础", "s": "光线步进就是沿射线一步步查询一个场（密度或符号距离）。", "n": "光线步进、球面追踪与隐式表面求交"}, "concept-r-volume": {"u": "basics/foundations/r-volume.html", "t": "体渲染方程与离散化", "e": "The volume rendering equation & its discretization", "m": "Foundations · M4 图形学与渲染基础", "s": "体渲染把场景看成一团既发光又吸收的介质。", "n": "体渲染方程与离散化"}, "concept-v-codec": {"u": "basics/foundations/v-codec.html", "t": "视频编码、传输与延迟预算", "e": "Video coding, transport & latency budgets", "m": "Foundations · M8 视频、时间一致性、评测与系统", "s": "远程临场要在约百毫秒内把多路彩色和深度视频送到对端并渲染出来。", "n": "视频编码、传输与延迟预算"}, "concept-v-metrics": {"u": "basics/foundations/v-metrics.html", "t": "图像与视频质量指标", "e": "Image & video quality metrics", "m": "Foundations · M8 视频、时间一致性、评测与系统", "s": "单帧指标（PSNR、SSIM、LPIPS、FLIP）回答“这一帧像不像真值”；时间与视角指标（warping error、tOF、TCC、STED、SDT/SDV、EPI）回答“误差随时间、随视点是否稳定”。", "n": "图像与视频质量指标"}, "concept-v-temporal": {"u": "basics/foundations/v-temporal.html", "t": "时间一致性、闪烁与时域滤波", "e": "Temporal consistency, flicker & temporal filtering", "m": "Foundations · M8 视频、时间一致性、评测与系统", "s": "逐帧独立预测时，每帧误差互不相关，这些误差会直接表现为闪烁。", "n": "时间一致性、闪烁与时域滤波"}, "guide-ibrnet": {"u": "works/walkthrough/ibrnet.html", "t": "IBRNet 导读", "e": "", "m": "Walkthrough", "s": "2020 年春天，NeRF 让新视角合成的画质上了一个台阶：给一个场景拍几十张照片，训练一个 MLP，把场景的颜色和密度“记”在网络权重里，再用体渲染画出任意视角。"}, "guide-pixelsplat": {"u": "works/walkthrough/pixelsplat.html", "t": "pixelSplat 导读", "e": "", "m": "Walkthrough", "s": "想象你手里只有两张照片：同一个房间，从相隔几步远的两个位置拍下，你还知道两台相机的相对位姿。"}, "wpart-enerf-exercises": {"u": "works/walkthrough/enerf-exercises.html", "t": "ENeRF · 练习", "e": "", "m": "Walkthrough · ENeRF", "s": "6 道由浅入深的动手练习。"}, "wpart-enerf-experiments": {"u": "works/walkthrough/enerf-experiments.html", "t": "ENeRF · 阅读实验", "e": "", "m": "Walkthrough · ENeRF", "s": "论文里 9 组实验分别怎么读、真正说明了什么。"}, "wpart-enerf-faq": {"u": "works/walkthrough/enerf-faq.html", "t": "ENeRF · 常见问题", "e": "", "m": "Walkthrough · ENeRF", "s": "初读时最常问的 12 个问题。"}, "wpart-enerf-glossary": {"u": "works/walkthrough/enerf-glossary.html", "t": "ENeRF · 论文术语", "e": "", "m": "Walkthrough · ENeRF", "s": "读这篇论文会遇到的 29 个术语。"}, "wpart-enerf-tensor-trace": {"u": "works/walkthrough/enerf-tensor-trace.html", "t": "ENeRF · 张量追踪", "e": "", "m": "Walkthrough · ENeRF", "s": "逐阶段列出 16 个关键张量的形状与含义。"}, "wpart-enerf-tradeoffs": {"u": "works/walkthrough/enerf-tradeoffs.html", "t": "ENeRF · 设计权衡", "e": "", "m": "Walkthrough · ENeRF", "s": "8 个关键设计选择：换来了什么，付出了什么。"}}, "page": {"id": "guide-enerf", "head": {"title": "ENeRF 导读", "sub": "Efficient Neural Radiance Fields for Interactive Free-viewpoint Video", "meta": ["12 步", {"k": "anchor-enerf", "t": "ENeRF 精读"}], "epigraph": "", "prereqs": [], "lede": "", "minutes": 45}, "body": [{"b": "sec", "h": null, "id": "story"}, {"b": "mtoc", "items": [{"u": "#walk-enerf-en1", "t": "EN1 问题设定：S 个最近的已标定源视角 + 一个深度范围，逐帧推理，不做逐场景优化"}, {"u": "#walk-enerf-en2", "t": "EN2 特征金字塔：一个 FPN 式小 CNN 同时产出 1/4（32 通道）、1/2（16 通道）、1×（8 通道）三级特征"}, {"u": "#walk-enerf-en3", "t": "EN3 粗代价体：在目标视角 1/8 分辨率上扫 64 个逆深度平面，取跨视角特征方差"}, {"u": "#walk-enerf-en4", "t": "EN4 深度分布：3D U-Net 正则代价体，沿深度 softmax，得到每像素的期望深度 D 与标准差 σ"}, {"u": "#walk-enerf-en5", "t": "EN5 级联细层：只在 [D−σ, D+σ] 内扫 8 个平面，分辨率升到 1/2，得到 D₁、σ₁"}, {"u": "#walk-enerf-en6", "t": "EN6 深度引导采样：每条射线只在 [D₁−σ₁, D₁+σ₁] 内取 2 个点，512×640 下约 65.5 万个点"}, {"u": "#walk-enerf-en7", "t": "EN7 点特征：8 维体素对齐特征 + 每个源视角 15 维像素对齐特征（8 维特征、RGB、4 维视角差）"}, {"u": "#walk-enerf-en8", "t": "EN8 多视角聚合与密度：均值/方差池化加 softmax 加权得到 16 维特征，再和体素特征一起经 64 维 MLP 输出 σ"}, {"u": "#walk-enerf-en9", "t": "EN9 颜色：为每个源视角预测混合权重，输出颜色是源像素 RGB 的凸组合"}, {"u": "#walk-enerf-en10", "t": "EN10 体渲染与训练：2 个样本的 α 合成，两级 MSE（权重 0.1 / 1.0）加 0.01 倍 VGG 感知损失，只用 RGB 端到端训练"}, {"u": "#walk-enerf-en11", "t": "EN11 动态视频：逐帧独立推理，人物数据依赖前景 mask 与 SMPL 包围盒，可在该视频上微调；户外另有前景/背景两层模型"}, {"u": "#walk-enerf-en12", "t": "EN12 交互速度从哪来、怎么测：2 点采样 × 低分辨率代价体 × 约 44 万参数的小网络；FPS 只计网络前向"}]}, {"b": "p", "t": "设想一个圆形摄影棚：二十来台相机围着一个正在做动作的人同步拍摄（ZJU-MoCap 就是这样采集的）。你想拖动鼠标，从任意角度实时看这段视频。2021 年时，NeRF 已经能合成照片级的新视角，但有两个问题：每个场景都要单独优化几个小时；渲染时每条射线要查询一两百次 MLP，一张图要几秒到几十秒。可泛化方法（pixelNeRF、IBRNet、MVSNeRF）解决了第一个问题：在很多场景上训练一个网络，拿到新场景的几张照片就能直接推理。第二个问题却没有解决：它们仍然沿射线密集采样，每射线上百个点，一帧要好几秒，远谈不上交互。\n\n作者的核心直觉是：绝大多数射线只穿过一个表面，密度集中在很窄的一段，其余采样都浪费在空气里。只要事先大致知道表面在哪里，并且知道这个估计有多不确定，就只需要在表面附近取极少的点。深度从哪里来？多视角立体（MVS）里的代价体本来就能给出每个像素的深度概率分布：分布的期望就是深度估计，标准差就是不确定性。\n\nENeRF 的做法分三步。第一步，在目标视角的视锥里做平面扫描：把源视角的特征按一组深度平面 warp 过来，取跨视角方差作为代价体，经 3D CNN 和 softmax 得到深度分布。为了省计算，这一步分两级：粗层在 1/8 分辨率上扫 64 个平面，细层只在粗层给出的 D±σ 范围里扫 8 个平面，分辨率提高到 1/2。第二步，每条射线只在细层给出的 [D−σ, D+σ] 内取 2 个点。第三步，对每个点取代价体里的体素特征和源图像上的像素特征，预测密度和“各源视角颜色的混合权重”，颜色直接是源像素的加权和，最后做体渲染。整个过程可微，深度模块不需要深度真值，和渲染部分一起只用 RGB 图像训练。\n\n结果是：在 RTX 3090 上，用 3 个输入视角渲染 512×512 图像约 25 FPS，论文称比此前的可泛化 NeRF 快至少 60 倍；DTU 上 PSNR 27.61，高于 MVSNeRF 和 IBRNet。动态人物视频被当作逐帧的多视角快照：每一帧都用同一个网络独立推理，也可以在这段视频上微调几十分钟来提高质量，于是得到“可交互的自由视点视频”。\n\n这篇论文的官方代码完整公开，读代码能看到不少实现细节：按代码算，整个网络只有约 44 万个参数；细层的 2 个样本恰好落在 D−σ 和 D+σ 两端；体渲染里的 α 没有乘样本间距；训练损失在 MSE 之外还有一项 0.01 倍的 VGG 感知损失（论文也写了这一项）；README 里 21.8 FPS 的测速用的是 48 个而不是 64 个粗层平面，并跳过了粗层渲染。本环境打不开论文全文，下面的导读把“代码里的事实”“检索到的论文说法”和“无法核对的部分”分开标注。\n\n读这篇论文时要留意四件事。第一，速度来自“少采样”，但所有计算仍在输出分辨率上逐像素进行，像素数翻四倍，时间也近乎翻四倍（Quark 在 A100 上测得 1024×768 为 205 ms、2048×1536 为 811 ms）。第二，“交互速度”只计网络前向；人物实验依赖的前景 mask 和 SMPL 包围盒都是离线准备好的。第三，逐帧独立意味着没有任何时间一致性，视点移动时输入相机还会切换，Ha et al. 后来专门量化并改进了这一点。第四，单峰的“期望 ± 标准差”区间在遮挡边缘不可靠，Quark 把这类方法的失败概括为“单层带厚度的深度在深度复杂的场景中失败”。\n\n放到站内的谱系里看，ENeRF 处在承上启下的位置。它把 IBRNet 的“源像素混合”和 MVSNeRF 的“代价体几何”组合起来，做成了当时最快的可泛化 NeRF。之后，MVSplat、GPS-Gaussian、DepthSplat 保留了“先估深度”这一步（MVSplat、DepthSplat 用代价体，GPS-Gaussian 用立体匹配），但不再沿射线采样，而是直接在深度处放置高斯并光栅化；Quark 和 Ha et al. 则都把 ENeRF 当作必须击败的实时基线。理解了 ENeRF，就能看清后面这些方法分别在哪一步做了替换。"}, {"b": "sec", "h": "流水线", "id": "pipeline"}, {"b": "p", "t": "点击方框跳到对应步骤。"}, {"b": "slot", "name": "diagram", "which": "enerf", "label": "ENeRF 流程图", "spec": {"w": 960, "nodes": [{"x": 10, "y": 48, "w": 135, "h": 64, "t": "测速口径", "s": "只计网络前向", "step": "en12", "data": true}, {"x": 10, "y": 160, "w": 135, "h": 64, "t": "源视角 × S", "s": "最近 2–3 台，已标定", "step": "en1"}, {"x": 10, "y": 272, "w": 135, "h": 64, "t": "多视角视频", "s": "逐帧独立，无时序", "step": "en11", "data": true}, {"x": 167, "y": 160, "w": 135, "h": 64, "t": "特征金字塔", "s": "FPN 1/4·1/2·1×", "step": "en2"}, {"x": 323, "y": 48, "w": 135, "h": 64, "t": "粗代价体", "s": "64 平面 @1/8，方差", "step": "en3"}, {"x": 480, "y": 48, "w": 135, "h": 64, "t": "深度分布", "s": "期望 D，标准差 σ", "step": "en4", "data": true}, {"x": 480, "y": 160, "w": 135, "h": 64, "t": "细代价体", "s": "D±σ 内 8 平面 @1/2", "step": "en5"}, {"x": 637, "y": 160, "w": 135, "h": 64, "t": "深度引导采样", "s": "每条射线 2 个点", "step": "en6"}, {"x": 637, "y": 272, "w": 135, "h": 64, "t": "点特征", "s": "体素 8 维 + 像素对齐", "step": "en7"}, {"x": 793, "y": 272, "w": 135, "h": 64, "t": "聚合与密度", "s": "均值方差池化 → σ", "step": "en8"}, {"x": 793, "y": 160, "w": 135, "h": 64, "t": "颜色混合", "s": "源图 RGB 凸组合", "step": "en9"}, {"x": 793, "y": 48, "w": 135, "h": 64, "t": "体渲染", "s": "2 样本 α 合成", "step": "en10"}], "edges": [{"d": "M78,272 L78,224"}, {"d": "M145,192 L167,192"}, {"d": "M302,192 C312,192 312,80 323,80"}, {"d": "M458,80 L480,80"}, {"d": "M548,112 L548,160"}, {"d": "M302,192 L480,192"}, {"d": "M615,192 L637,192"}, {"d": "M704,224 L704,272"}, {"d": "M615,192 C626,192 626,304 637,304"}, {"d": "M302,192 C470,192 470,304 637,304"}, {"d": "M772,304 L793,304"}, {"d": "M860,272 L860,224"}, {"d": "M860,160 L860,112"}, {"d": "M860,112 L860,128 L939,128 L939,354"}], "loop": {"x": 311, "y": 16, "w": 316, "h": 234, "label": "级联 × 2 层", "noteK": "en5", "note": "细层只扫粗层给出的 D±σ"}, "out": {"x": 812, "y": 372, "text": "新视角图像（DTU 512×640，RTX 3090 约 22 FPS）"}, "h": 384}}, {"b": "sec", "h": "读之前先掌握", "id": "before"}, {"b": "refs", "items": [{"k": "concept-g-pinhole", "gloss": "平面扫描、像素对齐特征采样、射线生成都在做“像素 ↔ 3D 点 ↔ 另一台相机的像素”的换算。代码里的 get_proj_mats 就是把 K[R|t] 拼成 4×4 再求逆相乘，不熟悉内外参和齐次坐标就看不懂 en3 和 en7。"}, {"k": "concept-g-depth", "gloss": "粗层按逆深度（视差）均匀取 64 个平面，细层在深度空间均匀取 8 个平面；DTU 上近处平面间距约 3.6 mm、远处约 15.9 mm。要理解为什么近处要更密、σ 在视差和深度两个空间里怎样换算，需要先懂逆深度采样。"}, {"k": "concept-d-mvs", "gloss": "ENeRF 的几何模块就是一个学习式 MVS：单应 warp、方差代价、3D CNN 正则、softmax 求期望深度，全部来自 MVSNet 这一路线。先弄清 MVS 的输入输出，才能看出 ENeRF 改了什么（代价体建在目标视角、用标准差定区间）。"}, {"k": "concept-i-psv", "gloss": "代价体本质上是一个特征版的平面扫描体：在每个深度假设上比较多视角特征是否一致。理解平面扫描体，就理解了 en3 的全部计算和它的显存开销。"}, {"k": "concept-r-volume", "gloss": "ENeRF 仍然用体渲染合成颜色，只是每射线只有 2 个样本。要看懂 α 合成、透射率，以及代码里 α = 1 − exp(−σ) 没有乘样本间距 δ 意味着什么，需要先掌握体渲染方程的离散形式。"}, {"k": "concept-n-nerf", "gloss": "ENeRF 要加速的对象就是 NeRF 式的密集射线采样。知道 NeRF 每射线要 64+128 次 MLP 查询、为什么慢，才能体会“2 个点”意味着多大的节省。"}, {"k": "concept-n-generalizable", "gloss": "ENeRF 属于“一个网络用于所有场景”的可泛化路线，与 pixelNeRF、IBRNet、MVSNeRF 同类。需要分清泛化推理和逐场景微调两种用法，以及跨数据集泛化为什么会掉点。"}, {"k": "concept-i-blending", "gloss": "颜色不是回归出来的，而是源视角像素 RGB 的加权平均，权重由网络按视角差、特征一致性等线索预测，这是学习版的视角相关混合。它决定了 ENeRF 锐度高、但无法生成未被观测到的颜色。"}, {"k": "concept-f-prob", "gloss": "深度分布的期望和标准差是 ENeRF 的核心量：σ 被当作不确定性，决定下一级搜索范围和最终采样区间。要能算出多峰分布的期望会落在哪里，才能理解遮挡边缘处的失败。"}, {"k": "concept-l-cnn", "gloss": "特征网络是 FPN 式 2D CNN，代价体正则是 3D U-Net（两次或三次下采样）。了解卷积、残差/跳连和编码器-解码器结构，才能读懂 feature_net.py 和 cost_reg_net.py。"}, {"k": "concept-n-dynamic", "gloss": "论文标题里的“free-viewpoint video”并不意味着有时空模型：ENeRF 对动态场景是逐帧独立推理。了解动态场景的几类表示（逐帧、4D、形变场、人体模板），才能判断这种做法的利弊。"}, {"k": "concept-v-metrics", "gloss": "DTU 的 PSNR 只在前景掩码内算，ZJU-MoCap 的指标只在人体包围盒内算，其他论文用的是全图指标，还有人用 STED、TCC 量化闪烁。不先弄清各指标的计算范围，就无法正确比较 ENeRF 与 Quark、Ha et al. 的数字。"}]}, {"b": "sec", "h": "EN1 · 问题设定：S 个最近的已标定源视角 + 一个深度范围，逐帧推理，不做逐场景优化", "id": "walk-enerf-en1", "sn": {"label": "论文位置", "t": "论文引言与实验设定（DTU 每场景 16 个已知视角、4 个新视角；ZJU-MoCap Sequence-313 前 600 帧；DynamicCap olek/vlad，经检索核对）；lib/datasets/dtu/enerf.py:30–75、77–120；lib/datasets/zjumocap/enerf.py:57–101、157–165；configs/enerf/dtu_pretrain.yaml:18–20、70–72；lib/datasets/samplers.py:10–25"}}, {"b": "p", "t": "输入：B×S×3×H×W 的源图（DTU 默认测试 S=3、512×640，像素归一化到 [−1, 1]），每个源视角的 4×4 外参和 3×3 内参，目标相机的外参和内参，以及深度范围 near/far（DTU 固定为 [425, 905] mm）。输出：目标视角 H×W×3 的 RGB，附带一张深度图。每帧、每个目标视角独立执行，不保留任何跨帧状态。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-g-pinhole"}, {"k": "concept-g-rig"}, {"k": "concept-g-depth"}, {"k": "concept-n-generalizable"}, {"k": "adv-a-generalizable-ibr"}]}}, {"b": "p", "t": "先把“游戏规则”说清楚。相机阵列已标定，每台相机都能用针孔模型（g-pinhole）在像素、射线和 3D 点之间来回换算；阵列固定不动，标定一次即可（g-rig）。对一个想看的目标视角，ENeRF 不用全部相机，只取离它最近的 S 台：DTU 测试时 S=3，人物数据 S=2。选择规则在代码里是“相机中心欧氏距离最近”（dtu/enerf.py:67–74）；ZJU-MoCap 还额外要求朝向相近：按位置取最近的 2S 台，只保留其中朝向（旋转矩阵之差）也排在最近 2S 台之内的，再取前 S 台（zjumocap/enerf.py:84–98）。\n\n第二个输入是深度范围 [near, far]。它决定了代价体在哪一段深度里搜索表面（g-depth），范围之外的东西根本表示不出来。DTU 用固定的 425–905 mm；LLFF 取 COLMAP 给出的所有图像近界的最小值和远界的最大值，整个场景共用一个范围（llff/enerf.py:94–95）；NeRF Synthetic 固定 2.5–5.5；人物数据则由每帧 SMPL 顶点的包围盒外扩 0.1 m、再转到目标相机坐标系下取 z 的最小和最大值（zjumocap/enerf.py:157–165）。后面会看到，这个范围对质量和速度都很关键。\n\n“可泛化”（n-generalizable）指的是：网络在 DTU 的 88 个训练场景上训练一次，拿到一个新场景的几张照片就直接推理，不做任何优化；如果愿意花 11–40 分钟，也可以在新场景上微调。动态视频没有专门的时序建模，被当作一帧一帧的多视角快照，每帧都独立走一遍同样的流程（a-generalizable-ibr）。\n\n训练时视角数是随机的：每个样本按 0.1/0.8/0.1 的概率取 2/3/4 个源视角，从离目标最近的几台里随机抽，所以同一个网络能处理不同数量的输入。", "mn": {"label": "类比", "t": "像拼一张“从这个位置看过去”的照片：摄影师只翻出离这个位置最近的两三张照片，并事先知道被拍的东西大概在 0.4 到 0.9 米之间，然后在这个范围里找每个像素的表面。"}}, {"b": "eqs", "eqs": [{"tex": "\\lambda\\begin{bmatrix}u\\\\ v\\\\ 1\\end{bmatrix}=\\mathbf{K}_i\\left(\\mathbf{R}_i\\mathbf{X}+\\mathbf{t}_i\\right)", "explain_zh": "针孔投影。X 是世界坐标下的 3D 点；R_i（3×3）、t_i（3×1）把它变到第 i 台相机坐标系；K_i 是 3×3 内参；λ 是该点在相机 i 下的深度；(u, v) 是像素坐标。代码里外参以 4×4 矩阵 [R|t; 0 0 0 1] 存放。"}, {"tex": "\\mathcal{S}_t=\\underset{\\mathcal{S}\\subset\\{1..N\\},\\,|\\mathcal{S}|=S}{\\arg\\min}\\;\\sum_{i\\in\\mathcal{S}}\\left\\lVert \\mathbf{c}_i-\\mathbf{c}_t\\right\\rVert_2", "explain_zh": "按代码改写的视角选择规则。c_i 是第 i 台相机的光心（外参求逆后的平移），c_t 是目标相机光心；取距离最近的 S 台。ZJU-MoCap 的代码按光心距离取最近的 2S 台，只保留其中按旋转矩阵 Frobenius 距离也排在前 2S 的，再取前 S 台。"}, {"tex": "[\\,z_{\\text{near}},\\,z_{\\text{far}}\\,]=\\Big[\\max\\big(\\min_j z_j,\\;0.1\\big),\\;\\max_j z_j\\Big],\\qquad z_j=\\big(\\mathbf{R}_t\\mathbf{b}_j+\\mathbf{t}_t\\big)_z", "explain_zh": "人物数据的深度范围（按 zjumocap/enerf.py:157–165 改写）。b_j 是 SMPL 顶点包围盒外扩 0.1 m 后的 8 个角点，z_j 是它们在目标相机下的深度，近平面至少 0.1 m。交互 GUI 里下限是 0.05 m（enerf_interactive.py:198–201）。"}]}, {"b": "p", "t": "DTU：88 个训练扫描、16 个测试扫描，每个扫描 49 个视角，图像 512×640；测试时每个场景从 16 个已知视角里取 3 个做输入，渲染 4 个新视角（论文设定，经检索；代码用 MVSNeRF 的 pairs.th 划分，已核对 dtu_train 16 个、dtu_val 4 个视角）。训练时输入视角数 2/3/4 的概率为 0.1/0.8/0.1，实际由 train.sampler_meta 经 EnerfBatchSampler 抽取（dtu_pretrain.yaml:70–72、samplers.py:21）；enerf.train_input_views（:18–19）同值，只用来确定候选源视角个数。LLFF 输入 640×960；NeRF Synthetic 深度范围 [2.5, 5.5]。ZJU-MoCap（代码评测配置）：1024×1024 缩到 512×512，偶数号相机做输入、奇数号相机做测试目标，帧 0–599 中每 100 帧取一帧，S=2。交互 GUI 用全部 21 台相机做候选。", "label": "具体数字"}, {"b": "p", "t": "只取最近的几台相机，是因为它们与目标视角的可见区域重叠最多，代价体匹配和颜色混合都最可靠，而且计算量随 S 线性增长。深度范围由外部给定、不让网络预测，是 MVS 的通行做法：固定范围让逆深度平面的划分有意义。作者没有采用的方案有：用全部相机优化一个全局表示（NeRF 式逐场景优化，太慢），以及由网络自己估计深度范围（论文和代码都没有这样做）。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）深度范围不是可有可无的超参数：DTU 的 425–905 mm 很紧，人物的范围来自 SMPL 拟合，这些在真实系统里都需要在线获得。（2）“可泛化”不等于“到哪都好”：只在 DTU 上训练的模型跨数据集会掉点，论文和代码都准备了逐场景微调。（3）训练时有约 10% 的样本把目标视角本身放进候选集，但只有抽 4 个视角时它才可能真被选中（dtu/enerf.py:80–83），这是一个小的数据增强，不影响测试。（4）视角按距离选，目标视角移动时输入集合会突然换人，这是后面闪烁问题的来源之一。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "如果把 DTU 的深度范围从 [425, 905] mm 放宽到 [200, 2000] mm，仍用 64 个逆深度平面，物体附近（约 650 mm）的平面间距会变成多少？这会怎样影响后面的细层？", "a": "逆深度范围从 1/425−1/905 ≈ 1.25×10⁻³ 变成 1/200−1/2000 = 4.5×10⁻³，每步视差从约 1.98×10⁻⁵ 变成约 7.1×10⁻⁵ mm⁻¹。650 mm 处深度间距约为 z²×Δ(1/z)，从约 8.4 mm 变成约 30 mm，粗 3.6 倍左右。粗层深度更不准，σ 通常更大，细层 8 个平面分布在更宽的区间里，间距也更大，最终采样区间变宽，质量下降。"}]}, {"b": "sec", "h": "EN2 · 特征金字塔：一个 FPN 式小 CNN 同时产出 1/4（32 通道）、1/2（16 通道）、1×（8 通道）三级特征", "id": "walk-enerf-en2", "sn": {"label": "论文位置", "t": "论文方法部分的图像特征提取（小节号未能核对）；lib/networks/enerf/feature_net.py:4–36；lib/networks/enerf/network.py:58–67（forward_feat）"}}, {"b": "p", "t": "输入：B·S 张源图，形状 [B·S, 3, 512, 640]，取值 [−1, 1]。输出三级特征：level_0 为 [B, S, 32, 128, 160]（1/4），level_1 为 [B, S, 16, 256, 320]（1/2），level_2 为 [B, S, 8, 512, 640]（原分辨率）。level_0 供粗代价体和训练时的粗层渲染使用，level_1 供细代价体使用，level_2 与 RGB 拼接后供细层渲染的像素对齐特征使用。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-l-cnn"}, {"k": "concept-f-image"}, {"k": "adv-a-learned-mvs"}]}}, {"b": "p", "t": "特征网络是一个很小的 FPN（特征金字塔网络，l-cnn）。自底向上三段：第一段两层 3×3 卷积，3→8 通道，保持原分辨率；第二段用 5×5、步长 2 的卷积降到 1/2，通道 8→16；第三段同样降到 1/4，通道 16→32。每层卷积后接 BatchNorm 和 ReLU。自顶向下时，最粗的 1/4 特征过一个 1×1 卷积得到 32 通道输出；它双线性上采样 2 倍，与 1/2 特征的 1×1 横向投影相加，再过 3×3 卷积压到 16 通道；同理再上采样一次，得到原分辨率的 8 通道特征（f-image）。\n\n为什么要三级？因为后面有三个用途，分辨率各不相同：粗代价体在目标视角 1/8 分辨率上，需要源图 1/4 的特征；细代价体在 1/2 分辨率上，需要源图 1/2 的特征；细层渲染在原分辨率上，需要逐像素的特征。一个金字塔一次前向就全给出来，几何和外观共用同一套特征（a-learned-mvs）。\n\n这个网络非常小：按代码逐层计算只有 37,360 个参数。对比一下，pixelNeRF、IBRNet 用的是 ResNet 系的编码器，大得多。小网络是 ENeRF 追求速度的第一步，但也意味着特征的表达能力有限，泛化到与 DTU 差别很大的场景时容易吃亏。\n\n注意一个容易绊倒人的命名：代码里 level_0 是最粗的 1/4 特征，level_2 才是原分辨率特征（network.py:62–66），与“第 0 级是原图”的常见习惯正好相反。", "mn": {"label": "类比", "t": "像先把照片缩成三种尺寸：小图用来快速判断“东西大概在多远”，中图用来细找，原图用来取色。只是这三种尺寸由同一个小网络一次生成，而且每个尺寸都带着从更粗一级传下来的上下文。"}}, {"b": "eqs", "eqs": [{"tex": "C_1=f_1(I),\\quad C_2=f_2(C_1),\\quad C_3=f_3(C_2)", "explain_zh": "自底向上（按代码改写）。I 是 3×H×W 的源图；f_1 为两层 3×3 卷积（3→8，原分辨率）；f_2 为 5×5 步长 2 卷积加 3×3 卷积（8→16，1/2）；f_3 同理（16→32，1/4）。每层含 BN 和 ReLU。"}, {"tex": "P_3=W_{\\text{top}}C_3,\\quad P_2=\\mathrm{Up}_{2}(P_3)+W_1C_2,\\quad P_1=\\mathrm{Up}_{2}(P_2)+W_0C_1", "explain_zh": "自顶向下与横向连接。W_top、W_1、W_0 都是 1×1 卷积，把通道统一到 32；Up_2 是 align_corners=True 的双线性 2 倍上采样。"}, {"tex": "F^{1/4}=P_3\\in\\mathbb{R}^{32},\\qquad F^{1/2}=\\mathrm{Conv}_{3\\times3}(P_2)\\in\\mathbb{R}^{16},\\qquad F^{1}=\\mathrm{Conv}_{3\\times3}(P_1)\\in\\mathbb{R}^{8}", "explain_zh": "三级输出的通道数。代码里分别叫 level_0、level_1、level_2（feature_net.py:31–36，network.py:62–66）。"}]}, {"b": "p", "t": "参数量 37,360（按代码逐层计算，含 BN 的缩放和平移参数）。卷积核：下采样用 5×5、步长 2，其余 3×3，横向 1×1。以 DTU、S=3 为例，level_2 特征为 3×8×512×640 ≈ 786 万个浮点数，level_1 为 3×16×256×320 ≈ 393 万，level_0 为 3×32×128×160 ≈ 197 万。输入归一化为 x×2−1，不是 ImageNet 的均值方差归一化。", "label": "具体数字"}, {"b": "p", "t": "FPN 能在一次前向里给出多分辨率、带上下文的特征，适合同时服务几何（代价体）和外观（渲染）两路。通道数刻意压得很小（32/16/8），因为代价体的显存和计算量与通道数成正比，而颜色本身会直接从源图 RGB 里取，特征只需帮助判断“几何一致性”和“该信哪个视角”。作者没有采用 ImageNet 预训练的大编码器（pixelNeRF 用 ResNet-34）；这一点是结合代码的合理解读，论文是否专门讨论未能核对。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）命名反直觉：level_0 是 1/4 分辨率 32 通道，level_2 才是原分辨率 8 通道。（2）原分辨率特征只有 8 个通道，渲染时的外观细节主要靠与之拼接的 RGB，而不是特征本身。（3）网络含 BatchNorm，训练时每卡 batch 为 1（一个样本的 S 张图一起过网络），测试时用滑动统计量；换到分布差异很大的数据时，BN 统计量可能不匹配。（4）源图和特征都要按 render_scale、im_feat_scale 缩放，对应的内参也要同步缩放（utils.py:35–55），自己改分辨率时容易漏掉。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "细层渲染用的像素对齐特征只有 8 个通道。为什么这样也够用？如果把它加到 64 通道，你预计速度和质量分别会怎样变化？", "a": "因为颜色不是由特征回归的，而是源像素 RGB 的加权和，特征只需要帮网络判断几何是否一致、哪个视角更可信；几何信息还有来自代价体的 8 维体素特征。加到 64 通道后，每个采样点、每个视角要采样和处理的维度增加 8 倍，逐点计算量和显存近似成比例上升，而质量提升可能有限，因为颜色细节本来就来自原图。"}]}, {"b": "sec", "h": "EN3 · 粗代价体：在目标视角 1/8 分辨率上扫 64 个逆深度平面，取跨视角特征方差", "id": "walk-enerf-en3", "sn": {"label": "论文位置", "t": "论文方法部分的级联代价体（小节号未能核对）；lib/networks/enerf/utils.py:35–55（get_proj_mats）、57–95（homo_warp）、98–111（初始深度假设）、322–349（build_feature_volume）；configs/enerf/dtu_pretrain.yaml:29–33"}}, {"b": "p", "t": "输入：level_0 特征 [B, S, 32, 128, 160]、源和目标相机、[near, far]。输出：深度假设 [B, 64, 64, 80]（每个目标像素 64 个深度），以及方差代价体 [B, 32, 64, 64, 80]（通道 × 深度 × 高 × 宽），网格位于目标视角的 1/8 分辨率上。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-i-psv"}, {"k": "concept-d-mvs"}, {"k": "concept-g-epipolar"}, {"k": "concept-g-depth"}, {"k": "adv-a-learned-mvs"}]}}, {"b": "p", "t": "这一步是经典的平面扫描（i-psv、d-mvs），只是扫的是特征而不是颜色，而且扫描的“参考视角”是我们想渲染的目标视角本身。做法是：在目标相机前方放 64 张平行于像平面的平面，从近到远按逆深度均匀分布（g-depth）；对目标网格上的每个像素 (u, v) 和每个深度 d，求出对应的 3D 点，投到每个源视角，在该视角的 32 通道特征图上双线性采样。于是每个源视角都贡献一个 32×64×64×80 的“扭曲特征体”。\n\n怎样判断哪个深度是对的？如果 (u, v, d) 恰好落在物体表面上，所有源视角看到的是同一个表面点，特征应该相近；如果 d 不对，各视角沿各自的极线（g-epipolar）采到不同的东西，特征差异大。所以对 S 个扭曲特征逐通道求方差，方差小的深度更可能是表面。方差对视角顺序不敏感，对视角个数也不敏感，同一个网络能吃 2、3、4 个视角。\n\n代码里的投影写得很紧凑：把目标相机的 K_t[R_t|t_t] 补成 4×4 矩阵 P_t，源相机为 3×4 的 P_s，计算 M = P_s·P_t⁻¹，拆成左 3×3 块 A 和右列 b，则源图像坐标满足 x_s ∝ A·[u, v, 1]ᵀ + b/d。注意分辨率：目标网格是 1/8，源特征是 1/4，所以内参分别乘以 0.125 和 0.25。\n\n为什么建在目标视角？因为后面要为目标射线决定采样位置，直接在目标像素上得到深度分布最省事，不需要再做一次视角变换。代价是每换一个视点，代价体都要重建。", "mn": {"label": "类比", "t": "像拿着一叠透明胶片站在目标相机的位置，每张胶片放在一个固定距离上；把每台源相机的“照片特征”投到每张胶片上，看哪张胶片上几台相机投下来的图案能对上，对得上的那张就是表面所在的距离。"}}, {"b": "eqs", "eqs": [{"tex": "\\frac{1}{d_j}=\\frac{1}{z_{\\text{near}}}+\\frac{j}{D-1}\\left(\\frac{1}{z_{\\text{far}}}-\\frac{1}{z_{\\text{near}}}\\right),\\qquad j=0,\\dots,D-1", "explain_zh": "粗层深度假设（utils.py:104–107）。D=64（训练配置；README 评测改为 48）；d_j 是第 j 个平面的深度。在视差（逆深度）上均匀，所以近处平面密、远处稀。"}, {"tex": "\\mathbf{M}=\\mathbf{P}_s\\,\\mathbf{P}_t^{-1}=\\big[\\mathbf{A}\\;|\\;\\mathbf{b}\\big],\\qquad \\tilde{\\mathbf{x}}_s\\propto \\mathbf{A}\\begin{bmatrix}u\\\\ v\\\\ 1\\end{bmatrix}+\\frac{\\mathbf{b}}{d}", "explain_zh": "按代码改写的单应 warp（utils.py:35–55、72–81）。P_t 是目标相机补成 4×4 的投影矩阵（内参按 0.125 缩放），P_s 是源相机 3×4 投影矩阵（内参按 0.25 缩放）；A 是 3×3 块，b 是 3×1 列；(u, v) 是目标网格像素坐标，d 是深度。除以第三个分量得到源图像素坐标，再归一化到 [−1, 1] 给 grid_sample 用。"}, {"tex": "\\mathcal{C}(c,j,u,v)=\\frac{1}{S}\\sum_{i=1}^{S}F_i(c,j,u,v)^2-\\Big(\\frac{1}{S}\\sum_{i=1}^{S}F_i(c,j,u,v)\\Big)^2", "explain_zh": "方差代价体（utils.py:328–348）。F_i 是第 i 个源视角 warp 到目标网格上的特征，c 为通道（32），j 为深度平面序号，(u, v) 为目标像素。越界采样填 0。"}]}, {"b": "p", "t": "DTU 默认：目标网格 64×80，64 个平面；深度 425 mm 处相邻平面间距约 3.6 mm，905 mm 处约 15.9 mm（按公式计算；48 个平面时约 4.9 mm 和 21.2 mm）。每个源视角的扭曲特征体 32×64×64×80 ≈ 1049 万个浮点数（fp32 约 42 MB），代价体大小相同。人物配置用 32 个粗层平面（zjumocap_eval.yaml）。", "label": "具体数字"}, {"b": "p", "t": "方差代价来自 MVSNet，优点是与视角数和顺序无关。把代价体建在目标视角，而不是 MVSNeRF 那样建在一个参考源视角，是因为目标是为目标射线决定采样位置；这样得到的深度与目标像素一一对应。逆深度均匀采样与像素视差均匀一致，是 MVS 的常规选择。粗层放在 1/8 分辨率，是因为它只需找到表面的大致位置，细节留给后面的细层。以上动机是结合代码的解读，论文的原话未能逐字核对。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）越界填 0：一个点投到某个源视角的图像外时，该视角贡献全零特征，仍参与方差计算；代码中计算有效视角数的掩码被注释掉了（utils.py:341–344），图像边缘处的代价因此有偏。（2）这不是世界坐标下的体素网格，而是目标视锥里的“像素 × 深度”网格，每换一个目标视角都要重建。（3）目标网格 1/8、源特征 1/4，两者分辨率不同，内参要分别缩放。（4）遮挡没有显式处理：被挡住的源视角同样参与方差，只能依靠后面的 3D CNN 学着容忍。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "如果只有 2 个源视角，方差代价体在每个通道上等于什么？只有 1 个视角时呢？这说明了 ENeRF 为什么至少要 2 个输入视角。", "a": "两个视角时，方差 = ((F_1 − F_2)/2)²，也就是两者之差平方的四分之一，仍然衡量两个视角是否一致。只有一个视角时，方差恒为 0，代价体不含任何匹配信息，深度无从判断。所以方差代价体至少需要 2 个视角，代码的训练和测试配置也都在 2 个及以上。"}]}, {"b": "sec", "h": "EN4 · 深度分布：3D U-Net 正则代价体，沿深度 softmax，得到每像素的期望深度 D 与标准差 σ", "id": "walk-enerf-en4", "sn": {"label": "论文位置", "t": "论文方法部分的深度预测与不确定性（经检索核对：代价体预测深度概率分布，给出表面可能所在的区间）；lib/networks/enerf/cost_reg_net.py:51–86（MinCostRegNet）；lib/networks/enerf/utils.py:614–667（depth_regression）；commit 30a4e90（方差下限 1e-8 → 1e-10）"}}, {"b": "p", "t": "输入：方差代价体 [B, 32, 64, 64, 80]。输出：8 通道特征体 [B, 8, 64, 64, 80]（训练时用于粗层渲染的体素特征）、每个平面一个 logit [B, 64, 64, 80]，以及粗层的期望 D 和标准差 σ，形状都是 [B, 64, 80]。粗层的 D、σ 是在视差（1/深度）空间里算的。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-f-prob"}, {"k": "concept-d-mvs"}, {"k": "concept-l-cnn"}, {"k": "adv-a-learned-mvs"}]}}, {"b": "p", "t": "原始代价体噪声很大：弱纹理区域各深度的方差都差不多，高光区域会出现假的低方差。所以先用一个 3D U-Net（l-cnn）在深度和空间两个方向上做正则。粗层用的 MinCostRegNet 很小：3D 卷积把通道从 32 压到 8，再两次步长 2 下采样到 16、32 通道，然后用转置卷积上采样并与同尺度特征相加，最后分两个头：一个输出 8 通道特征体，一个输出每个深度平面的 1 个 logit。按代码计算共 78,232 个参数。\n\n接着沿深度维做 softmax，得到每个像素在 64 个平面上的概率 p_j（f-prob）。这里借用了 MVSNet 的 soft argmin：深度估计不取概率最大的那个平面（不可微），而取期望 D = Σ p_j δ_j。ENeRF 多算了一步：标准差 σ = sqrt(Σ p_j (δ_j − D)²)。概率越集中，σ 越小，说明网络越有把握；概率越分散，σ 越大。这个 σ 就是后面决定“去多宽的范围里找表面”的不确定性。\n\n有两点值得注意。第一，粗层 depth_inv 为 True，δ_j 是视差值，所以 D 和 σ 都在视差空间里（utils.py:659–663），换回深度时近处区间窄、远处区间宽。第二，没有任何深度真值监督这个分布：它完全由后面渲染损失的梯度塑造。所以 σ 是一个“对渲染有用”的宽度，而不是经过校准的统计不确定性（a-learned-mvs）。", "mn": {"label": "类比", "t": "像几个人投票猜一件东西在几号货架：每个货架得到一个票数比例。平均货架号就是估计位置，票数的分散程度就是“大家有多不确定”。票数集中，就只去那一个货架附近找；票数分散，就得多看几个货架。"}}, {"b": "eqs", "eqs": [{"tex": "p_j(u,v)=\\frac{\\exp\\ell_j(u,v)}{\\sum_{k=1}^{D}\\exp\\ell_k(u,v)}", "explain_zh": "ℓ_j 是 3D U-Net 对第 j 个深度平面输出的 logit，softmax 沿深度维进行（utils.py:658）。"}, {"tex": "D(u,v)=\\sum_{j=1}^{D}p_j\\,\\delta_j,\\qquad \\sigma(u,v)=\\sqrt{\\max\\Big(\\sum_{j=1}^{D}p_j\\,(\\delta_j-D)^2,\\;10^{-10}\\Big)}", "explain_zh": "期望与标准差（utils.py:659–663）。粗层 δ_j = 1/d_j 为视差；细层 depth_inv 为 False，δ_j 就是深度 d_j。方差下限 10⁻¹⁰ 来自 2023-03 的修复提交（原为 10⁻⁸）；设下限是为了避免对 0 开方及其梯度发散，下限为何改小，提交信息没有说明。"}, {"tex": "\\frac{\\partial D}{\\partial \\ell_j}=p_j\\,(\\delta_j-D)", "explain_zh": "soft argmin 的梯度：logit 升高会把期望往 δ_j 的方向拉，拉力与 p_j 和 δ_j 到当前期望的距离成正比。这说明深度可以只靠渲染损失端到端地学。"}]}, {"b": "p", "t": "MinCostRegNet：通道 32→8→16→32，两次 3D 下采样，参数 78,232（按代码计算）。输出分辨率与粗代价体相同：64×80 个像素、64 个平面（人物配置 32 个）。以 DTU 为例，σ 等于 1 个粗平面间距时，在约 650 mm 处对应约 8.4 mm 的深度宽度。", "label": "具体数字"}, {"b": "p", "t": "用期望而不是 argmax，是为了可微；用标准差表示不确定性，是因为它能直接从同一个概率分布里算出来，不需要额外的网络头。作者没有采用的方案包括：固定比例缩小下一级的搜索范围（CasMVSNet 式）、单独回归一个区间宽度、用深度真值监督概率分布。前两者不能根据每个像素的难易程度自适应，后者需要真实数据上通常没有的深度真值。以上是结合代码和 MVS 文献的解读。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）σ 没有经过校准，只是“对渲染有用”的宽度，不能当作真实误差的置信区间。（2）多峰分布时期望会落在两个峰之间：遮挡边缘处前景和背景各有一个峰，D 可能正好指向空中。（3）粗层的 D、σ 在视差空间，细层在深度空间，读代码时要看 depth_inv 的配置（dtu_pretrain.yaml:29）。（4）这一步输出的 8 通道特征体不只用于深度，训练时还作为粗层渲染的体素特征。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "某像素在 64 个粗平面上的概率一半集中在第 10 号平面、一半集中在第 50 号平面（按平面序号计）。期望和标准差是多少？细层会在哪里搜索？这对遮挡边缘意味着什么？", "a": "期望为 0.5×10 + 0.5×50 = 30 号平面，方差为 0.5×20² + 0.5×20² = 400，标准差 20 个平面。细层区间是 [10, 50] 号平面对应的深度，8 个细平面均匀铺在这 40 个粗平面宽的区间里，每个细平面间隔约 5.7 个粗平面，分辨率很低。遮挡边缘的像素常常就是这种双峰情况：期望落在前景和背景之间的空处，细层搜索又很稀疏，容易出现边缘混色和拖尾。"}]}, {"b": "sec", "h": "EN5 · 级联细层：只在 [D−σ, D+σ] 内扫 8 个平面，分辨率升到 1/2，得到 D₁、σ₁", "id": "walk-enerf-en5", "sn": {"label": "论文位置", "t": "论文方法部分的级联代价体；消融“级联（64+8 平面）对非级联（128 平面）”（经检索核对）；lib/networks/enerf/utils.py:112–151（get_depth_values 的细层分支）；lib/networks/enerf/cost_reg_net.py:4–49（CostRegNet）；configs/enerf/dtu_pretrain.yaml:27–43；configs/enerf/dtu_pretrain_nocascade.yaml"}}, {"b": "p", "t": "输入：粗层的 D、σ（[B, 64, 80]，视差空间）和粗层深度范围，level_1 特征 [B, S, 16, 256, 320]。输出：每个像素 8 个深度假设 [B, 8, 256, 320]，细代价体 [B, 16, 8, 256, 320]，经 3D U-Net 后的 8 通道特征体 [B, 8, 8, 256, 320]，以及细层的 D₁、σ₁（[B, 256, 320]，深度空间，DTU 上单位为 mm）。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-d-mvs"}, {"k": "concept-i-psv"}, {"k": "concept-g-depth"}, {"k": "concept-f-prob"}, {"k": "adv-a-learned-mvs"}]}}, {"b": "p", "t": "粗层告诉我们“表面大概在 D 附近，不确定度约为 σ”。细层就只在这个范围里认真找。具体做法：先把 D、σ 和粗层范围用双线性插值放大 4 倍，从 64×80 到 256×320；在视差空间取 [D−σ, D+σ]，截到粗层的总范围内，再取倒数换成深度区间 [z_near(u,v), z_far(u,v)]；在这个区间里按深度均匀放 8 个假设（细层 depth_inv 为 False）。于是每个像素有自己的一组深度，不再是一叠共享的平行平面，但单应 warp 的代码照样适用，因为它本来就是逐像素按 d 计算的。\n\n然后用 1/2 分辨率、16 通道的 level_1 特征再做一次方差代价体，交给更深的 CostRegNet：三次步长 2 下采样，最深 64 通道，按代码计算约 29.6 万参数，是全网最大的部件。输出 8 通道特征体和 8 个 logit，同样 softmax、求期望和标准差，得到 D₁、σ₁（a-learned-mvs）。\n\n级联省了多少？粗层 64×(64×80) ≈ 32.8 万个体素，细层 8×(256×320) ≈ 65.5 万个；若在 1/2 分辨率上直接扫 128 个平面，需要约 1049 万个，约为级联的 11 倍（按代码配置计算）。论文消融（经检索）的结论是：级联版本（64+8 平面）与非级联版本（128 平面）质量相当，速度大幅提升；arXiv v1 补充材料解释说，有了深度引导采样后，高分辨率代价体的构建成为速度瓶颈，级联在不损失质量的前提下进一步提速。细层的平面间距也更细：例如在约 650 mm 处，若粗层 σ 为 1.5 个粗平面间距，细层区间约 637.7–662.8 mm，8 个平面间距约 3.6 mm，而粗平面在该处的间距约 8.4 mm。", "mn": {"label": "类比", "t": "像找钥匙：先用手电筒在整个房间扫一遍，确定大概在书桌附近（粗层）；再趴到书桌上，只在书桌这一小块地方一寸一寸地摸（细层）。书桌范围划多大，取决于你第一眼有多确定（σ）。"}}, {"b": "eqs", "eqs": [{"tex": "z_{\\text{near}}(u,v)=\\frac{1}{\\min\\big(D+\\sigma,\\;\\delta_{\\max}\\big)},\\qquad z_{\\text{far}}(u,v)=\\frac{1}{\\max\\big(D-\\sigma,\\;\\delta_{\\min}\\big)}", "explain_zh": "细层的逐像素深度区间（utils.py:122–128 改写）。D、σ 是放大到 1/2 分辨率后的粗层视差期望和标准差；δ_max、δ_min 是粗层范围两端的视差（即 1/z_near、1/z_far）。视差越大越近，所以 D+σ 对应近端。"}, {"tex": "d_k(u,v)=z_{\\text{near}}(u,v)+\\frac{k}{7}\\big(z_{\\text{far}}(u,v)-z_{\\text{near}}(u,v)\\big),\\qquad k=0,\\dots,7", "explain_zh": "细层 8 个假设在深度空间均匀分布（utils.py:143–146，depth_inv[1]=False）。"}, {"tex": "N_{\\text{vox}}^{\\text{cas}}=64\\cdot\\frac{H}{8}\\cdot\\frac{W}{8}+8\\cdot\\frac{H}{2}\\cdot\\frac{W}{2}\\;\\approx\\;\\frac{N_{\\text{vox}}^{128}}{10.7},\\qquad N_{\\text{vox}}^{128}=128\\cdot\\frac{H}{2}\\cdot\\frac{W}{2}", "explain_zh": "按代码配置估算的体素数对比。H×W=512×640 时，级联为 327,680 + 655,360 = 983,040，单层 128 平面为 10,485,760。实际计算量还要乘以各自的通道数（粗层 32，细层 16）和视角数。"}]}, {"b": "p", "t": "细层：volume_scale 0.5（256×320），8 个平面，level_1 特征 16 通道，CostRegNet 参数 296,280（按代码计算）。粗层到细层 D、σ 放大 4 倍（0.5/0.125）。代码中的非级联配置 dtu_pretrain_nocascade.yaml（2023-11 加入）为 1/4 分辨率、48 个平面、每射线 2 个样本，与论文消融中的“128 平面”不同。人物和户外配置的细层也是 8 个平面。", "label": "具体数字"}, {"b": "p", "t": "由粗到细是 CasMVSNet 的思路；ENeRF 的区别在于下一级范围由上一级分布的标准差逐像素决定，而不是按固定比例缩小。好处是容易的像素区间窄、难的像素区间宽，而且 σ 在后面还会再用一次，直接决定采样区间。没有采用单层高分辨率代价体，是因为体素数和显存会大一个数量级。这里对动机的描述是结合代码和消融结论的解读。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）粗层的错误无法挽回：真表面不在 D±σ 里时，细层再细也找不到。（2）D 和 σ 用双线性插值放大，在物体边缘会把前景和背景的深度混在一起，产生“中间深度”。（3）检索到的论文消融描述中，非级联版本是 128 个平面；仓库里的非级联配置是 1/4 分辨率、48 个平面，复现那组消融时要注意。（4）粗层在视差空间、细层在深度空间，D 和 D₁ 的单位不同，打印中间结果时别弄混。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "为什么细层 8 个平面就够，而粗层要 64 个？如果某个像素的粗层 σ 被严重低估（比如真表面在 D+3σ 处），后面会发生什么？", "a": "粗层要覆盖整个 [near, far]，平面必须多；细层只覆盖粗层认为最可能的一小段，8 个平面在这一小段里已经足够密。若 σ 被低估，真表面落在细层区间之外，细层的 8 个平面都不在表面上，D₁ 会被推到区间端点附近，最终的 2 个采样点也在错误的深度上，渲染出的颜色取自各源视角的错误位置，表现为重影或模糊。网络只能在训练中学着把 σ 放大一些来规避，没有任何回退机制。"}]}, {"b": "sec", "h": "EN6 · 深度引导采样：每条射线只在 [D₁−σ₁, D₁+σ₁] 内取 2 个点，512×640 下约 65.5 万个点", "id": "walk-enerf-en6", "sn": {"label": "论文位置", "t": "论文方法部分的深度引导采样；消融“样本数从 128 降到 2”（经检索核对）；lib/networks/enerf/utils.py:390–441（build_rays、sample_along_depth）；lib/datasets/enerf_utils.py:25–71；configs/enerf/dtu_pretrain.yaml:34–38"}}, {"b": "p", "t": "输入：细层 D₁、σ₁ [B, 256, 320] 和细代价体范围，目标射线 [B, 327680, 8]（光心 3、方向 3、像素坐标 2）。输出：每条射线 2 个采样深度 z [B, 327680, 2]、对应的 3D 点 [B, 327680, 2, 3]，以及它们在细代价体里的归一化坐标 (u, v, d) [B, 327680, 2, 3]。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-r-volume"}, {"k": "concept-r-raymarch"}, {"k": "concept-g-pinhole"}, {"k": "concept-n-nerf"}, {"k": "adv-a-nerf-fast"}]}}, {"b": "p", "t": "到这里，每个目标像素都有一个“表面大概在 D₁ 附近，误差约 σ₁”的估计。ENeRF 的关键一步是：射线上只在这个区间里取点。先把 D₁、σ₁ 双线性放大 2 倍到渲染分辨率（512×640），区间取 [D₁−σ₁, D₁+σ₁]，并截到细代价体的范围内。然后在区间里均匀取 N 个点：细层 N=2，代码用 linspace(0, 1, 2)，所以两个点正好落在区间的两端，而不是 D₁ 两侧对称的某处；如果设成 N=1，则取中点（utils.py:425–428）。\n\n射线的写法也值得一看。数据集里生成射线时，方向取 R_tᵀK_t⁻¹[u, v, 1]ᵀ，它在相机坐标系下的 z 分量恰好为 1，所以“沿射线走 z”就等于“到达相机深度 z”，采样点直接是 o + z·d，不需要再除以方向长度（g-pinhole）。\n\n训练时粗层也要渲染：在 1/4 分辨率（128×160）上，每射线在视差空间的 [D−σ, D+σ] 内均匀取 8 个点，用来给粗层提供监督。测试时 README 的命令用 render_if False,True 跳过粗层渲染，只保留它的深度输出。\n\n点数对比（按代码配置计算）：细层 327,680 条射线 × 2 = 655,360 个点；NeRF 式每射线 128 个样本需要约 4194 万个点，是 64 倍。论文消融（经检索；arXiv v1 补充材料图 2 的说明相同）表明：样本数从 128 降到 2，有深度引导时质量几乎不变，没有深度引导时质量显著下降（r-volume、a-nerf-fast）。\n\n还有一点：z 由 D₁、σ₁ 计算，没有被 detach，体素特征又按 z 插值，因此渲染误差可以通过采样位置一路传回代价体网络，这是深度模块只靠 RGB 就能学的原因之一。", "mn": {"label": "类比", "t": "像用探针测水底：先用声呐（代价体）得到“水底大概在 3 米，误差 10 厘米”，然后只在 2.9 米和 3.1 米两处各放一次探针，而不是从水面到 10 米每隔几厘米都戳一下。"}}, {"b": "eqs", "eqs": [{"tex": "\\mathbf{x}(z)=\\mathbf{o}_t+z\\,\\mathbf{R}_t^{\\top}\\mathbf{K}_t^{-1}\\begin{bmatrix}u\\\\ v\\\\ 1\\end{bmatrix}", "explain_zh": "目标射线（enerf_utils.py:55–58）。o_t 是目标相机光心，R_t、K_t 是目标相机旋转和内参；方向向量在相机坐标系下 z 分量为 1，所以参数 z 就是相机深度。"}, {"tex": "z_k=z_{\\text{lo}}+\\frac{k}{N-1}\\big(z_{\\text{hi}}-z_{\\text{lo}}\\big),\\quad k=0,\\dots,N-1;\\qquad N=2:\\;z_0=D_1-\\sigma_1,\\;z_1=D_1+\\sigma_1", "explain_zh": "区间内均匀采样（utils.py:425–428）。z_lo、z_hi 是截到细代价体范围后的区间端点；N=2 时两个样本就在端点上；N=1 时取 (z_lo+z_hi)/2。粗层在视差空间做同样的事，再用 1/z 换回深度。"}, {"tex": "N_{\\text{pts}}=H\\cdot W\\cdot N=512\\times640\\times2=655{,}360\\quad\\text{vs.}\\quad 512\\times640\\times128\\approx4.19\\times10^{7}", "explain_zh": "每帧采样点数（按代码配置计算）。每个点还要对 S 个源视角各做一次双线性采样和一次小 MLP，所以逐点开销还要乘以 S。"}]}, {"b": "p", "t": "细层：N=2，渲染分辨率 512×640（render_scale 1.0），327,680 条射线；粗层（仅训练）：N=8，128×160，163,840 个点。人物配置：512×512，最多 262,144 条射线，但评测和交互时只渲染 SMPL 包围盒投影内的射线。户外两层配置：前景 num_samples 为 [2, 1]，即细层每射线只取 1 个点（区间中点）。", "label": "具体数字"}, {"b": "p", "t": "表面附近的概率质量最集中，远处的样本对颜色几乎没有贡献；用 σ 定宽度，可以让确定的像素区间窄、不确定的像素区间宽。保留 2 个点而不是 1 个，保留了体渲染对深度误差的一点容错：两个点的 α 可以调节“更信前面还是后面”。作者没有采用 NeRF 的层级重要性采样（仍需几十上百个点），也没有退化成只取一个表面点的纯深度 warp。动机描述是结合消融结论的解读。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）2 个样本在区间两端，不在 D₁ 上。σ₁ 较大时，两个点都可能离真表面很远，颜色要靠 α 的混合“猜”出来。（2）σ₁ 很小时两个点几乎重合，体渲染退化为表面渲染。（3）每条射线只有一段区间，表示不了多层表面、半透明和细丝结构。（4）输出深度图在 raw2outputs 里用了 z.detach()，但采样位置本身不 detach，梯度照样流回深度网络，读代码时不要误以为深度没有被渲染损失训练。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "某像素 D₁=650 mm、σ₁=2 mm。两个采样点在哪里？如果网络把前一个点的 α 预测为 0.9，后一个点的颜色对最终像素最多能贡献多少？", "a": "两个点在 648 mm 和 652 mm。体渲染中后一个点的权重是 (1−α₁)·α₂ = 0.1·α₂，最多 0.1（α₂=1 时）。也就是说，只要前一个点足够不透明，像素颜色几乎完全由前一个点的混合颜色决定；网络通过调节 α₁ 在“近端”和“远端”两个候选之间做软选择。"}]}, {"b": "sec", "h": "EN7 · 点特征：8 维体素对齐特征 + 每个源视角 15 维像素对齐特征（8 维特征、RGB、4 维视角差）", "id": "walk-enerf-en7", "sn": {"label": "论文位置", "t": "论文方法部分的辐射场预测（体素对齐特征由三线性插值 3D 特征体得到，像素对齐特征来自源图，经检索核对）；lib/networks/enerf/network.py:24–43（render_rays）；lib/networks/enerf/utils.py:456–458（get_vox_feat）、689–722（get_img_feat）"}}, {"b": "p", "t": "输入：采样点 [B, N, 3]（N=655,360）及其归一化坐标 (u, v, d)，细层特征体 [B, 8, 8, 256, 320]，level_2 特征 [B, S, 8, 512, 640]，源图 RGB [B, S, 3, 512, 640]。输出：体素对齐特征 [B, N, 8]，像素对齐特征 [B, N, S, 15]。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-g-pinhole"}, {"k": "concept-i-warping"}, {"k": "concept-l-encoding"}, {"k": "concept-n-generalizable"}, {"k": "adv-a-generalizable-ibr"}]}}, {"b": "p", "t": "每个采样点从两处取特征。\n\n第一处是代价体。细层 3D U-Net 输出的 8 通道特征体定义在“目标像素 × 8 个深度假设”的网格上。把采样点的像素坐标除以 (W−1)、(H−1)，深度按 (z − z_near)/(z_far − z_near) 归一化到该像素自己的区间里，再用 grid_sample 做三线性插值，就得到 8 维体素对齐特征。它汇总了多视角的一致性信息，主要负责判断“这里是不是表面”。\n\n第二处是源图像。把点投到每个源视角（g-pinhole），在 8 通道的原分辨率特征图和 RGB 上双线性采样，得到 8+3 维；越界时 grid_sample 用 border 模式，取图像边缘像素（utils.py:706）。再拼上 4 维相对视角特征：从目标相机光心指向该点的单位向量 r_t，从源相机光心指向该点的单位向量 r_i，取 (r_t − r_i) 的单位方向（3 维）和点积 r_t·r_i（1 维）。这个特征告诉网络“这个源视角看这个点的方向和我们要看的方向差多少”，与 IBRNet 用的相对视角特征相同（a-generalizable-ibr）。于是每个视角给出 15 维。\n\n训练时的粗层渲染用的是 1/4 分辨率、32 通道的 level_0 特征和同分辨率的 RGB，每视角 32+3+4=39 维，对应代码里 NeRF 头的 feat_ch=35。\n\n两类特征分工明确：体素特征来自代价体，偏几何；像素特征来自具体某个视角，偏外观，后面决定颜色从哪个视角取（i-warping）。", "mn": {"label": "类比", "t": "像在一个路口找目击者：体素特征是“几个路人的证词是否一致”的统计结论；像素特征是每个路人各自描述的细节，以及他们站的角度与你的角度差多少。"}}, {"b": "eqs", "eqs": [{"tex": "\\mathbf{f}_{\\text{vox}}=\\mathrm{Trilinear}\\Big(\\mathbf{V}_1,\\;\\big(\\tfrac{u}{W-1},\\;\\tfrac{v}{H-1},\\;\\tfrac{z-z_{\\text{near}}(u,v)}{z_{\\text{far}}(u,v)-z_{\\text{near}}(u,v)}\\big)\\Big)\\in\\mathbb{R}^{8}", "explain_zh": "体素对齐特征（utils.py:434–438、456–458）。V_1 是细层 8 通道特征体；(u, v) 是渲染像素坐标；z_near、z_far 是该像素细代价体的深度范围；三个坐标再映射到 [−1, 1] 给 grid_sample。"}, {"tex": "\\mathbf{x}_i=\\pi\\big(\\mathbf{K}_i(\\mathbf{R}_i\\mathbf{x}+\\mathbf{t}_i)\\big),\\qquad \\mathbf{f}_i=\\mathrm{Bilinear}(F_i^{1},\\mathbf{x}_i)\\in\\mathbb{R}^{8},\\qquad \\mathbf{c}_i=\\mathrm{Bilinear}(I_i,\\mathbf{x}_i)\\in\\mathbb{R}^{3}", "explain_zh": "像素对齐特征。x 是采样点；π 表示透视除法；F_i^1 是第 i 个源视角的原分辨率特征；I_i 是其 RGB（取值 [0, 1]）；越界时取边缘像素。"}, {"tex": "\\mathbf{r}_t=\\frac{\\mathbf{x}-\\mathbf{o}_t}{\\lVert\\mathbf{x}-\\mathbf{o}_t\\rVert},\\quad \\mathbf{r}_i=\\frac{\\mathbf{x}-\\mathbf{o}_i}{\\lVert\\mathbf{x}-\\mathbf{o}_i\\rVert},\\quad \\Delta\\mathbf{d}_i=\\Big[\\frac{\\mathbf{r}_t-\\mathbf{r}_i}{\\lVert\\mathbf{r}_t-\\mathbf{r}_i\\rVert},\\;\\mathbf{r}_t\\cdot\\mathbf{r}_i\\Big]\\in\\mathbb{R}^{4}", "explain_zh": "相对视角特征（utils.py:707–720）。o_t、o_i 是目标和源相机光心；两方向完全相同时点积为 1，差向量方向无定义，代码用 1e−6 下限避免除零。"}]}, {"b": "p", "t": "每个采样点：体素特征 8 维 + S×15 维像素特征，S=3 时共 53 维。细层 N=655,360 个点，像素对齐特征张量 [1, 655360, 3, 15] 约 2949 万个浮点数（fp32 约 118 MB）。粗层（训练时）每视角 39 维。", "label": "具体数字"}, {"b": "p", "t": "体素特征和像素特征互补：前者已经在代价体里完成了跨视角比较，适合判断密度；后者保留了单个视角的外观和方向信息，适合决定颜色从哪里取。相对视角特征让网络能在视角相近的源图上给更高权重，近似处理视角相关外观。这种“体素 + 像素”的组合综合了 MVSNeRF（体素）和 IBRNet（像素 + 方向）的做法，是结合代码与两篇前作的解读。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）border 填充：投到源图外的点会取到图像边缘像素的颜色，而不是被标记为无效，网络只能自己学着降低这些视角的权重。（2）没有可见性测试：被前景挡住的源视角照样会采到前景的颜色和特征。（3）所谓“体素”是目标视锥里逐像素的深度区间网格，每个像素的区间位置和宽度都不同，不是世界坐标下的规则体素。（4）像素对齐特征在渲染分辨率上采样；若改 render_scale，源图 RGB 也会被同比例缩放（utils.py:605–612）。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "一个采样点在某个源视角里被前景物体挡住了。这个视角的像素对齐特征会取到什么？网络有哪些线索可以把它的影响降下来？", "a": "它会取到前景物体表面的特征和颜色，因为投影只看像素位置，不做遮挡判断。能用的线索有三类：一是该视角的特征与其他视角不一致，聚合时的跨视角方差会变大；二是体素对齐特征来自代价体，编码了多视角一致性，可以提示“这里的真实表面是什么”；三是相对视角特征，视角差大的源视角更可能被遮挡或拍到不同的面。这些都只是软线索，网络能否正确降权取决于训练数据里这类情况是否常见。"}]}, {"b": "sec", "h": "EN8 · 多视角聚合与密度：均值/方差池化加 softmax 加权得到 16 维特征，再和体素特征一起经 64 维 MLP 输出 σ", "id": "walk-enerf-en8", "sn": {"label": "论文位置", "t": "论文方法部分的多视角特征聚合（计算跨视角均值与方差、拼接后经共享 MLP 得到权重、soft-argmax 加权，经检索核对；arXiv v1 补充材料第 1 节、表 1）；lib/networks/enerf/nerf.py:29–43（NeRF.forward）、45–89（Agg）；configs/enerf/dtu_pretrain.yaml:21（viewdir_agg）"}}, {"b": "p", "t": "输入：像素对齐特征 [B, N, S, 15]，体素对齐特征 [B, N, 8]。输出：聚合图像特征 f_img [B, N, 16]，点特征 h [B, N, 64]，密度 σ [B, N, 1]。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-n-generalizable"}, {"k": "concept-i-blending"}, {"k": "concept-f-prob"}, {"k": "adv-a-generalizable-ibr"}]}}, {"b": "p", "t": "S 个视角的特征要合成一个与视角数、视角顺序都无关的向量。ENeRF 的聚合器（代码里的 Agg 类）分四步。第一，把 4 维视角差经一层 MLP 映射到与特征同维（细层 11 维：8 维特征加 3 维 RGB），加到每个视角的特征上；这一项由 viewdir_agg 开关控制，DTU 和人物配置打开，户外两层模型关闭。第二，求 S 个视角的逐维均值 μ 和方差 v，拼到每个视角后面，得到 33 维。均值描述“大家看到了什么”，方差描述“大家看到的是否一致”（f-prob）。第三，经一层 32 维 MLP 得到每个视角的中间特征，再用一层线性加 ReLU 得到一个分数，沿视角做 softmax 得到权重，对中间特征加权求和。第四，投到 16 维。论文把第三步称为 soft-argmax 式的加权。\n\n接着把 8 维体素特征和 16 维聚合特征拼成 24 维，经一层 64 维的 ReLU 全连接得到点特征 h，再由一个线性层加 Softplus 输出非负的密度 σ（n-generalizable）。\n\n这个“NeRF”头非常浅：隐藏层只有 64 维，代码里额外的隐藏层数被设成 0（nerf.py:15–17）。细层整个头（聚合、密度、颜色）按代码计算只有 10,090 个参数，粗层的头因为输入 35 维也只有 14,050 个。与 IBRNet 相比，最大的省略是去掉了沿射线的 ray transformer：IBRNet 用它在一条射线的几十个样本之间交换信息来推理可见性，而 ENeRF 每射线只有 2 个点，这种注意力已经没有意义（a-generalizable-ibr）。", "mn": {"label": "类比", "t": "像评审小组打分：每位评委先看自己的材料，再看全组的平均意见和分歧程度，然后给自己的发言分配权重；分歧大的地方，各人的权重会被拉开。最后汇总成一句结论，交给“密度判官”判断这里有没有实物。"}}, {"b": "eqs", "eqs": [{"tex": "\\mathbf{g}_i=[\\mathbf{f}_i;\\mathbf{c}_i]+\\phi(\\Delta\\mathbf{d}_i),\\qquad \\boldsymbol{\\mu}=\\tfrac{1}{S}\\textstyle\\sum_i\\mathbf{g}_i,\\qquad \\mathbf{v}=\\mathrm{Var}_i(\\mathbf{g}_i)", "explain_zh": "按代码改写（nerf.py:74–84）。f_i 为 8 维特征，c_i 为 RGB；φ 为 Linear(4→11)+ReLU；Var 用 torch.var，默认为无偏估计（除以 S−1）。"}, {"tex": "\\mathbf{e}_i=\\mathrm{ReLU}\\big(W_g[\\mathbf{g}_i;\\boldsymbol{\\mu};\\mathbf{v}]\\big),\\quad a_i=\\mathrm{softmax}_i\\big(\\mathrm{ReLU}(\\mathbf{w}_a^{\\top}\\mathbf{e}_i)\\big),\\quad \\mathbf{f}_{\\text{img}}=\\mathrm{ReLU}\\Big(W_f\\sum_i a_i\\mathbf{e}_i\\Big)", "explain_zh": "W_g：33→32；w_a：32→1；W_f：32→16。softmax 沿视角维 i 进行；注意 softmax 之前有一个 ReLU，分数不会为负。"}, {"tex": "\\mathbf{h}=\\mathrm{ReLU}\\big(W_0[\\mathbf{f}_{\\text{vox}};\\mathbf{f}_{\\text{img}}]\\big)\\in\\mathbb{R}^{64},\\qquad \\sigma=\\mathrm{softplus}(\\mathbf{w}_\\sigma^{\\top}\\mathbf{h})", "explain_zh": "W_0：24→64；w_σ：64→1。Softplus 保证 σ ≥ 0（nerf.py:13–18、33–37）。"}]}, {"b": "p", "t": "细层头：φ 4→11，W_g 33→32，w_a 32→1，W_f 32→16，W_0 24→64，w_σ 64→1，加上颜色 MLP（en9），共 10,090 个参数；粗层头 14,050 个（按代码计算）。全部线性层用 Kaiming 正态初始化（nerf.py:130–134）。对照：arXiv v1 补充材料表 1 中密度 MLP 为 (8+16)→128→…→(64+1)，隐藏层 128 维且不止一层，比发布代码大；SIGGRAPH Asia 版本用哪一种未能核对，这里以代码为准。", "label": "具体数字"}, {"b": "p", "t": "均值和方差池化使聚合与视角数、顺序无关，训练时的 2/3/4 个视角可以共用一个网络；方差项把“一致性”显式交给网络。加权求和比简单平均更能压低不可靠的视角。网络做得极浅，是因为它要对每个采样点、每个视角都跑一次，是逐点开销的主要来源。去掉 ray transformer 是 2 点采样的直接后果。这些理由是结合代码与 IBRNet 的对照做出的解读。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）softmax 前的 ReLU 让所有分数非负；若所有视角的分数都被截成 0，各视角权重就会变成均匀的。（2）σ 虽然用 Softplus 输出，但渲染时 α = 1 − exp(−σ)，不乘样本间距（见 en10），它的数值含义与 NeRF 的体密度不同。（3）粗层和细层各有一个独立的头（nerf_0、nerf_1），参数不共享。（4）户外两层模型用的是 nerf_.py，不使用体素特征，只靠图像特征预测密度。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "为什么聚合时要把跨视角方差拼进去？如果 3 个视角在某点的 11 维特征几乎完全相同，这通常说明什么？密度应当偏大还是偏小？", "a": "方差直接度量“各视角看到的是否是同一个东西”，这是判断表面的最直接线索，而单看均值无法区分“一致”和“不一致但平均起来相同”。3 个视角特征几乎相同，通常说明该点落在被各视角共同看到的表面上，密度应当偏大。例外是大片无纹理区域：各深度的特征都一样，方差总是很小，这时需要体素特征和上下文来消除歧义。"}]}, {"b": "sec", "h": "EN9 · 颜色：为每个源视角预测混合权重，输出颜色是源像素 RGB 的凸组合", "id": "walk-enerf-en9", "sn": {"label": "论文位置", "t": "论文方法部分的颜色预测（为源视角图像颜色预测混合权重，经检索核对）；lib/networks/enerf/nerf.py:19–23、38–42；对照 nerf.py:91–126（代码中保留但默认不用的 MVSNeRF 式直接回归头）"}}, {"b": "p", "t": "输入：点特征 h [B, N, 64]，拼接特征 [f_vox; f_img] [B, N, 24]，每个视角的 [f_i, c_i, Δd_i] [B, N, S, 15]。输出：每个视角的混合权重 w [B, N, S, 1]（沿视角维和为 1），采样点颜色 c [B, N, 3]。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-i-blending"}, {"k": "concept-i-lightfield"}, {"k": "concept-r-appearance"}, {"k": "adv-a-generalizable-ibr"}]}}, {"b": "p", "t": "ENeRF 不让网络“画”颜色，而是让它决定“从哪几张源图取色、各取多少”。对每个采样点，把 64 维点特征 h 和 24 维 [f_vox; f_img] 复制 S 份，分别与每个视角自己的 15 维特征（8 维特征、RGB、4 维视角差）拼接，得到 103 维；经一层 64 维隐藏层和一层输出层（输出后接 ReLU）得到每个视角一个分数，沿视角做 softmax 得到权重 w_i，颜色等于 Σ w_i c_i，其中 c_i 就是 en7 里在第 i 个源视角上采到的 RGB（nerf.py:38–42）。\n\n这是基于图像的渲染（IBR）的学习版（i-blending）。经典的非结构化 Lumigraph 渲染按“视角夹角小、分辨率合适”之类的手工规则给权重；这里由网络根据视角差、特征一致性和几何上下文来学。好处是输出的纹理直接来自真实像素，锐度高，而且不依赖场景的颜色分布，所以跨数据集泛化更稳（a-generalizable-ibr）。视角相关效果（r-appearance）只能靠重新分配权重来近似：离目标视角更近的源视角得到更高权重，高光会“跟着”最近的源图走。\n\n代码里还留着一个 MVSNeRF 类（nerf.py:91–126）：它把所有视角的特征直接拼接，用 MLP 加 sigmoid 回归 RGB。默认网络没有使用它，可以理解为作者在“直接回归”和“混合源像素”之间选了后者，但论文里是否有这组消融未能核对。\n\n最终像素颜色还要经过体渲染：两个采样点各有一组权重和颜色，再按 α 合成（en10）。因此像素颜色是“两个深度处、各源视角像素”的双重凸组合，它永远落在源像素颜色的凸包里（i-lightfield）。", "mn": {"label": "类比", "t": "像调色师只能用现成的几罐颜料（源视角像素）按比例混色，不能自己造新颜料：混得好就非常真实，但如果目标颜色根本不在这几罐颜料能调出的范围里（比如一处谁都没拍到的高光），就调不出来。"}}, {"b": "eqs", "eqs": [{"tex": "s_i=\\mathrm{ReLU}\\Big(\\mathbf{w}_2^{\\top}\\,\\mathrm{ReLU}\\big(W_1[\\mathbf{h};\\mathbf{f}_{\\text{vox}};\\mathbf{f}_{\\text{img}};\\mathbf{f}_i;\\mathbf{c}_i;\\Delta\\mathbf{d}_i]\\big)\\Big),\\qquad w_i=\\frac{e^{s_i}}{\\sum_{k=1}^{S}e^{s_k}}", "explain_zh": "按代码改写（nerf.py:19–23、38–41）。W_1：103→64（64+24+15），w_2：64→1；输出层后的 ReLU 使 s_i ≥ 0；softmax 沿视角维。h 是 en8 的 64 维点特征。"}, {"tex": "\\mathbf{c}=\\sum_{i=1}^{S}w_i\\,\\mathbf{c}_i,\\qquad w_i\\ge0,\\;\\;\\sum_i w_i=1", "explain_zh": "采样点颜色是源像素 RGB 的凸组合（nerf.py:42）。c_i 是第 i 个源视角在该点投影处的双线性采样颜色，取值 [0, 1]。"}]}, {"b": "p", "t": "颜色 MLP：103→64→1，共 6,656 + 65 = 6,721 个参数（细层，按代码计算）；粗层输入为 64+24+39=127 维。S=3 时每个点做 3 次该 MLP。对照：arXiv v1 补充材料表 1 中颜色权重 MLP 为 (64+16+4)→128→64→1，与代码不同。", "label": "具体数字"}, {"b": "p", "t": "混合源像素可以保证锐度，并把网络的任务从“生成颜色”缩小为“挑选和加权”，这对只在 DTU 上训练、要泛化到其他场景的模型尤其重要。它继承自 IBRNet。没有采用的方案：MVSNeRF 式直接回归 RGB（代码中保留了实现但默认不用），以及显式的反射或视角相关外观模型。选择理由是结合 IBRNet 和代码的解读，论文原文未能逐字核对。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）颜色永远在源像素颜色的凸包里：所有源视角都没拍到的颜色（去遮挡区域、强高光）生成不出来，只会取到错误视角的像素。（2）输出层后接 ReLU 再 softmax，分数下界为 0，权重不会被压到极端小，只能靠其他视角分数升高来相对降权。（3）被遮挡的源视角没有被显式排除，只能靠学出来的低权重；遮挡关系复杂的地方容易混入前景或背景颜色。（4）两个采样点各自有一组权重，它们的颜色在体渲染时再混合一次，不要把 w_i 误当成最终像素的视角权重。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "3 个源视角都拍到了一块金属，但在目标视角下它应该出现一个比所有源像素都亮的高光。ENeRF 能渲染出这个高光吗？为什么？什么样的改动可以缓解？", "a": "不能。像素颜色是源像素 RGB 的凸组合，最亮也只能等于最亮的那个源像素，任何比它更亮的颜色都在凸包之外。缓解办法包括：增加覆盖更多方向的源视角，让某个视角恰好拍到高光；在混合结果上加一个小的残差颜色头（代价是可能引入幻觉和闪烁）；或者引入显式的视角相关外观模型。"}]}, {"b": "sec", "h": "EN10 · 体渲染与训练：2 个样本的 α 合成，两级 MSE（权重 0.1 / 1.0）加 0.01 倍 VGG 感知损失，只用 RGB 端到端训练", "id": "walk-enerf-en10", "sn": {"label": "论文位置", "t": "论文方法部分的体渲染与训练（经检索核对：全流程可微，深度引导采样与 NeRF 仅用多视角 RGB 联合训练；损失 L = L_mse + λ′L_perc，λ′ = 0.01）；README（4 卡、138000 次迭代）；lib/networks/enerf/utils.py:571–603（raw2outputs）；lib/train/losses/enerf.py；lib/train/losses/vgg_perceptual_loss.py；configs/enerf/dtu_pretrain.yaml:43、59–74；lib/utils/optimizer/lr_scheduler.py:66–75；train_net.py:52"}}, {"b": "p", "t": "输入：每条射线 2 个样本的颜色和密度 [B, 327680, 2, 4] 及其深度 z。输出：像素颜色 [B, 327680, 3]、深度图，训练时还有一个标量损失。训练用 DTU：88 个场景、每场景 49 个视角、512×640，每个样本随机 2/3/4 个输入视角。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-r-volume"}, {"k": "concept-r-alpha"}, {"k": "concept-l-loss"}, {"k": "concept-f-optim"}, {"k": "concept-n-nerf"}]}}, {"b": "p", "t": "体渲染（r-volume、r-alpha）沿用 NeRF 的离散形式：每个样本的不透明度 α、到达该样本前的透射率 T、颜色按 T·α 加权求和。但代码里有一个与 NeRF 不同的细节：α = 1 − exp(−σ)，没有乘相邻样本的间距 δ（utils.py:584–585）。于是 σ 实际上是“这个样本有多不透明”的 logit，与区间宽度无关。只有 2 个样本时，渲染公式可以直接写成 C = α₁c₁ + (1−α₁)α₂c₂，它本质上是在“区间近端”和“区间远端”两个候选颜色之间做软选择。输出深度时，代码对权重又做了一次 softmax（utils.py:594），这个深度只用于可视化和深度评测。\n\n损失（l-loss）在粗细两级上都算：每级一个像素 MSE，权重分别为 0.1 和 1.0；DTU 配置下两级都用整图训练（train_img 为 True），所以每级还要加 0.01 倍的 VGG16 感知损失，即 VGG 前 4 个卷积块特征的 L1 距离之和。检索摘要显示论文也写了这一项：可以在采样的图块上用 VGG16 感知损失监督，λ′ = 0.01。没有任何深度监督：深度模块的梯度来自两条路径，一是采样位置 z 由 D、σ 计算，二是体素特征按 z 在特征体上插值，二者都可微（f-optim）。\n\n优化器为 Adam，学习率 5e-4，每个 epoch（1000 次迭代）结束后按 lr·0.5^(epoch/50) 连续衰减（train_net.py:52）；每卡 batch 1，README 称发布的模型用 4 块 GPU 训练了 138000 次迭代，按公式此时学习率约为 7.4e-5。检索摘要中论文写的是每 5 万次迭代减半、约 20 万次迭代收敛、单张 RTX 3090 约 15 小时，衰减日程与代码一致，训练规模与 README 不同。微调就是从这个权重继续训练若干千次迭代，README 给出 3000 / 11000 次迭代在 RTX 3090 上约 11 / 40 分钟。", "mn": {"label": "类比", "t": "像教一个人“看两眼就判断表面”：只告诉他最后照片对不对（RGB 损失），不告诉他正确距离。为了让照片对，他必须自己学会把两次观察放在正确的位置、给前一次观察合适的不透明度。"}}, {"b": "eqs", "eqs": [{"tex": "\\alpha_k=1-e^{-\\sigma_k},\\qquad T_k=\\prod_{j<k}(1-\\alpha_j),\\qquad \\hat{\\mathbf{C}}=\\sum_{k=1}^{N}T_k\\,\\alpha_k\\,\\mathbf{c}_k", "explain_zh": "代码中的体渲染（utils.py:584–592）。σ_k 为第 k 个样本的密度，c_k 为其颜色（en9），T_k 为透射率。注意没有 NeRF 中的样本间距 δ_k：NeRF 为 α_k = 1 − exp(−σ_k δ_k)。"}, {"tex": "N=2:\\quad \\hat{\\mathbf{C}}=\\alpha_1\\mathbf{c}_1+(1-\\alpha_1)\\,\\alpha_2\\,\\mathbf{c}_2", "explain_zh": "两个样本时的闭式。α_1、c_1 对应区间近端 D₁−σ₁，α_2、c_2 对应远端 D₁+σ₁。若 α_1+(1−α_1)α_2 < 1，剩余部分为背景（DTU 配置 white_bkgd 为 False，即黑色）。"}, {"tex": "\\mathcal{L}=\\sum_{l\\in\\{0,1\\}}\\lambda_l\\Big(\\big\\lVert\\hat{\\mathbf{C}}_l-\\mathbf{C}_l\\big\\rVert_2^2+0.01\\sum_{b=1}^{4}\\big\\lVert\\phi_b(\\hat{\\mathbf{C}}_l)-\\phi_b(\\mathbf{C}_l)\\big\\rVert_1\\Big),\\qquad \\lambda_0=0.1,\\;\\lambda_1=1.0", "explain_zh": "按代码改写的训练损失（losses/enerf.py:21–38）。l=0 为粗层（128×160 整图），l=1 为细层（512×640 整图）；第一项为像素 MSE（均值）；φ_b 为 VGG16 第 b 个卷积块的输出（features[:4]、[4:9]、[9:16]、[16:23]），输入先做 ImageNet 归一化；感知项只在整图训练或图块训练时计算。"}, {"tex": "\\eta(e)=5\\times10^{-4}\\cdot0.5^{\\,e/50},\\qquad e=\\text{iter}/1000", "explain_zh": "学习率日程（lr_scheduler.py:66–75，dtu_pretrain.yaml:61–67），每个 epoch 后调用一次 scheduler.step()。e=138 时约为 7.4×10⁻⁵。"}]}, {"b": "p", "t": "DTU：88 个训练场景 × 49 个视角，512×640；输入视角数 2/3/4（概率 0.1/0.8/0.1）；每卡 batch 1，4 卡；138000 次迭代（README）；Adam，lr 5e-4，无权重衰减，eps 1e-8。损失权重：粗层 0.1、细层 1.0，感知损失系数 0.01。微调：3000 / 11000 次迭代约 11 / 40 分钟（i9-12900K + RTX 3090，README）。检索摘要（未能逐字核对）中论文写的是：Adam，5e-4，每 5 万次迭代减半，约 20 万次迭代收敛，单张 RTX 3090 约 15 小时；逐场景微调 10 分钟到 2 小时；感知损失系数 0.01。", "label": "具体数字"}, {"b": "p", "t": "只用 RGB 监督，是为了能在没有深度真值的多视角数据（包括动态视频）上训练和微调，这是论文强调的“全流程可微、联合学习”。粗层损失权重小，因为粗层渲染只是辅助：它让粗层的深度分布也得到渲染梯度，而不必渲染得很好。感知损失论文和代码里都有，作用通常是提升锐度（合理的解读）。α 不乘 δ 可能是有意为之：区间宽度随 σ 逐像素变化，乘 δ 会让同样的 σ 在不同像素上含义不同；但这一点是解读，作者没有说明。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）α = 1 − exp(−σ) 不乘 δ，σ 的数值不能与 NeRF 的体密度直接比较，也不能直接拿去做体积分或网格提取。（2）感知损失的计算范围：论文的说法是在采样图块上计算；代码在 DTU 上对整图（粗层 128×160、细层 512×640）计算，在 ZJU-MoCap 上对 4 个 64×64 图块计算，复现时要看 train_img 和 num_patchs 两项配置。（3）深度输出又做了一次 softmax，与颜色使用的权重不同，深度评测时要注意。（4）损失里没有任何时间项，训练数据也都是静态多视角样本，网络从未被要求在相邻帧之间保持一致。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "两个样本 α₁=0.6、α₂=0.8，颜色 c₁=0.2、c₂=0.9（单通道），像素颜色是多少？若真值为 0.9，用 MSE 做一步梯度下降，α₁ 会被调大还是调小？", "a": "Ĉ = 0.6×0.2 + 0.4×0.8×0.9 = 0.12 + 0.288 = 0.408。∂Ĉ/∂α₁ = c₁ − α₂c₂ = 0.2 − 0.72 = −0.52，残差 Ĉ − 0.9 = −0.492，MSE 对 α₁ 的梯度为 2×(−0.492)×(−0.52) ≈ +0.51 > 0，梯度下降会减小 α₁，让远端那个颜色更接近真值的样本露出来。同时 z 的梯度也会推动采样区间向远端移动，这就是深度只靠 RGB 也能学的直观原因。"}]}, {"b": "sec", "h": "EN11 · 动态视频：逐帧独立推理，人物数据依赖前景 mask 与 SMPL 包围盒，可在该视频上微调；户外另有前景/背景两层模型", "id": "walk-enerf-en11", "sn": {"label": "论文位置", "t": "论文动态场景实验（ZJU-MoCap Sequence-313 前 600 帧、DynamicCap olek 1000 帧与 vlad 600 帧，数据集“背景简单、mask 质量高”，经检索核对）；lib/networks/enerf/network_human.py:69–119；lib/datasets/zjumocap/enerf.py；lib/datasets/zjumocap/enerf_interactive.py；gui_human.py；configs/enerf/zjumocap/zjumocap_train.yaml；configs/enerf/zjumocap_eval.yaml；lib/networks/enerf/network_composite.py；lib/datasets/enerf_outdoor/enerf.py"}}, {"b": "p", "t": "输入：第 t 帧的同步多视角图像（ZJU-MoCap 为 21 台相机）、该帧的前景 mask 和 SMPL 顶点包围盒、观看者给出的目标相机位姿。输出：第 t 帧的新视角图像。网络不保留任何跨帧状态，第 t 帧的结果与第 t−1 帧无关。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-n-dynamic"}, {"k": "concept-v-temporal"}, {"k": "concept-g-rig"}, {"k": "adv-a-human-capture"}, {"k": "adv-a-dynamic-4d"}]}}, {"b": "p", "t": "论文标题里的“自由视点视频”并没有时空模型（n-dynamic）。network_human.py 的 forward 与静态版几乎相同，只接受当前帧的 batch。视频之所以能“播放”，是因为每一帧都独立构建代价体、渲染一次，而网络参数对所有帧共享。\n\n人物数据还有一套预处理（a-human-capture）。读图时先去畸变，缩到 512×512，把前景 mask 用 5×5 核膨胀后，mask 外的像素全部置 0（zjumocap/enerf.py:128–153）。深度范围不再是固定值，而是由该帧的 SMPL 顶点包围盒外扩 0.1 m 得到。评测和交互时只渲染包围盒投影内的射线（network_human.py:90–107），其余像素直接填黑。这些 mask 和 SMPL 拟合都来自数据集，是离线得到的。\n\n交互 GUI（gui_human.py）的做法是：启动时把要播放的帧（configs/enerf/interactive/zjumocap.yaml 为前 100 帧中每 10 帧取 1 帧）、21 路相机的图像全部读进内存；每一帧根据当前虚拟相机位置，按距离取最近的 2 台相机，构建射线和包围盒，调用网络，把结果贴到 OpenGL 纹理上显示；虚拟相机可以沿穿过 21 台相机的样条路径移动。README 报告，直接用 DTU 预训练模型在 CoreView_313 上评测为 PSNR 31.48、49 FPS。若在该视频上微调（zjumocap_train.yaml），用前 600 帧、偶数号相机做输入和监督，每步随机取射线（至多 75% 落在前景上）并加 4 个 64×64 图块的感知损失。\n\n户外（ENeRF-Outdoor，2023 年随代码发布）又是另一套：前景人物在每帧 visual hull 包围盒内用 32/8 个平面建代价体，背景用预先拍摄的空场景图像和背景点云给出的深度范围、16/4 个平面单独建模，两层的采样点拼接后一起做体渲染；这个模型按序列从头训练（network_composite.py）。\n\n所以 ENeRF 的时间维处理可以概括为：共享网络、逐帧独立、没有任何时间一致性约束（v-temporal）。", "mn": {"label": "类比", "t": "像翻页动画：每一页都由同一位画师根据当页的几张参考照片重新画一遍，画师不看上一页。画得都很像，但页与页之间可能有细小的抖动；而且画师事先拿到了每页的人物轮廓和大致位置。"}}, {"b": "eqs", "eqs": [{"tex": "\\hat{I}_t^{\\,\\text{tgt}}=F_\\theta\\Big(\\{I_t^{i},\\mathbf{P}_i\\}_{i\\in\\mathcal{S}_t(\\mathbf{P}_{\\text{tgt}})},\\;\\mathbf{P}_{\\text{tgt}},\\;[z_{\\text{near}}^t,z_{\\text{far}}^t]\\Big)", "explain_zh": "按代码改写的逐帧推理。F_θ 是整个网络，参数 θ 对所有帧共享；I_t^i 是第 t 帧第 i 台相机的图像；P_i 是相机投影矩阵；𝒮_t 是按目标位姿选出的最近 S 台相机；[z_near^t, z_far^t] 来自第 t 帧的 SMPL 包围盒。式中没有任何 t−1 时刻的量。"}, {"tex": "\\hat{\\mathbf{C}}=\\sum_{k=1}^{N_{\\text{fg}}+N_{\\text{bg}}}T_k\\,\\alpha_k\\,\\mathbf{c}_k,\\qquad \\{(\\alpha_k,\\mathbf{c}_k)\\}=\\{\\text{前景样本}\\}\\cup\\{\\text{背景样本}\\}", "explain_zh": "户外两层模型的合成（utils.py:889–942 改写）。只有一个前景层时，代码直接把前景样本接在背景样本前面，不按深度重新排序；多个前景层时才对前景样本按深度排序。"}]}, {"b": "p", "t": "ZJU-MoCap（代码）：21 台相机（known_cams = arange(21)），1024×1024 缩到 512×512，mask 膨胀核 5×5，包围盒外扩 0.1 m，S=2，32/8 个平面；README 评测 31.48 / 0.971 / 0.042，49.2 FPS（DTU 预训练模型）；微调 100 epoch，学习率每 10 epoch 减半。论文设定（经检索）：Sequence-313 前 600 帧；DynamicCap olek 前 1000 帧、vlad 前 600 帧。arXiv v1 补充材料表 2：ZJU-MoCap 4 个测试帧上，只在单帧上微调平均 PSNR 34.38，在整段序列（1200 帧）上微调 36.22。ENeRF-Outdoor（代码）：18 台相机，图像缩放 0.75 后裁到 768×1024，前景 32/8 平面、背景 16/4 平面，前景每射线 2/1 个样本，从头训练 50 epoch。", "label": "具体数字"}, {"b": "p", "t": "逐帧推理让新视频“拿来就能看”，不必为每一帧优化一个场景表示，这是可泛化方法相对于 Neural Body 等逐序列优化方法的主要优势。前景 mask 和 SMPL 包围盒一方面缩小深度搜索范围、提高代价体的有效分辨率，另一方面裁掉大量背景射线，直接提速。户外改用两层模型，是因为单一的深度区间难以同时覆盖近处人物和远处背景。以上是结合代码的解读。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）没有时间一致性：每帧的代价体、σ、混合权重都会有独立的小波动；交互时输入相机按距离切换，视点连续移动时输入集合会突变，画面可能跳变。（2）mask、SMPL 包围盒、空场景背景图都是离线准备好的输入（数据集提供或预先拍摄），它们的获取时间和误差都不在论文的速度和质量数字里。（3）人物指标只在包围盒投影内计算，背景为纯黑，数值不能与全图指标比较。（4）户外两层模型按序列从头训练，已经不是“可泛化、拿来就用”的设定。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "如果把 ENeRF 部署到一个真实的临场摄影棚（没有 SMPL 拟合，也没有现成的 mask），需要补哪几个在线模块？它们各自会怎样影响帧率和画质？", "a": "至少需要：（1）实时人体分割，用来去掉背景像素并决定渲染哪些射线，分割误差会直接变成边缘的缺口或背景残留；（2）实时的深度范围估计，例如用分割结果做 visual hull 或用上一帧深度统计，范围太宽会降低代价体精度，太窄会截掉身体部分；（3）去畸变、缩放和上传 GPU，这部分原本在 DataLoader 里，不计入 FPS；（4）如果要稳定的视频，还要加时间滤波或视角选择的滞回。这些模块都会增加每帧延迟，端到端帧率会明显低于 README 中只计网络前向的 49 FPS。"}]}, {"b": "sec", "h": "EN12 · 交互速度从哪来、怎么测：2 点采样 × 低分辨率代价体 × 约 44 万参数的小网络；FPS 只计网络前向", "id": "walk-enerf-en12", "sn": {"label": "论文位置", "t": "论文速度比较（512×512、3 视角、2 样本/射线 25.21 FPS；比此前可泛化方法快至少 60 倍，经检索核对）；README（DTU 21.8 FPS@512×640，ZJU-MoCap 49.2 FPS）；run.py:39–76；Quark 论文 Table 1（ENeRF 205 / 811 ms，A100）；GPS-Gaussian 论文速度对比"}}, {"b": "p", "t": "输入：一组配置（输入视角数 S、粗细平面数、每射线样本数、是否渲染粗层、输出分辨率、是否只渲染包围盒内射线）。输出：每帧耗时，以及它由哪几部分构成、在什么条件下测得。", "label": "这一步做什么", "mn": {"label": "需要的基础", "links": [{"k": "concept-v-codec"}, {"k": "concept-v-metrics"}, {"k": "adv-a-nerf-fast"}, {"k": "adv-a-telepresence-sys"}]}}, {"b": "p", "t": "ENeRF 的速度来自四处叠加（a-nerf-fast）。第一，采样点少：细层每射线 2 个点，512×640 下约 65.5 万个点，而 NeRF 式 128 个样本需要约 4194 万个，少 64 倍。第二，代价体小：粗层在 1/8 分辨率、细层在 1/2 分辨率上，体素总数约 98 万，而且测试时 README 把粗层平面从 64 减到 48，并跳过粗层渲染。第三，网络小：全网约 44 万参数，逐点 MLP 的隐藏层只有 64 维。第四，人物数据只渲染包围盒内的射线。\n\n怎么测的？run.py 的 run_evaluate 在网络前向前后各调用一次 torch.cuda.synchronize，只计 network(batch) 的时间，去掉第 1 帧后取平均的倒数作为 FPS。batch 已在 GPU 上，目标射线已经由 DataLoader 在 CPU 上构建好；读图、解码、去畸变、缩放、读 mask、算包围盒都不计入。README 给出的两组数字都是这个口径：DTU 512×640、3 视角为 21.8 FPS（i9-12900K + RTX 3090），ZJU-MoCap 512×512、2 视角为 49.2 FPS。论文报告的是 512×512、3 视角、每射线 2 个样本时 25.21 FPS（RTX 3090）。\n\n第三方的测量给出另一个角度。Quark 在 A100 上测得 ENeRF 1024×768 为 205 ms、2048×1536 为 811 ms：像素数乘 4，时间乘 3.96，几乎线性。这说明 ENeRF 的开销主要是逐像素、逐采样点的计算，输出分辨率一高就吃不消。GPS-Gaussian 论文（RTX 3090，两张 1024×1024 源图）中，ENeRF 源视角 11 ms、每个新视角 125 ms，约 5 FPS，同时渲染 10 个新视角要 1261 ms；GPS-Gaussian 每个新视角只要 0.8 ms，约 25 FPS（输出 2048×2048）。比较这些数字时要注意 GPU、输入视角数、分辨率和是否只渲染前景都不相同（a-telepresence-sys、v-codec）。", "mn": {"label": "类比", "t": "像餐厅宣传“一道菜 40 秒出锅”：计时从配好的食材已经放在灶台上开始，不含洗菜、切菜和上菜；而且菜量翻四倍，出锅时间也差不多翻四倍。"}}, {"b": "eqs", "eqs": [{"tex": "T_{\\text{frame}}\\approx T_{\\text{2D}}(S\\,HW)+T_{\\text{cv}}\\Big(S\\,\\big(D_0C_0\\tfrac{HW}{64}+D_1C_1\\tfrac{HW}{4}\\big)\\Big)+T_{\\text{pts}}\\big(N\\,S\\,HW\\big)", "explain_zh": "按代码改写的计算量模型（不是论文公式）。T_2D 为特征网络，与 S 张源图的像素数成正比；T_cv 为两级代价体的 warp 和 3D U-Net，D_0=64（或 48）、C_0=32，D_1=8、C_1=16；T_pts 为逐采样点的特征采样和 MLP，N=2 为每射线样本数。三项都与输出像素数 HW 成正比，这解释了 Quark 测得的近似线性增长。"}, {"tex": "\\mathrm{FPS}=\\Big(\\frac{1}{n-1}\\sum_{k=2}^{n}t_k\\Big)^{-1},\\qquad t_k=\\text{网络前向时间（含 cuda.synchronize）}", "explain_zh": "README 中 FPS 的算法（run.py:57–76）。去掉第 1 帧以排除预热；不含数据读取与预处理。"}, {"tex": "\\frac{811\\ \\text{ms}}{205\\ \\text{ms}}=3.96\\;\\approx\\;\\frac{2048\\times1536}{1024\\times768}=4", "explain_zh": "Quark 表 1 中 ENeRF 的耗时随输出像素数近似线性增长；同条件下 Quark 为 32.2 → 33.0 ms，几乎不随分辨率变化。"}]}, {"b": "p", "t": "论文：25.21 FPS（512×512，3 视角，2 样本/射线，RTX 3090）；比此前可泛化方法快至少 60 倍（v2 摘要；v1 摘要为 50 倍）。README：21.78 FPS（DTU 512×640，3 视角，48/8 平面，跳过粗层渲染）；49.24 FPS（ZJU-MoCap 512×512，2 视角，32/8 平面，只渲染包围盒内射线）。Quark（A100）：205 ms @1024×768、811 ms @2048×1536。GPS-Gaussian 论文（RTX 3090）：ENeRF 11 ms + 125 ms/新视角，约 5 FPS。按代码计算：每帧约 65.5 万个采样点、约 98 万个代价体体素、约 44 万参数。README 与检索到的论文内容中未见：显存、端到端延迟、fp16 或 TensorRT 下的速度。", "label": "具体数字"}, {"b": "p", "t": "论文追求的是“交互式”而不是“视频实时”：先证明可泛化 NeRF 可以快到每秒 20 帧以上，因此把全部加速都押在减少采样点和缩小代价体上，没有做算子融合、半精度或 TensorRT 等工程优化。这也意味着现有数字还有工程提速空间，但逐像素计算随分辨率线性增长这一结构性限制不会因此改变。以上是解读。", "label": "为什么这样设计"}, {"b": "p", "t": "（1）FPS 不等于延迟：README 的 FPS 是 batch=1 的网络前向吞吐，不含采集、预处理、传输和显示。（2）不同论文的数字来自不同 GPU（RTX 3090、A100）和不同设置（视角数、分辨率、是否只渲染前景），不能直接横比。（3）README 的 DTU 测速用 48 个粗平面并跳过粗层渲染，和训练配置不同，这是一个合理的测试时加速，但读论文数字时要知道。（4）人物场景的高帧率很大程度上来自只渲染包围盒内射线；背景复杂、需要全图渲染时会慢得多。", "label": "容易误解的地方"}, {"b": "qa", "items": [{"q": "按 Quark 测得的 1024×768 下 205 ms，假设耗时与像素数成正比，估算 ENeRF 在 1920×1080 下每帧多少毫秒？如果是双目 VR，要达到 90 Hz，还差多少倍？", "a": "像素比为 (1920×1080)/(1024×768) = 2,073,600/786,432 ≈ 2.64，单目约 205×2.64 ≈ 541 ms。双目需要两次，约 1.08 s/帧；90 Hz 的帧预算约 11.1 ms，相差约 100 倍。这还没算预处理和传输。结论是：ENeRF 的加速对 512 左右分辨率的单视点浏览有效，对高分辨率双目临场远远不够，需要换成一次重建、多次光栅化的表示，或 Quark 式低分辨率几何加全分辨率取色。"}]}, {"b": "sec", "h": "配套文章", "id": "parts"}, {"b": "toc", "groups": [{"items": [{"k": "wpart-enerf-tensor-trace", "t": "ENeRF · 张量追踪", "en": "", "s": "逐阶段列出 16 个关键张量的形状与含义。"}, {"k": "wpart-enerf-experiments", "t": "ENeRF · 阅读实验", "en": "", "s": "论文里 9 组实验分别怎么读、真正说明了什么。"}, {"k": "wpart-enerf-tradeoffs", "t": "ENeRF · 设计权衡", "en": "", "s": "8 个关键设计选择：换来了什么，付出了什么。"}, {"k": "wpart-enerf-faq", "t": "ENeRF · 常见问题", "en": "", "s": "初读时最常问的 12 个问题。"}, {"k": "wpart-enerf-exercises", "t": "ENeRF · 练习", "en": "", "s": "6 道由浅入深的动手练习。"}, {"k": "wpart-enerf-glossary", "t": "ENeRF · 论文术语", "en": "", "s": "读这篇论文会遇到的 29 个术语。"}]}]}], "toc": true, "series": {"prev": {"k": "guide-ibrnet"}, "next": {"k": "guide-pixelsplat"}, "up": {"u": "works/walkthrough/index.html", "t": "Walkthrough 目录"}}}}</script>
+<script>
+(function () {
+  "use strict";
+  // ================= lib: DOM, text and math helpers shared by every page =================
+  // A page script defines rich(text) (inline cross-links); paras() and eqList() call it.
+  var DATA;
+  try { DATA = JSON.parse(document.getElementById("data").textContent); } catch (e) { DATA = {}; }
+  var meta = DATA.meta || {};
+
+  // ---------- DOM helpers: all text goes through textContent; external links are https-only ----------
+  function safeUrl(u) { if (typeof u !== "string") return null; var s = u.trim(); return /^https:\/\/[^\s"'<>]+$/i.test(s) ? s : null; }
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "class") n.className = v;
+      else if (k === "text") n.textContent = String(v);
+      else if (k === "href") { var u = safeUrl(v); if (u) { n.setAttribute("href", u); n.setAttribute("target", "_blank"); n.setAttribute("rel", "noopener noreferrer"); } }
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c === null || c === undefined || c === false) return; n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return n;
+  }
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function sv(tag, attrs, kids) {
+    var n = document.createElementNS(SVGNS, tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "text") n.textContent = String(v);
+      else if (k.slice(0, 2) === "on" && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, String(v));
+    }
+    (kids || []).forEach(function (c) { if (c) n.appendChild(c); });
+    return n;
+  }
+  function arr(x) { return Array.isArray(x) ? x : []; }
+  function str(x) { return typeof x === "string" ? x : (x === null || x === undefined ? "" : String(x)); }
+  function paras(text) { return str(text).split(/\n\s*\n/).map(function (t) { return t.trim(); }).filter(Boolean).map(function (t) { return el("p", null, rich(t)); }); }
+  function link(title, url) { return safeUrl(url) ? el("a", { href: url, text: title }) : el("span", { text: title }); }
+  function ul(items, map) { return el("ul", { class: "plain" }, arr(items).map(function (x) { return el("li", null, [map ? map(x) : str(x)]); })); }
+  function fmtCit(n) { n = Number(n); if (!(n >= 0)) return "—"; if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k"; return String(n); }
+
+  // ---------- math (MathJax, typeset lazily) ----------
+  var mathReady = false, mathQueue = [];
+  function mathUsable() { return !!(window.MathJax && typeof window.MathJax.typesetPromise === "function"); }
+  function flushMath() { mathReady = true; var q = mathQueue.slice(); mathQueue = []; q.forEach(typeset); }
+  window.__atlasMathReady = flushMath;
+  // MathJax may finish loading before this script runs (cached/async), so also poll for it.
+  var mathPoll = setInterval(function () { if (mathUsable()) { clearInterval(mathPoll); flushMath(); } }, 200);
+  setTimeout(function () { clearInterval(mathPoll); }, 30000);
+  function typeset(node) {
+    if (!node) return;
+    if (!mathReady && mathUsable()) mathReady = true;
+    if (!mathReady || !mathUsable()) { mathQueue.push(node); return; }
+    try { window.MathJax.typesetPromise([node]).catch(function () { /* leave raw TeX visible */ }); } catch (e) { /* leave raw TeX visible */ }
+  }
+  function eqList(eqs) {
+    eqs = arr(eqs).filter(function (q) { return q && str(q.tex).trim(); });
+    if (!eqs.length) return null;
+    return el("div", { class: "eqs" }, eqs.map(function (q) {
+      return el("div", { class: "eq" }, [el("div", { class: "math-block", text: "\\[" + str(q.tex) + "\\]" }), q.explain_zh ? el("p", null, rich(q.explain_zh)) : null]);
+    }));
+  }
+  document.addEventListener("toggle", function (e) { var t = e.target; if (t && t.tagName === "DETAILS" && t.open) typeset(t); }, true);
+
+  // ================= frame (Tufte site): links, notes, hover previews, top bar, theme =================
+  var SITE = DATA.site || {};
+  var ROOT = str(SITE.root);
+  var XREF = DATA.xref || {};
+  function hasX(key) { return Object.prototype.hasOwnProperty.call(XREF, key); }
+  // Custom page parts (search tools, diagrams, charts) register here; blocks.js calls them for {"b": "slot"} blocks.
+  var SLOTS = {};
+
+  // ---------- internal links: urls are relative to the site root; pages sit at different depths ----------
+  var SAFE_PATH = /^[A-Za-z0-9][A-Za-z0-9._\/-]*(\?[A-Za-z0-9=&._-]+)?(#[A-Za-z0-9._-]+)?$/;
+  function relHref(u) {
+    u = str(u);
+    if (/^#[A-Za-z0-9._-]+$/.test(u)) return u;
+    if (!SAFE_PATH.test(u)) return null;
+    var cut = u.indexOf("#"), path = cut < 0 ? u : u.slice(0, cut);
+    if (path === SITE.path) return cut < 0 ? "#" : u.slice(cut);
+    return ROOT + u;
+  }
+  function pageLink(u, text, cls) {
+    var h = relHref(u);
+    if (!h) return el("span", { class: cls || null, text: text });
+    var a = el("a", { class: cls || null, text: text });
+    a.setAttribute("href", h);
+    return a;
+  }
+  // A link to a known entry (concept, topic, paper, step...). data-xref drives the hover preview.
+  function xlink(key, text, cls) {
+    if (!hasX(key)) return text ? document.createTextNode(text) : null;
+    var x = XREF[key], a = pageLink(x.u, text || x.n || x.t, cls);
+    a.setAttribute("data-xref", key);
+    return a;
+  }
+
+  // Concept / topic ids mentioned in prose ("见 g-pinhole") become links labelled with the entry's short name.
+  var ID_RE = /(a-[a-z0-9]+(?:-[a-z0-9]+)*|[fgdrilnv]-[a-z0-9]+)/g;
+  var CJK = /[　-〿㐀-鿿＀-￯]/;
+  function rich(text) {
+    var s = str(text), out = [], last = 0, m;
+    ID_RE.lastIndex = 0;
+    while ((m = ID_RE.exec(s)) !== null) {
+      var id = m[1], prev = m.index > 0 ? s.charAt(m.index - 1) : "", next = s.charAt(m.index + id.length);
+      var key = hasX("concept-" + id) ? "concept-" + id : (hasX("adv-" + id) ? "adv-" + id : null);
+      if (!key || /[A-Za-z0-9_\-]/.test(prev) || /[A-Za-z0-9_]/.test(next)) continue;
+      // The prose spaces ids off from Chinese text; a Chinese label needs no such space.
+      var before = s.slice(last, m.index);
+      if (/ $/.test(before) && CJK.test(before.charAt(before.length - 2))) before = before.slice(0, -1);
+      if (before) out.push(document.createTextNode(before));
+      out.push(xlink(key, null, "xref"));
+      last = m.index + id.length;
+      if (s.charAt(last) === " " && CJK.test(s.charAt(last + 1))) last++;
+    }
+    if (last < s.length) out.push(document.createTextNode(s.slice(last)));
+    return out;
+  }
+  function lines(text) { return str(text).split(/\n+/).map(function (t) { return t.trim(); }).filter(Boolean).map(function (t) { return el("p", null, rich(t)); }); }
+
+  // ---------- side notes (numbered) and margin notes (unnumbered); on phones they fold behind a toggle ----------
+  var noteSeq = 0;
+  function sidenote(kids) {
+    var id = "sn-" + (++noteSeq);
+    return el("span", { class: "note-wrap" }, [
+      el("label", { for: id, class: "margin-toggle sidenote-number", "aria-label": "旁注" }),
+      el("input", { type: "checkbox", id: id, class: "margin-toggle" }),
+      el("span", { class: "sidenote" }, kids)
+    ]);
+  }
+  function marginnote(kids) {
+    var id = "mn-" + (++noteSeq);
+    return el("span", { class: "note-wrap" }, [
+      el("label", { for: id, class: "margin-toggle", "aria-label": "边注", text: "⊕" }),
+      el("input", { type: "checkbox", id: id, class: "margin-toggle" }),
+      el("span", { class: "marginnote" }, kids)
+    ]);
+  }
+  function noteLabel(text) { return el("span", { class: "note-label", text: text }); }
+
+  // ---------- article scaffolding ----------
+  var main = document.getElementById("main");
+  var art = main.querySelector("article");
+  function section(id, title, kids) {
+    var s = el("section", { id: id }, [title ? el("h2", { text: title }) : null].concat(kids));
+    art.appendChild(s);
+    return s;
+  }
+  function articleHead(o) {
+    var crumbs = el("nav", { class: "crumbs", "aria-label": "位置" });
+    arr(SITE.crumbs).forEach(function (c, i) {
+      if (i) crumbs.appendChild(el("span", { class: "sep", text: "›", "aria-hidden": "true" }));
+      crumbs.appendChild(c[1] ? pageLink(c[1], c[0]) : el("span", { text: c[0] }));
+    });
+    art.appendChild(el("header", { class: "art-head" }, [
+      crumbs,
+      el("h1", { text: o.title }),
+      o.subtitle ? el("p", { class: "subtitle", text: o.subtitle }) : null,
+      o.meta ? el("p", { class: "meta" }, o.meta) : null
+    ]));
+    if (o.epigraph) art.appendChild(el("div", { class: "epigraph" }, [el("blockquote", null, [el("p", null, rich(o.epigraph))])]));
+  }
+  // Previous / next in the series, each with its hover preview.
+  function seriesNav(prevKey, nextKey, indexUrl, indexLabel) {
+    var nav = el("nav", { class: "series", "aria-label": "同系列" });
+    nav.appendChild(el("div", { class: "prev" }, prevKey && hasX(prevKey) ? [el("small", { text: "上一篇" }), xlink(prevKey)] : []));
+    nav.appendChild(el("div", { class: "up" }, indexUrl ? [pageLink(indexUrl, indexLabel)] : []));
+    nav.appendChild(el("div", { class: "next" }, nextKey && hasX(nextKey) ? [el("small", { text: "下一篇" }), xlink(nextKey)] : []));
+    art.appendChild(nav);
+  }
+
+  // ---------- hover preview for internal links: mouse (after 300 ms) or keyboard focus; never on touch ----------
+  var tip = null, tipTimer = 0, tipFor = null;
+  function hideTip() {
+    clearTimeout(tipTimer);
+    if (tip) tip.hidden = true;
+    if (tipFor) { tipFor.removeAttribute("aria-describedby"); tipFor = null; }
+  }
+  function showTip(a) {
+    var key = a.getAttribute("data-xref");
+    if (!hasX(key)) return;
+    var x = XREF[key];
+    if (!tip) { tip = el("div", { class: "xtip", id: "xtip", role: "tooltip" }); document.body.appendChild(tip); }
+    tip.textContent = "";
+    if (x.m) tip.appendChild(el("div", { class: "xt-m", text: x.m }));
+    tip.appendChild(el("div", { class: "xt-t", text: x.t }));
+    if (x.e) tip.appendChild(el("div", { class: "xt-e", text: x.e }));
+    if (x.s) tip.appendChild(el("p", { class: "xt-s", text: x.s }));
+    tip.hidden = false;
+    var r = a.getClientRects()[0] || a.getBoundingClientRect(), vw = document.documentElement.clientWidth;
+    var w = tip.offsetWidth, h = tip.offsetHeight;
+    var left = Math.max(8, Math.min(r.left, vw - w - 8));
+    var top = r.bottom + 6;
+    if (top + h > window.innerHeight - 8 && r.top - h - 6 > 8) top = r.top - h - 6;
+    tip.style.left = Math.round(left + window.pageXOffset) + "px";
+    tip.style.top = Math.round(top + window.pageYOffset) + "px";
+    a.setAttribute("aria-describedby", "xtip");
+    tipFor = a;
+  }
+  function xrefTarget(e) { return e.target && e.target.closest ? e.target.closest("a[data-xref]") : null; }
+  document.addEventListener("pointerover", function (e) {
+    var a = xrefTarget(e);
+    if (!a || e.pointerType !== "mouse" || a === tipFor) return;
+    clearTimeout(tipTimer);
+    tipTimer = setTimeout(function () { showTip(a); }, 300);
+  });
+  document.addEventListener("pointerout", function (e) {
+    var a = xrefTarget(e);
+    if (!a || (e.relatedTarget && a.contains(e.relatedTarget))) return;
+    hideTip();
+  });
+  document.addEventListener("focusin", function (e) {
+    var a = xrefTarget(e);
+    if (a && a.matches(":focus-visible")) showTip(a);
+  });
+  document.addEventListener("focusout", function (e) { if (xrefTarget(e)) hideTip(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") hideTip(); });
+  window.addEventListener("scroll", function () { if (tipFor && !tipFor.matches(":focus-visible")) hideTip(); }, { passive: true });
+
+  // ---------- top bar: four menus with dropdowns (hover or click on desktop, a folding list on phones) ----------
+  var wide = window.matchMedia("(min-width: 761px)");
+  function setOpen(li, open) {
+    var btn = li.querySelector(".menu-btn");
+    if (open) Array.prototype.forEach.call(li.parentNode.children, function (o) { if (o !== li) setOpen(o, false); });
+    li.classList.toggle("open", open);
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (!open) li._hover = false;
+  }
+  function buildTopbar() {
+    var bar = document.getElementById("topbar");
+    var menus = el("ul", { class: "menus", id: "menus" });
+    arr(SITE.nav).forEach(function (m) {
+      var id = "menu-" + m.key;
+      var btn = el("button", { type: "button", class: "menu-btn", "aria-expanded": "false", "aria-controls": id, text: m.label });
+      var list = el("ul", { class: "drop", id: id }, arr(m.items).map(function (it) {
+        var a = pageLink(it[1], it[0]);
+        if (it[1] === SITE.navItem) a.classList.add("cur");
+        if (it[1] === SITE.path) a.setAttribute("aria-current", "page");
+        return el("li", null, [a]);
+      }));
+      var li = el("li", { class: "menu" + (m.key === SITE.navCur ? " cur" : "") }, [btn, list]);
+      btn.addEventListener("click", function () {
+        // A click on a menu the mouse already opened keeps it open instead of closing it again.
+        if (li._hover) { li._hover = false; return; }
+        setOpen(li, !li.classList.contains("open"));
+      });
+      btn.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowDown") { e.preventDefault(); setOpen(li, true); var f = list.querySelector("a"); if (f) f.focus(); }
+      });
+      li.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse" && wide.matches) { setOpen(li, true); li._hover = true; } });
+      li.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse" && wide.matches) setOpen(li, false); });
+      li.addEventListener("focusout", function (e) { if (wide.matches && !li.contains(e.relatedTarget)) setOpen(li, false); });
+      li.addEventListener("keydown", function (e) { if (e.key === "Escape" && li.classList.contains("open")) { setOpen(li, false); btn.focus(); } });
+      menus.appendChild(li);
+    });
+    var burger = el("button", { type: "button", class: "burger", "aria-expanded": "false", "aria-controls": "menus", text: "Menu" });
+    burger.addEventListener("click", function () {
+      var open = !bar.classList.contains("nav-open");
+      bar.classList.toggle("nav-open", open);
+      burger.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    var themeBtn = el("button", { type: "button", class: "theme-btn" });
+    function darkNow() {
+      var t = document.documentElement.getAttribute("data-theme");
+      return t ? t === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+    function paintThemeBtn() {
+      var dark = darkNow();
+      themeBtn.textContent = dark ? "Light" : "Dark";
+      themeBtn.setAttribute("aria-label", dark ? "切换到浅色" : "切换到深色");
+    }
+    themeBtn.addEventListener("click", function () {
+      var next = darkNow() ? "light" : "dark";
+      var system = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      // Choosing what the system already shows drops the override, so the page follows the system again.
+      if (next === system) document.documentElement.removeAttribute("data-theme");
+      else document.documentElement.setAttribute("data-theme", next);
+      try { if (next === system) localStorage.removeItem("atlas-theme"); else localStorage.setItem("atlas-theme", next); } catch (e) { /* storage unavailable */ }
+      paintThemeBtn();
+    });
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintThemeBtn);
+    paintThemeBtn();
+    bar.appendChild(el("div", { class: "bar-in" }, [pageLink("index.html", SITE.brand || "", "brand"), el("nav", { class: "site-nav", "aria-label": "站点导航" }, [menus]), themeBtn, burger]));
+    document.addEventListener("click", function (e) {
+      if (!bar.contains(e.target)) Array.prototype.forEach.call(menus.children, function (li) { setOpen(li, false); });
+    });
+  }
+
+  function finishPage() {
+    buildTopbar();
+    var foot = document.getElementById("site-foot");
+    if (foot) foot.appendChild(el("p", null, [pageLink("index.html", SITE.brand || ""), SITE.date ? " · 内容截至 " + SITE.date : ""]));
+    typeset(main);
+    // Deep links (#id): the page is rendered by script, so jump once it exists and again after fonts settle.
+    var h = window.location.hash ? window.location.hash.slice(1) : "";
+    if (h && /^[A-Za-z0-9._~-]+$/.test(h) && document.getElementById(h)) {
+      var moved = false;
+      ["wheel", "touchstart", "keydown", "mousedown"].forEach(function (ev) { window.addEventListener(ev, function () { moved = true; }, { once: true, passive: true }); });
+      var settle = function () { var t = document.getElementById(h); if (t && !moved) t.scrollIntoView({ block: "start" }); };
+      settle();
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { window.requestAnimationFrame(settle); });
+      [400, 1200, 2500].forEach(function (ms) { setTimeout(settle, ms); });
+    }
+  }
+
+  // ================= slot: walkthrough pipeline diagram (nodes link to the steps on the same page) =================
+  function diagramQuark() {
+    return {
+      w: 960, h: 300,
+      nodes: [
+        { x: 10, y: 118, w: 132, h: 64, t: "输入视角 × M", s: "RGB + 相机，M = 8", k: "q1" },
+        { x: 162, y: 118, w: 140, h: 64, t: "编码", s: "特征金字塔 + 射线编码 γ", k: "q2" },
+        { x: 322, y: 118, w: 132, h: 64, t: "初始化 LDM", s: "24 层 × 36×64", k: "q4" },
+        { x: 322, y: 212, w: 132, h: 58, t: "LDM 参数化", s: "等视差锚点 + 视差带", k: "q3", data: true },
+        { x: 496, y: 64, w: 118, h: 58, t: "Render", s: "LDM → 输入视角 Ĩ", k: "q5" },
+        { x: 640, y: 64, w: 118, h: 58, t: "Update", s: "对比 Ĩ 与观测 → Δ", k: "q6" },
+        { x: 568, y: 160, w: 118, h: 58, t: "Fuse", s: "One-to-many attention", k: "q7" },
+        { x: 800, y: 64, w: 150, h: 64, t: "上采样后激活", s: "3.75× 到 1080p", k: "q9" },
+        { x: 800, y: 170, w: 150, h: 64, t: "IBR 混合 + over", s: "全分辨率像素凸组合", k: "q10" }
+      ],
+      loop: { x: 480, y: 26, w: 294, h: 250, label: "Update & Fuse × 5（由粗到细）", noteK: "q8", note: "每步分辨率 ×2，Layer Collapse 层数 ÷2" },
+      edges: [
+        { d: "M142,150 L162,150" }, { d: "M302,150 L322,150" },
+        { d: "M388,212 L388,182" },
+        { d: "M454,150 C470,150 470,93 496,93" },
+        { d: "M614,93 L640,93" },
+        { d: "M699,122 C699,150 686,189 686,189" },
+        { d: "M568,189 C520,189 530,122 540,122", fb: true },
+        { d: "M774,96 L800,96" },
+        { d: "M875,128 L875,170" },
+        { d: "M875,234 L875,268" }
+      ],
+      out: { x: 875, y: 285, text: "新视角图像（1080p，≈30 ms/帧）" }
+    };
+  }
+  function diagramHa() {
+    return {
+      w: 960, h: 330,
+      nodes: [
+        { x: 10, y: 128, w: 136, h: 64, t: "K 个 RGB-D 视角", s: "t 时刻，K = 4", k: "h1" },
+        { x: 10, y: 236, w: 136, h: 58, t: "深度来源", s: "RAFT-Stereo / 传感器", k: "h2", data: true },
+        { x: 176, y: 26, w: 164, h: 64, t: "逐视角前向 splat", s: "像素大小的不透明高斯", k: "h3" },
+        { x: 372, y: 26, w: 150, h: 64, t: "Iₖ, αₖ, Dₖ", s: "K 份目标视角图像", k: "h3", data: true },
+        { x: 176, y: 128, w: 110, h: 64, t: "差分掩码 M", s: "哪里在动", k: "h4" },
+        { x: 304, y: 128, w: 110, h: 64, t: "深度 EMA", s: "只滤静止区域", k: "h5" },
+        { x: 432, y: 128, w: 140, h: 64, t: "图像空间 TSDF", s: "sₖ 截断 τ，加权", k: "h6" },
+        { x: 590, y: 128, w: 128, h: 64, t: "光线步进", s: "零交叉 → 深度 𝒟ᵗ", k: "h8" },
+        { x: 432, y: 240, w: 140, h: 58, t: "上一帧深度 𝒟ᵗ⁻¹", s: "时间反馈 ω_tmp", k: "h9" },
+        { x: 752, y: 60, w: 160, h: 72, t: "几何引导混合 U-Net", s: "9K+1 通道输入", k: "h10" },
+        { x: 752, y: 190, w: 160, h: 64, t: "wₖ、w_BG、I_BG", s: "混合出最终图像", k: "h11" }
+      ],
+      edges: [
+        { d: "M78,236 L78,192" },
+        { d: "M146,146 C160,146 160,58 176,58" },
+        { d: "M146,160 L176,160" },
+        { d: "M340,58 L372,58" },
+        { d: "M286,160 L304,160" }, { d: "M414,160 L432,160" }, { d: "M572,160 L590,160" },
+        { d: "M502,240 L502,192" },
+        { d: "M654,192 C654,270 600,269 572,269", fb: true },
+        { d: "M522,58 C640,58 700,84 752,84" },
+        { d: "M718,160 C735,160 735,112 752,112" },
+        { d: "M832,132 L832,190" },
+        { d: "M832,254 L832,292" }
+      ],
+      out: { x: 832, y: 312, text: "输出图像 ℐᵗ（≈40–100 ms/帧，不含立体深度）" },
+      notes: [{ x: 600, y: 300, text: "虚线：下一帧回灌" }]
+    };
+  }
+  function drawDiagram(spec, anchorKey, title) {
+    var svg = sv("svg", { class: "diagram", viewBox: "0 0 " + spec.w + " " + spec.h, role: "img", "aria-label": title });
+    svg.appendChild(sv("defs", null, [
+      sv("marker", { id: "ah-" + anchorKey, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" }, [sv("path", { d: "M0,0 L10,5 L0,10 z", class: "dhead" })]),
+      sv("marker", { id: "ahf-" + anchorKey, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" }, [sv("path", { d: "M0,0 L10,5 L0,10 z", class: "dhead fb" })])
+    ]));
+    function step(k, kids) {
+      var a = sv("a", { class: "dnode", "aria-label": "跳到步骤 " + k.toUpperCase() }, kids);
+      a.setAttribute("href", "#walk-" + anchorKey + "-" + k);
+      return a;
+    }
+    if (spec.loop) {
+      var lp = spec.loop;
+      svg.appendChild(sv("rect", { class: "dloop", x: lp.x, y: lp.y, width: lp.w, height: lp.h, rx: 4 }));
+      svg.appendChild(sv("text", { class: "dlabel", x: lp.x + 14, y: lp.y + 22, text: lp.label }));
+      svg.appendChild(step(lp.noteK, [sv("text", { class: "dnote", x: lp.x + 14, y: lp.y + lp.h - 14, text: "▸ " + lp.note + "（" + lp.noteK + "）" })]));
+    }
+    spec.edges.forEach(function (e) { svg.appendChild(sv("path", { class: "dedge" + (e.fb ? " fb" : ""), d: e.d, "marker-end": "url(#" + (e.fb ? "ahf-" : "ah-") + anchorKey + ")" })); });
+    spec.nodes.forEach(function (n) {
+      n.k = n.k || n.step;
+      svg.appendChild(step(n.k, [
+        sv("rect", { class: n.data ? "data" : null, x: n.x, y: n.y, width: n.w, height: n.h, rx: 3 }),
+        sv("text", { class: "k", x: n.x + 10, y: n.y + 16, text: n.k }),
+        sv("text", { class: "t", x: n.x + 10, y: n.y + 35, text: n.t }),
+        sv("text", { class: "s", x: n.x + 10, y: n.y + 52, text: n.s })
+      ]));
+    });
+    if (spec.out) svg.appendChild(sv("text", { class: "dnote", x: spec.out.x, y: spec.out.y, "text-anchor": "middle", text: spec.out.text }));
+    arr(spec.notes).forEach(function (n) { svg.appendChild(sv("text", { class: "dnote", x: n.x, y: n.y, text: n.text })); });
+    return svg;
+  }
+  SLOTS.diagram = function (b) {
+    // Laid-out specs come with the page (routes.layout_diagram); the first two deep reads keep their hand-drawn ones.
+    if (b.spec && /^[a-z0-9]+$/.test(str(b.which))) {
+      return el("figure", { class: "fullwidth diagram-fig" }, [el("div", { class: "diagram-wrap" }, [drawDiagram(b.spec, b.which, str(b.label))])]);
+    }
+    var which = b.which === "ha" ? "ha" : "quark";
+    var spec = which === "quark" ? diagramQuark() : diagramHa();
+    return el("figure", { class: "fullwidth diagram-fig" }, [el("div", { class: "diagram-wrap" }, [drawDiagram(spec, which, (which === "quark" ? "Quark" : "Ha et al.") + " 流程图")])]);
+  };
+
+  // ================= article: a page composed as blocks in routes.py =================
+  (function () {
+    var PG = DATA.page || {};
+    var H = PG.head || {};
+    if (PG.id) art.id = PG.id;
+
+    // A link dict from routes.py: {k} an entry with hover preview, {u, t} a page of this site, {url, t} an external page.
+    function part(x) {
+      if (x === null || x === undefined) return null;
+      if (typeof x === "string") return x;
+      if (x.k) return xlink(x.k, x.t || null);
+      if (x.u) return pageLink(x.u, x.t || x.u);
+      if (x.url) return link(x.t || x.url, x.url);
+      return x.t ? str(x.t) : null;
+    }
+    function noteNodes(n) {
+      var kids = [noteLabel(n.label)];
+      if (n.t) kids = kids.concat(rich(n.t));
+      arr(n.links).forEach(function (l, i) { if (i) kids.push(el("br")); kids.push(part(l)); });
+      return kids;
+    }
+    function runIn(label) { return el("b", { class: "run-in", text: label + "：" }); }
+    function multiline(text) {
+      var out = [];
+      str(text).split("\n").forEach(function (line, i) { if (i) out.push(el("br")); out = out.concat(rich(line)); });
+      return out;
+    }
+
+    // ---------- head ----------
+    var meta = [];
+    if (arr(H.prereqs).length) {
+      meta.push(marginnote([noteLabel("阅读前需要")].concat(arr(H.prereqs).map(function (p, i) {
+        var a = part(p);
+        return i ? el("span", null, ["；", a]) : a;
+      }))));
+    }
+    var sep = false;
+    arr(H.meta).concat(H.minutes > 1 ? ["约 " + H.minutes + " 分钟"] : []).forEach(function (x) {
+      var n = part(x);
+      if (!n || (typeof n === "string" && !n.trim())) return;
+      if (sep) meta.push(" · ");
+      meta.push(n);
+      sep = !(typeof x === "string" && /：$/.test(x));
+    });
+    articleHead({ title: H.title, subtitle: H.sub, meta: meta.length ? meta : null, epigraph: H.epigraph });
+    if (str(H.lede).trim()) art.appendChild(el("div", { class: "lede" }, paras(H.lede)));
+
+    // ---------- blocks ----------
+    function heading(tag, b) {
+      var title = b.url && safeUrl(b.url) ? link(b.t, b.url) : (b.k ? part({ k: b.k, t: b.t }) : str(b.t));
+      var h = el(tag, { id: b.id || null }, [title]);
+      if (b.sn) h.appendChild(sidenote(noteNodes(b.sn)));
+      if (b.en) h.appendChild(el("span", { class: "en", text: b.en }));
+      if (b.tag) h.appendChild(el("span", { class: "used", text: b.tag }));
+      return h;
+    }
+    function withNotes(nodes, b) {
+      if (nodes.length && b.mn) nodes[0].insertBefore(marginnote(noteNodes(b.mn)), nodes[0].firstChild);
+      if (nodes.length && b.label) nodes[0].insertBefore(runIn(b.label), nodes[0].firstChild);
+      return nodes;
+    }
+    function listItem(x) {
+      if (typeof x === "string") return el("li", null, rich(x));
+      return el("li", null, (x.label ? [runIn(x.label)] : []).concat(rich(x.t)));
+    }
+    function refsList(items, cls) {
+      var left = items.some(function (x) { return x.left; });
+      return el("ul", { class: "refs " + (cls || "") + (left ? "" : " noleft") }, items.map(function (x) {
+        var body = [x.k || x.u || x.url ? part(x) : el("span", { class: "plain-t", text: x.t })];
+        if (x.tag) body.push(el("span", { class: "used", text: x.tag }));
+        if (x.sub) body.push(el("div", { class: "en", text: x.sub }));
+        if (str(x.gloss).trim()) body.push(el("div", { class: "gloss" }, multiline(x.gloss)));
+        var kids = left ? [el("span", { class: /^\d{4}$/.test(str(x.left)) ? "yr" : "kind", text: str(x.left) })] : [];
+        return el("li", { id: x.id || null }, kids.concat([el("div", null, body)]));
+      }));
+    }
+    var TY = { book: "教材", course: "课程", paper: "论文", tutorial: "教程", code: "代码", video: "视频", blog: "文章" };
+    function tocGroups(groups, level) {
+      var out = [];
+      arr(groups).forEach(function (g) {
+        if (g.h) out.push(el(level, { class: "toc-h" }, [g.k || g.u ? part({ k: g.k, u: g.u, t: g.h }) : g.h]));
+        if (str(g.lede).trim()) out.push(el("p", { class: "toc-lede" }, rich(g.lede)));
+        out.push(el("ol", { class: "toc" }, arr(g.items).map(function (it) {
+          return el("li", null, [
+            el("div", { class: "toc-t" }, [part({ k: it.k, u: it.u, t: it.t }), it.en ? el("span", { class: "en", text: it.en }) : null,
+              it.meta ? el("span", { class: "toc-meta", text: it.meta }) : null]),
+            str(it.s).trim() ? el("p", { class: "toc-s", text: it.s }) : null
+          ]);
+        })));
+      });
+      return out;
+    }
+    function cell(tag, c) { return el(tag, null, c && typeof c === "object" ? [part(c)] : rich(c)); }
+
+    var box = null;
+    function cur() { if (!box) { box = el("section"); art.appendChild(box); } return box; }
+    function render(b) {
+      switch (b.b) {
+        case "p": return withNotes(paras(b.t), b);
+        case "lines": return withNotes(lines(b.t), b);
+        case "h3": return [heading("h3", b)];
+        case "note": return [el("p", { class: "note", text: b.t })];
+        case "ul": case "ol": return [el(b.b, null, arr(b.items).map(listItem))];
+        case "eqs": return [eqList(b.eqs)];
+        case "qa": return [el("p", { class: "quiz-h", text: "自测" }), el("ol", { class: "quiz" }, arr(b.items).map(function (q) {
+          return el("li", null, [el("p", null, rich(q.q)), el("details", null, [el("summary", { text: "答案" }), el("p", null, rich(q.a))])]);
+        }))];
+        case "res": return [refsList(arr(b.items).map(function (r) {
+          return { left: TY[r.type] || r.type || "", url: r.url, t: r.title, gloss: r.note_zh };
+        }))];
+        case "refs": return [refsList(arr(b.items), b.cls)];
+        case "toc": return tocGroups(b.groups, cur().querySelector("h2") ? "h3" : "h2");
+        case "table": return [el("div", { class: "table-wrap" + (b.wide ? " fullwidth" : "") }, [el("table", { class: "booktabs" + (b.cls ? " " + b.cls : "") }, [
+          el("thead", null, [el("tr", null, arr(b.head).map(function (h) { return el("th", { text: h }); }))]),
+          el("tbody", null, arr(b.rows).map(function (r) { return el("tr", null, arr(r).map(function (c) { return cell("td", c); })); }))
+        ])])];
+        case "timeline": return [el("ul", { class: "refs timeline" }, arr(b.items).map(function (x) {
+          return el("li", null, [el("span", { class: "yr", text: str(x[0]) }), el("div", null, rich(x[1]))]);
+        }))];
+        case "kv": return [el("table", { class: "kv" }, [el("tbody", null, arr(b.items).map(function (x) {
+          return el("tr", null, [el("th", { text: x[0] }), el("td", null, rich(x[1]))]);
+        }))])];
+        case "mtoc": return [marginToc(b.items)];
+        case "slot": return typeof SLOTS[b.name] === "function" ? [SLOTS[b.name](b)] : [];
+        default: return [];
+      }
+    }
+    // Long articles: a table of contents at the top of the margin (a folding list on phones).
+    function marginToc(items) {
+      var d = el("details", { class: "mtoc" }, [el("summary", { text: "本文目录" }), el("ol", null, arr(items).map(function (x) { return el("li", null, [part(x)]); }))]);
+      var wide = window.matchMedia("(min-width: 761px)");
+      d.open = wide.matches;
+      return d;
+    }
+    arr(PG.body).forEach(function (b) {
+      if (b.b === "sec") {
+        box = el("section", { id: b.id || null });
+        if (b.h) box.appendChild(heading("h2", { t: b.h, sn: b.sn }));
+        art.appendChild(box);
+        return;
+      }
+      render(b).forEach(function (n) { if (n) cur().appendChild(n); });
+    });
+
+    var S = PG.series || {};
+    if (S.prev || S.next || S.up) {
+      var nav = el("nav", { class: "series", "aria-label": "同系列" });
+      nav.appendChild(el("div", { class: "prev" }, S.prev ? [el("small", { text: "上一篇" }), part(S.prev)] : []));
+      nav.appendChild(el("div", { class: "up" }, S.up ? [part(S.up)] : []));
+      nav.appendChild(el("div", { class: "next" }, S.next ? [el("small", { text: "下一篇" }), part(S.next)] : []));
+      art.appendChild(nav);
+    }
+  })();
+
+  finishPage();
+})();
+</script>
+</body>
+</html>

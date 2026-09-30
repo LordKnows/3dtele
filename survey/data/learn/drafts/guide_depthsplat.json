@@ -1,0 +1,1031 @@
+{
+ "story_zh": "设想手里有同一个房间的两张照片，拍摄位置相差一两米，相机位姿已经由 SLAM 算好。你想马上从两者之间的某个位置看这个房间，不愿意等几分钟做逐场景优化。2024 年的主流做法是前馈式 3D Gaussian Splatting：网络看一遍输入图像，为每个像素预测一个 3D 高斯，然后用光栅化渲染任意视角。pixelSplat 最早这样做，MVSplat 让它又快又准。MVSplat 先用多视角 Transformer 提特征，再像传统多视角立体（MVS）那样，把另一张图的特征按 128 个候选深度 warp 过来逐一比对，组成代价体，由 softmax 选出每个像素最可能的深度。高斯中心就放在“光心 + 深度 × 射线”的位置。\n\n这类方法的质量几乎完全由深度决定。高斯与像素对齐，深度一错，高斯就悬在半空，换个角度看就是重影和飞点。代价体的弱点是公认的：白墙、地板、天空这类弱纹理区域没有可区分的特征；窗户和镜面违反光度一致；被遮挡或只出现在一张图里的区域，根本找不到匹配对象。MVSplat 在这些地方只能靠猜。与此同时，单目深度基础模型进步很快。Depth Anything V2 在大量图像上训练，只看一张图就能给出形状合理、边界清楚的相对深度，擅长的恰好是代价体不擅长的地方。它的问题是不知道绝对尺度，而且各视角各算各的，放在一起并不一致。DepthSplat 的核心直觉可以用一句话概括：这两者互补，那就让网络同时看到“匹配证据”和“单目常识”，逐像素决定信谁。\n\n做法很直接。多视角分支沿用 MVSplat 和 UniMatch：CNN 提取 1/4 分辨率的特征，6 层 Swin 式多视角 Transformer 在视角之间交换信息，再在逆深度上均匀取 128 个候选建代价体。单目分支把图像送进 Depth Anything V2 的 ViT 编码器，取 4 个中间层的特征，插值到同一分辨率。两路特征按通道拼接，交给一个带跨视角注意力的 2D U-Net，softmax 得到深度分布后取期望。大模型还会在上一级结果附近用 32 个候选再细化一次，最后由 DPT 头把深度上采样到全分辨率。另一个小卷积头为每个像素输出 37 个数：不透明度、像素内偏移、尺度、旋转和 2 阶球谐颜色。整个网络只用新视角的渲染损失（MSE + 0.05·LPIPS）端到端训练，ViT 以正常学习率的 1/100 一起微调。\n\n论文还有反方向的另一半。既然渲染要对，深度就得对，那么渲染损失本身就是深度的监督信号。于是可以在只有相机位姿、没有深度标注的大量视频上训练深度网络，把这一步当作“无监督预训练”，再用少量真值深度微调。作者在 TartanAir、ScanNet、KITTI 上的实验表明，这样预训练过的模型比随机初始化更好，也比用 Depth Anything 或 UniMatch 的权重初始化更好，在难的数据集上尤其明显。标题里的 “Connecting” 指的就是这两个方向：更好的深度带来更好的高斯，高斯渲染反过来也能训练出更好的深度。\n\n结果：在 RealEstate10K 两视角 256×256 上，PSNR 为 27.47，高于 MVSplat 的 26.39 和 pixelSplat 的 25.89。在 DL3DV 上，2、4、6 视角都领先 MVSplat 1.3–1.8 dB，视角越少领先越多。12 张 512×960 的输入在 A100 上约 0.6 s 完成重建。消融显示，去掉单目特征掉 0.8 dB，去掉代价体掉 3.6 dB。也就是说，匹配仍然是主力，单目是关键的补充。\n\n读这篇论文时有几点要看清。第一，头条数字来自 354M 参数的大模型，其中 ViT-L 就占 304M，而 MVSplat 只有 12M。第二，评测都是插值设定，DL3DV 的目标帧里甚至包括输入帧本身。第三，每个像素一个高斯，视角数和分辨率一上去，高斯数就是几百万个。第四，论文的“深度预训练”那一半，仓库里没有训练代码。第五，代码里有一批从 MVSplat 继承来却不再生效的配置项，改了不会有任何效果。\n\n和站内另外两篇重点论文对照着读更清楚。Quark 为每个目标视角即时生成分层深度图，再混合原始像素；DepthSplat 则一次性输出一堆持久的高斯，之后渲染多少个视角都很便宜。Ha et al. 用 RAFT-Stereo 在人工挑选的立体对上求深度，再解析地生成像素级高斯；DepthSplat 提供了一个可以直接替换它的、学习式的“单目 + 多视角”深度前端。对 3D 临场系统来说，最值得带走的是这个深度前端的设计，以及“只用渲染损失，就能在自己的相机阵列上让深度网络自适应”这一点。",
+ "before_you_read": [
+  {
+   "concept_id": "g-pinhole",
+   "why_zh": "高斯中心的计算方式是：光心加上 z 乘以 K⁻¹[u,v,1]ᵀ 在世界系中的方向。代价体需要把参考像素按候选深度反投影，再投影到邻居视角。代码使用归一化内参（第一行除以宽、第二行除以高）和 camera-to-world 外参，不熟悉针孔模型和坐标变换，就读不懂 matching.py 和 projection.py。"
+  },
+  {
+   "concept_id": "g-depth",
+   "why_zh": "DepthSplat 在逆深度 [1/far, 1/near] 上均匀取 128 个候选，最后取逆深度的期望。要理解为什么近处的候选更密、远处 10 m 处的候选间隔会超过 1 m，以及 near 取 0.5 意味着什么，需要先弄清楚深度、视差、逆深度三者的关系。"
+  },
+  {
+   "concept_id": "d-mvs",
+   "why_zh": "多视角分支就是一个学习式 MVS：提取特征，按候选深度 warp，逐像素求相关，得到代价体，再用 softmax 回归深度。两尺度由粗到细的设计也来自 MVS 的级联思路。MVS 在弱纹理、反光、遮挡处为什么会失败，正是本文引入单目分支的动机。"
+  },
+  {
+   "concept_id": "i-psv",
+   "why_zh": "代价体本质上是在特征空间里做平面扫描（plane sweep）：对每个候选深度平面，把邻居特征重采样到参考视角。理解平面扫描体，就能明白代价体的形状为什么是 [D, h, w]，以及它为什么能像普通图像通道一样交给 2D U-Net 处理。"
+  },
+  {
+   "concept_id": "d-mono",
+   "why_zh": "单目分支用的是 Depth Anything V2 的 ViT 编码器。需要知道单目深度只能给出相对深度，尺度未知，各视角之间也不一致；但它在弱纹理和边界处给出的形状很可靠。这决定了本文取的是它的“特征”，而不是它输出的深度图。"
+  },
+  {
+   "concept_id": "l-attention",
+   "why_zh": "网络里有三处注意力：多视角 Transformer 在 2×2 窗口内做 self-attention 和 cross-attention；ViT 的全局自注意力；U-Net 在低分辨率层把所有视角的 token 拼成一个序列做自注意力。要分清三者各自的作用，以及它们的计算量如何随视角数和分辨率增长。"
+  },
+  {
+   "concept_id": "l-cnn",
+   "why_zh": "CNN 编码器（残差块，InstanceNorm）、回归深度的 2D U-Net、DPT 的 RefineNet 融合块、两层卷积的高斯头，都是标准的卷积构件。读懂 U-Net 的跳连和多级下采样，才能看明白代价体融合和 DPT 上采样在做什么。"
+  },
+  {
+   "concept_id": "n-3dgs",
+   "why_zh": "输出的每个像素是一个 3D 高斯：均值、由 scale 和四元数组成的协方差、不透明度、球谐颜色。需要熟悉 3DGS 的参数化、投影和 α 合成，才能理解高斯头的 37 个通道分别是什么，以及渲染损失的梯度如何一路传回深度。"
+  },
+  {
+   "concept_id": "r-alpha",
+   "why_zh": "渲染时，高斯按深度排序做前到后的 α 合成。深度估错时，前景和背景的高斯会以错误的次序叠加，形成重影。不透明度由网络预测，可以把不可靠的高斯“调暗”，这是理解高斯头设计的关键。"
+  },
+  {
+   "concept_id": "n-generalizable",
+   "why_zh": "DepthSplat 属于可泛化的前馈新视角合成：训练一次，对新场景只做一次前向推理。要知道它与逐场景优化（3DGS、NeRF）、逐射线推理（IBRNet、ENeRF）、无几何 Transformer（LVSM）的区别，才能判断它的速度和质量数字放在哪一类里比较。"
+  },
+  {
+   "concept_id": "l-loss",
+   "why_zh": "训练只用渲染损失：MSE 加 0.05 倍 LPIPS，两尺度模型再加 0.9 倍的中间尺度损失。论文的另一半把这种光度损失解释为深度的无监督预训练。需要理解光度损失能约束什么，以及在弱纹理区为什么约束不住。"
+  },
+  {
+   "concept_id": "v-metrics",
+   "why_zh": "新视角合成用 PSNR、SSIM、LPIPS 评测，深度用 Abs Rel、δ1 等指标评测。要会把 dB 差换算成 MSE 比例，例如 +1.08 dB 约等于 MSE 乘 0.78；还要注意评测索引里有一部分目标帧就是输入帧，这会抬高分数。"
+  }
+ ],
+ "walkthrough": [
+  {
+   "id": "ds1",
+   "title_zh": "问题设定：已知位姿的 V 张图（默认 2 张 256×256），一次前向为每个像素给出一个 3D 高斯",
+   "paper_ref": "论文引言与方法部分开头（问题定义；节号未能核对）；Fig. 1 teaser（README 同图）；README “Camera Conventions”；config/experiment/re10k.yaml、dl3dv.yaml；src/model/encoder/encoder_depthsplat.py（forward）；src/geometry/projection.py（get_world_rays）",
+   "what_zh": "输入是字典 context：image [B,V,3,H,W]，取值 [0,1]；归一化内参 intrinsics [B,V,3,3]；camera-to-world 外参 extrinsics [B,V,4,4]（OpenCV 约定）；near/far [B,V]，RE10K 为 0.5/100，DL3DV 为 0.5/200。输出有两部分：一是高斯集合，其中 means [B,V·H·W,3]、covariances [B,V·H·W,3,3]、harmonics [B,V·H·W,3,9]、opacities [B,V·H·W]；二是每个视角的深度 [B,V,H,W]。解码器再按目标位姿渲染出 [B,V_tgt,3,H,W]。",
+   "plain_zh": "先把任务说清楚。这是“可泛化、前馈”的新视角合成（n-generalizable、a-ff-3dgs）：网络在大量场景上训练一次，遇到新场景只做一次前向推理，不像原版 3DGS（n-3dgs）那样对每个场景优化几千步。输入是少量已标定、有位姿的照片，默认是 RealEstate10K（RE10K）的 2 张 256×256；输出是一组 3D 高斯，可以用光栅化器渲染任意视角。\n\nDepthSplat 沿用 pixelSplat 和 MVSplat 的“像素对齐”做法：每个输入像素恰好对应一个高斯，高斯中心落在这个像素的视线上，位置由深度决定（g-pinhole、g-depth）。这样一来，三维重建问题就变成了二维的稠密预测问题：为每个像素预测一个深度，再加上几个外观参数。所以论文标题叫“连接高斯溅射与深度”，而且是双向的。一个方向是深度越好，高斯越准；另一个方向是高斯的渲染损失可以反过来训练深度（见 ds12）。\n\n数据和评测也要先了解。RE10K 来自网上的房产视频，位姿由 SLAM/SfM 求得，尺度任意；DL3DV 是日常场景视频。评测沿用 pixelSplat 的协议：RE10K 每个场景 2 张输入、3 张目标，目标帧都在两张输入帧之间，所以是插值而不是外推。DL3DV 取前 50 帧中的 2、4、6 帧作为输入，渲染这 50 帧全部。\n\n和站内其他论文比较：Quark 为每个目标视角即时生成分层深度图（LDM），用完即丢；Ha et al. 用立体深度解析地生成像素级高斯，不经过学习；DepthSplat 用网络预测深度和高斯参数，输出的高斯可以长期保留并反复渲染。",
+   "analogy_zh": "就像把每张照片变成一块“针板”：每个像素伸出一根针，针的长度等于深度，针尖上粘一个彩色小球。两张照片的针板在空间里叠在一起，就拼出了房间。网络要做的主要是把每根针的长度定对。",
+   "equations": [
+    {
+     "tex": "\\boldsymbol{\\mu}_{i}(p)=\\mathbf{o}_i+z_i(p)\\,\\mathbf{R}_i\\,\\mathbf{K}_i^{-1}\\begin{bmatrix}u+\\delta_u\\\\ v+\\delta_v\\\\ 1\\end{bmatrix}",
+     "explain_zh": "像素对齐高斯的中心（按 get_world_rays 与 gaussian_adapter 改写）。o_i 为第 i 个视角的光心（外参平移列）；R_i 为 camera-to-world 旋转；K_i 为归一化内参；(u,v) 为像素中心的归一化坐标，取值 (0,1)；(δ_u, δ_v) 为网络预测的像素内偏移，不超过半个像素；z_i(p) 为 z 方向的深度。代码把射线方向归一化为 z 分量等于 1，所以 z 是 z-depth，而不是沿射线的距离。"
+    },
+    {
+     "tex": "N_G = V\\cdot H\\cdot W",
+     "explain_zh": "高斯总数。每个输入像素对应 1 个高斯（gaussians_per_pixel=1）。V 为输入视角数，H×W 为裁剪后的分辨率。RE10K 默认 2×256×256=131,072。"
+    }
+   ],
+   "numbers_zh": "RE10K：V=2，256×256，near 0.5，far 100，共 131,072 个高斯。评测索引有 6474 个有效场景，每个场景 3 个目标，输入间隔 45–136 帧（本地统计 assets/evaluation_index_re10k.json）。DL3DV：256×448（由 270×480 中心裁剪得到），训练时 V 在 2–6 之间随机，far 200；评测用 140 个场景，每个场景 50 个目标。高分辨率演示：V=12，512×960，共 5,898,240 个高斯，重建约 0.6 s（A100，README）。",
+   "why_design_zh": "像素对齐把三维问题化成二维稠密预测，可以直接使用 CNN、ViT、U-Net 这些成熟的二维网络，也能直接借用深度估计领域的预训练模型。这正是 DepthSplat 能接上 Depth Anything V2 的前提。没有采用的方案包括：逐场景优化的 3DGS（慢）；ENeRF、IBRNet 那样逐射线查询的体渲染（每个视角都要重算）；LVSM 那样的无几何 Transformer（不输出显式 3D，也不输出深度）。",
+   "pitfalls_zh": "（1）“前馈”不等于“实时”：大模型处理 2 视角 256×256 约需 0.080 s，12 视角 512×960 约需 0.6 s。（2）深度指 z-depth，不是射线长度；把深度图当射线距离使用，会让边缘处的点云变形。（3）内参必须归一化，第一行除以宽、第二行除以高；外参必须是 camera-to-world。换数据时最常见的错误就是约定不对。（4）评测是插值设定，外推视角的表现没有测过。",
+   "concept_ids": [
+    "g-pinhole",
+    "g-depth",
+    "n-3dgs",
+    "n-generalizable",
+    "a-ff-3dgs"
+   ],
+   "check_q_zh": "为什么说对像素对齐的前馈高斯而言，新视角质量的上限主要由深度决定？除了深度，还有哪些参数能“掩盖”深度误差？",
+   "check_a_zh": "高斯中心被限定在像素的视线上，唯一的自由度就是深度。深度错了，高斯在新视角下就会落到错误的位置，出现错位、重影或飞点，其他参数都无法把它挪回正确位置。其他参数只能缓解：网络可以降低不可靠高斯的不透明度，放大 scale 让错误变成模糊，或者靠像素内偏移做亚像素微调。这些手段都以牺牲锐度为代价。"
+  },
+  {
+   "id": "ds2",
+   "title_zh": "多视角分支①：CNN 提取 1/4 特征，6 层 Swin 式多视角 Transformer 在视角间交换信息",
+   "paper_ref": "论文方法部分“多视角分支”段（节号未能核对）；代码 src/model/encoder/unimatch/backbone.py（CNNEncoder）、mv_transformer.py（MultiViewFeatureTransformer、single_head_split_window_attention）、utils.py（mv_feature_add_position）、mv_unimatch.py:261-301；scripts/re10k_depthsplat_train.sh（gmflow-scale1-things 初始化）",
+   "what_zh": "输入 image [B,V,3,256,256]，先做 ImageNet 归一化，再送入 CNN。CNN 输出三级特征：[BV,64,128,128]、[BV,96,128,128]、[BV,128,64,64]。在 1/4 那一级的每个 2×2 窗口内加正弦位置编码，然后经过 6 层 Transformer，得到多视角特征 F_mv [BV,128,64,64]。以上是 small 模型在 RE10K 上的情况；DL3DV 模型的主尺度为 1/8，即 [BV,128,32,56]。",
+   "plain_zh": "这一步几乎原样继承自 UniMatch 和 GMFlow，Haofei Xu 本人的光流与深度工作，也是 MVSplat 的主干（l-cnn、l-attention、a-learned-stereo）。CNN 先做一次 7×7、步长 2 的卷积，再接三级残差块，归一化用 InstanceNorm。small 模型把 layer2 的步长设为 1，于是最低分辨率是 1/4，而不是 GMFlow 原本的 1/8，最后用 1×1 卷积得到 128 维特征。\n\nTransformer 共 6 层，每层先做 self-attention（视角内部），再做 cross-attention（看其他视角），最后接 FFN。计算都在窗口里进行：把 64×64 的特征图切成 2×2 个窗口，每个窗口 32×32=1024 个 token；奇数层把窗口平移半个窗口（Swin 的做法），让信息能跨窗口传播。多视角 cross-attention 的做法是：参考视角窗口里的 query，对所有邻居视角同一窗口位置的 token 拼成的一个长序列做一次 softmax，所以视角数不同也能用同一套权重。注意力是单头，128 维。\n\n为什么要在建代价体之前先做跨视角注意力？这样每个像素的特征已经“看过”另一张图，对重复纹理和弱纹理更有区分力，后面的点积相关也更可靠。MVSplat 的配置里至今保留着 wo_backbone_cross_attn 这个消融开关（其 Table 3 中的“w/o cross-view attention”），说明这一点做过验证。这部分权重从 GMFlow 在光流数据上训练的 gmflow-scale1-things 初始化，用 strict=False 载入。",
+   "analogy_zh": "两个人各拿一张照片找相同的东西。开始前先让他们隔着桌子交流几轮（cross-attention），“你那张左上角是不是有个红色花瓶？”这样再去逐点比对，找错的概率就低多了。",
+   "equations": [
+    {
+     "tex": "\\mathbf{m}_i=\\mathrm{softmax}\\!\\left(\\frac{(\\mathbf{F}_i\\mathbf{W}_q)\\,[\\mathbf{F}_{j}\\mathbf{W}_k]_{j\\in\\mathcal{N}(i)}^{\\top}}{\\sqrt{C}}\\right)[\\mathbf{F}_{j}\\mathbf{W}_v]_{j\\in\\mathcal{N}(i)}",
+     "explain_zh": "按代码改写的窗口内多视角 cross-attention。F_i 为参考视角某个窗口内的 token（每个窗口 1024 个，C=128）；N(i) 为邻居视角集合，V≤3 时是全部其他视角，V>3 时是最近的 2 个；[·]_{j∈N(i)} 表示把邻居的同位置窗口 token 沿序列方向拼接；W_q、W_k、W_v 为无偏置的线性投影。softmax 在全部邻居 token 上一起归一化。"
+    },
+    {
+     "tex": "\\mathbf{F}_i\\leftarrow\\mathbf{F}_i+\\mathrm{LN}_2\\!\\Big(\\mathrm{MLP}\\big([\\mathbf{F}_i;\\ \\mathrm{LN}_1(\\mathbf{W}_o\\mathbf{m}_i)]\\big)\\Big)",
+     "explain_zh": "cross-attention 层的残差更新（mv_transformer.py 中的 TransformerLayer）。W_o 为输出投影（代码中叫 merge）；[·;·] 为通道拼接，维度 2C=256；MLP 为 256→1024→128，中间用 GELU；LN 为 LayerNorm。self-attention 层没有 MLP，形式为 F←F+LN(W_o·Attn(F,F))。"
+    }
+   ],
+   "numbers_zh": "CNN 通道 64/96/128，参数 1.05M。Transformer 共 6 个 block（self-attn + cross-attn + FFN），d=128，单头，FFN 扩展比 4（作用在 2C 输入上），窗口 2×2（attn_splits_list=[2]，写死在 encoder_depthsplat.py:164），参数 3.15M（代码实例化统计）。small 模型在 RE10K 上 Transformer 的输入为 64×64，每窗口 1024 个 token；DL3DV 模型为 32×56，每窗口 16×28=448 个 token。",
+   "why_design_zh": "论文沿用 UniMatch 的匹配特征设计，理由之一是这些权重可以直接迁移。窗口注意力把复杂度从全图的 (hw)² 降到 (hw)²/4。单头、128 维是 GMFlow 的原始配置。没有采用的方案有：pixelSplat 的极线 Transformer（MVSplat 附录 Table B 做过对照，config 中有 use_epipolar_trans 开关）；完全不做跨视角交互（即 MVSplat 消融中的 w/o cross-view attention）。",
+   "pitfalls_zh": "（1）cross-attention 只在同一窗口位置之间进行。视差很大时，对应点可能落在另一个窗口里，此时只能靠后面的代价体找回来。（2）这里的 Transformer 和单目分支的 ViT 是两个完全不同的网络：前者 3M 参数，负责匹配；后者 22–304M 参数，负责单目先验。（3）初始化用的是光流（Things 数据）上训练的 GMFlow，不是深度模型；配置中的 unimatch_weights_path（gmdepth 权重）并没有被代码读取。（4）位置编码是在每个 2×2 窗口内分别添加的，窗口之间的绝对位置不可见。",
+   "concept_ids": [
+    "l-cnn",
+    "l-attention",
+    "l-encoding",
+    "a-learned-stereo",
+    "a-learned-mvs"
+   ],
+   "check_q_zh": "如果输入是 5 张图，参考视角的 cross-attention 会看几张图？相比“看全部 4 张”，计算量大约变为多少？",
+   "check_a_zh": "V=5>3，因此每个视角只看光心最近的 2 张（local_mv_match=2）。每个窗口的 key 序列长度从 4×1024 变成 2×1024，cross-attention 的计算量约减半。更重要的是，总开销从随 V² 增长变成随 V·2 线性增长。"
+  },
+  {
+   "id": "ds3",
+   "title_zh": "多视角分支②：逆深度上 128 个候选的平面扫描代价体（点积 / √C，对邻居取平均）",
+   "paper_ref": "论文方法部分“cost volume”段（节号未能核对）；代码 mv_unimatch.py:361-505（候选生成、相对位姿、warp、相关）；matching.py（warp_with_pose_depth_candidates）；mv_transformer.py（batch_features_camera_parameters）",
+   "what_zh": "输入：F_mv [BV,128,64,64]、缩放到 1/4 的内参、各视角外参。输出：代价体 C [BV,128,64,64]，其中的 128 是深度候选数 D，被当作通道使用。中间量是 warp 后的邻居特征 [BV·k,128(C),128(D),64,64]，k 为邻居数。",
+   "plain_zh": "这一步就是在特征空间里做平面扫描（i-psv、d-mvs）。对参考视角的每个像素，先假设它的深度等于第 d 个候选，把它反投影到 3D，再投影到邻居视角，用双线性插值取出邻居在那里的特征，与参考特征做点积。假设的深度正确时，两边看到的是同一个表面点，特征相似，点积大；假设错误时，点积小。对 128 个候选都算一遍，每个像素就得到一条长度 128 的“匹配曲线”。有多个邻居时，把各邻居的曲线取平均，这样与视角的顺序和数量无关。\n\n候选在逆深度上均匀取值（g-depth）：RE10K 的 near=0.5、far=100，所以逆深度范围是 [0.01, 2.0] m⁻¹，相邻候选相差约 0.0157 m⁻¹。换算回深度，2 m 处的间隔约为 0.0157×2²≈6 cm，10 m 处约为 1.6 m。近处密、远处疏，这与视差误差的分布一致。之后 softmax 取期望可以得到比间隔更细的值（ds5）。\n\n与 MVSNet 一类方法不同，这里不构建 [C,D,h,w] 的四维特征体再用 3D 卷积处理，而是先点积压掉通道维，得到 [D,h,w] 的相关体，把 D 当作通道交给 2D U-Net。这样省掉了昂贵的 3D 卷积，MVSplat 也是这样做的。代价体只负责给出“多视角几何证据”，匹配不上的地方它就是一条平坦或多峰的曲线，要靠单目分支补救（ds4、ds5）。",
+   "analogy_zh": "像对一把锁逐一试 128 把钥匙：每把钥匙对应一个深度，插进去看两边的特征能不能对上。对得越准，“咔哒”声越响（点积越大）。可是白墙上每把钥匙听起来都差不多，这时就需要另一个线索。",
+   "equations": [
+    {
+     "tex": "x_d = x_{\\min}+\\frac{d}{D-1}\\,(x_{\\max}-x_{\\min}),\\quad x_{\\min}=\\frac{1}{\\text{far}},\\ x_{\\max}=\\frac{1}{\\text{near}},\\ d=0,\\dots,D-1",
+     "explain_zh": "逆深度候选（mv_unimatch.py:419-435）。x_d 为第 d 个候选的逆深度（单位 m⁻¹）；D=128；near 和 far 取自数据集配置，RE10K 为 0.5 和 100。代码中的变量 min_depth=1/far、max_depth=1/near，存的都是逆深度。"
+    },
+    {
+     "tex": "\\mathbf{p}^{(d)}_{j}\\sim\\mathbf{K}_j\\,\\mathbf{T}_{j\\leftarrow i}\\!\\left(x_d^{-1}\\,\\mathbf{K}_i^{-1}\\tilde{\\mathbf{p}}\\right),\\qquad \\mathbf{T}_{j\\leftarrow i}=\\mathbf{E}_j^{-1}\\mathbf{E}_i",
+     "explain_zh": "按候选深度把参考像素投影到邻居 j（matching.py）。p̃ 为齐次像素坐标；x_d⁻¹ 为候选深度；K 为缩放到特征分辨率的内参；E 为 camera-to-world 外参，T_{j←i} 为从参考相机到邻居相机的相对位姿；∼ 表示齐次除法。投影出的坐标用 grid_sample 做双线性采样，越界的位置填 0。"
+    },
+    {
+     "tex": "\\mathcal{C}_i(d,\\mathbf{p})=\\frac{1}{|\\mathcal{N}(i)|}\\sum_{j\\in\\mathcal{N}(i)}\\frac{\\big\\langle \\mathbf{F}_i(\\mathbf{p}),\\ \\mathbf{F}_j(\\mathbf{p}^{(d)}_{j})\\big\\rangle}{\\sqrt{C}}",
+     "explain_zh": "点积相关代价体（mv_unimatch.py:501-505）。F_i(p) 为参考特征，C=128 维；F_j(p_j^{(d)}) 为 warp 后的邻居特征；除以 √C 是为了控制数值尺度；对邻居取平均。输出形状为 [D,h,w]。"
+    }
+   ],
+   "numbers_zh": "RE10K 的位姿尺度任意，这里的“m”指位姿坐标的单位，DL3DV 同理。D=128，C=128。RE10K 逆深度间隔为 (2.0−0.01)/127≈0.01567 m⁻¹，在 1 m、2 m、5 m、10 m 处对应的深度间隔约为 1.6 cm、6.3 cm、39 cm、1.57 m。small 模型 2 视角时，warp 后的张量为 2×128×128×64×64≈1.34 亿个数，fp32 约 537 MB（按形状估算）。DL3DV 6 视角 256×448 时为 12×128×128×32×56≈3.5 亿个数，约 1.4 GB。候选数写死为 128：配置文件里的 num_depth_candidates 不会传进 MultiViewUniMatch。",
+   "why_design_zh": "逆深度均匀采样能同时覆盖室内近景和室外远景，并且与视差误差的分布匹配。点积相关加 2D U-Net 比方差代价体加 3D CNN（MVSNet）便宜得多，也与 UniMatch 的预训练特征匹配。没有采用的方案有：MVSNet 式的方差代价体配合 3D 正则；pixelSplat 沿极线采样再做概率深度；线性深度采样。后续的 ReSplat 把逆深度采样改成了对数深度采样（其 MODEL_ZOO），可以看作对这一选择的修正。",
+   "pitfalls_zh": "（1）near/far 按数据集写死。比 0.5 m 更近的物体无法表示，会被 clamp 到 near；换到舱体尺寸的 3D 临场场景，必须重新设定。（2）改配置中的 num_depth_candidates 没有任何效果。（3）grid_sample 用零填充，投影到邻居视野之外时相关值为 0，网络无法区分“看不到”和“不相似”。（4）代码中的外参都是 camera-to-world，相对位姿是 inv(E_tgt)·E_ref；自己接数据时，用错成 world-to-camera 会导致代价体完全失效。",
+   "concept_ids": [
+    "i-psv",
+    "d-mvs",
+    "g-depth",
+    "g-epipolar",
+    "a-learned-mvs"
+   ],
+   "check_q_zh": "如果把 near 从 0.5 改成 0.3，far 和候选数都不变，10 m 处的深度候选间隔会怎样变化？这说明 near 的取值有什么副作用？",
+   "check_a_zh": "x_max 从 2.0 变为 3.33，逆深度间隔从 (2.0−0.01)/127≈0.0157 增大到 (3.33−0.01)/127≈0.0262。10 m 处的深度间隔约为 0.0262×100≈2.6 m，原来约为 1.57 m。near 取得越小，能表示的近处范围越大，但在固定候选数下，所有距离上的候选都会变疏，远处尤其明显。所以 near/far 应尽量贴合实际场景的范围。"
+  },
+  {
+   "id": "ds4",
+   "title_zh": "单目分支：Depth Anything V2 的 ViT 编码器取 4 层特征，插值到代价体分辨率，以 1/100 的学习率微调",
+   "paper_ref": "论文方法部分“单目特征”段；实现细节（学习率 2×10⁻⁶ 与 2×10⁻⁴，经检索核对）；单目骨干消融表；代码 mv_unimatch.py:79-92、303-357；src/main.py:183-195（pretrained_monodepth 载入）；src/model/model_wrapper.py:1074-1100（参数分组）",
+   "what_zh": "输入 image [BV,3,256,256]，双线性缩放到 [BV,3,252,252]，送入 ViT-S，patch 14，得到 18×18=324 个 token。取第 2、5、8、11 层的输出，形状为 4×[BV,324,384]，reshape 成 [BV,384,18,18]，再插值到 1/8 分辨率 [BV,384,32,32]。最后一层再 2× 上采样到 [BV,384,64,64]，与代价体对齐；4 层特征另外留给 DPT 头（ds7、ds8）使用。",
+   "plain_zh": "Depth Anything V2 是一个单目深度基础模型（d-mono、a-geo-fm）：编码器为 DINOv2 结构的 ViT，解码器为 DPT，在大规模合成数据和伪标签真实数据上训练，只看一张图就能给出相对深度，边界清楚。DepthSplat 只借用它的编码器，而且只要特征、不要它输出的深度图。这样做有两个好处：一是特征中除了深度，还带有物体边界、语义和“这里有没有把握”的信息；二是不必把单目深度的任意尺度和位姿尺度对齐，把这件事交给后面的网络去学。\n\n单目分支对每个视角独立运行，不看其他视角，所以它给出的是“每张图自己的常识”，彼此之间并不保证一致。它的价值集中在代价体失效的地方：白墙、地板这类弱纹理区域，窗户、镜面这类反光区域，被遮挡或只在一张图里出现的区域，以及图像边缘。\n\n训练时 ViT 并没有冻结。代码按参数名分组，名字里含 “pretrained” 的 ViT 参数用 2e-6 的学习率，其余参数用 2e-4（f-optim）。低学习率让 ViT 可以慢慢适应新任务，又不至于冲掉预训练学到的东西。ViT 的 patch 为 14，所以图像要先缩放到 14 的倍数，256 变成 252；特征图分辨率只有 1/14，比代价体的 1/4 粗得多，要插值上去，细节主要靠 CNN 特征和 DPT 上采样来补（f-image）。单目骨干消融：DA-V2 26.84 dB，DA-V1 与 DINOv2 都是 26.76，MiDaS 26.46，ConvNeXt-T 26.11。",
+   "analogy_zh": "像一位看过成千上万张房间照片的室内设计师。他只看一张照片就能说出“沙发在墙前面、地板往远处延伸”，但说不准具体几米，两张照片他也不会去对照。测量员（代价体）负责量准距离，设计师负责在测量员量不出来的地方给出合理的形状。",
+   "equations": [
+    {
+     "tex": "H'=\\left\\lfloor \\tfrac{H}{14}\\right\\rfloor\\cdot 14,\\quad W'=\\left\\lfloor \\tfrac{W}{14}\\right\\rfloor\\cdot 14,\\quad N_{\\text{tok}}=\\frac{H'}{14}\\cdot\\frac{W'}{14}",
+     "explain_zh": "ViT 的输入尺寸与 token 数（mv_unimatch.py:305）。256×256 → 252×252，N_tok=18×18=324；256×448 → 252×448，N_tok=18×32=576；512×960 → 504×952，N_tok=36×68=2448。这一步缩放会让横纵比例略有改变，例如 448 不变而 256 变为 252。"
+    },
+    {
+     "tex": "\\mathbf{f}^{(l)}=\\mathrm{Interp}_{\\to H/8\\times W/8}\\big(\\mathrm{reshape}(\\mathbf{T}^{(l)})\\big),\\quad l\\in\\{2,5,8,11\\}\\ (\\text{S/B}),\\ \\{4,11,17,23\\}\\ (\\text{L})",
+     "explain_zh": "中间层特征的整理。T^(l) 为第 l 层 ViT 的 token 序列，形状 [N_tok, C_vit]，C_vit=384/768/1024；reshape 成二维特征图后，双线性插值到 1/8 分辨率。代价体在 1/4 时，最后一层 f^(11)（或 L 的 f^(23)）再 2× 上采样后参与拼接。"
+    },
+    {
+     "tex": "\\theta_{\\text{vit}}:\\ \\eta=2\\times10^{-6},\\qquad \\theta_{\\text{rest}}:\\ \\eta=2\\times10^{-4}",
+     "explain_zh": "AdamW 的两组学习率（model_wrapper.py:1075-1093）。θ_vit 为名字含 “pretrained” 的 DINOv2/DA-V2 编码器参数，θ_rest 为其余全部参数。两组共用同一个 OneCycle 调度（ds10）。"
+    }
+   ],
+   "numbers_zh": "ViT-S：384 维，12 层，22.06M 参数；ViT-B：768 维，86.58M；ViT-L：1024 维，24 层，304.37M（代码实例化统计）。取层：S/B 为 [2,5,8,11]，L 为 [4,11,17,23]。学习率 2e-6 对 2e-4。消融（PSNR）：DA-V2 26.84、DA-V1 26.76、DINOv2 26.76、MiDaS 26.46、ConvNeXt-T 26.11。large 模型中 ViT 占总参数的约 86%。",
+   "why_design_zh": "用特征而不用深度图，可以避开尺度对齐问题，而且保留的信息更多。据检索摘要，作者比较过“先对齐单目深度的尺度再融合”，结果不如直接拼接特征。取多个中间层，是为了让 DPT 式解码器同时拿到低层边缘和高层语义。用低学习率微调而不冻结，是在“适应新任务”和“保留先验”之间折中。消融说明，大部分收益来自大规模预训练的 ViT 特征本身（DINOv2 与 DA-V1 持平），深度任务预训练只再多约 0.08 dB。",
+   "pitfalls_zh": "（1）ViT 没有冻结。一些二手资料写成 “frozen ViT”，与代码不符。（2）把 optimizer.lr_monodepth 设为 0 并不能冻结 ViT：代码的判断是“大于 0 才分组”，等于 0 时所有参数都用 2e-4，ViT 反而会被全速训练（见 ds10）。（3）构建模型时会调用 torch.hub.load('facebookresearch/dinov2', ...)，需要联网或本地 hub 缓存；之后 DA-V2 权重以 strict=False 覆盖，键名不匹配时不会报错。（4）单目分支对每个视角独立，本身不保证多视角一致；只用它会导致各视角的高斯对不齐。",
+   "concept_ids": [
+    "d-mono",
+    "a-geo-fm",
+    "l-attention",
+    "f-image",
+    "f-optim"
+   ],
+   "check_q_zh": "消融中，去掉代价体只剩单目分支时 PSNR 掉到 23.24，而去掉单目分支只剩代价体时是 26.04。为什么单独用单目分支会差这么多？",
+   "check_a_zh": "单目分支对每个视角独立估计，尺度未知，各视角之间也不一致。两张图各自生成的高斯在空间里对不齐，渲染新视角时就会出现重影和错位。像素对齐的高斯需要多视角一致、尺度与位姿一致的深度，这正是代价体提供的东西。单目特征只能在代价体失效的局部区域提供补充，替代不了几何约束。"
+  },
+  {
+   "id": "ds5",
+   "title_zh": "拼接融合：[代价体 128，CNN 128，多视角 128，单目 384] 进入带跨视角注意力的 2D U-Net，softmax 取深度期望",
+   "paper_ref": "论文方法部分“特征融合与深度回归”段；附录中的融合方式对比（据检索）；分支消融表；代码 mv_unimatch.py:94-169（regressor、regressor_residual、depth_head 定义）、507-531（前向）；ldm_unet/unet.py（UNetModel；QKVAttentionLegacy 的 use_cross_view_self_attn）",
+   "what_zh": "拼接后得到 [BV,768,64,64]（small；base 为 1152 通道）。依次经过 Conv3×3、GroupNorm(8)、GELU，变为 [BV,128,64,64]；再经过 2D U-Net 和 Conv3×3，并加上一条 1×1 残差投影；深度头 Conv(128→256)、GELU、Conv(256→128) 输出 logits [BV,128,64,64]。在 D 维上做 softmax 得到匹配概率 P，逆深度 x̂=Σ_d P_d·x_d，形状 [BV,1,64,64]。",
+   "plain_zh": "融合方式很简单：按通道拼接（l-cnn）。代价体告诉网络“哪个深度上两边的特征对得上”，CNN 特征和多视角 Transformer 特征提供局部外观和匹配上下文，单目特征提供“这里的表面大概是什么形状”的先验。网络逐像素学习该信哪一路：代价体曲线有尖峰时信代价体；曲线平坦或有多个峰时，更多依赖单目特征和周围像素。据检索摘要，作者比较过更复杂的方案，包括“用多视角深度对齐单目深度的尺度”和“注意力融合”，结论是简单拼接更好。\n\n回归器是一个 2D U-Net，借用自 latent diffusion 的 UNetModel，128 通道，3 级，每级 1 个 ResBlock。关键改动是在下采样 4 倍的那一级加入跨视角自注意力：把所有 V 个视角的 token 拼成一个长序列做注意力（small 在 RE10K 上每视角 16×16=256 个 token），4 个头，每头 32 通道（l-attention）。这样一个视角的深度估计可以参考其他视角的全局信息，与第一步的窗口 cross-attention 形成互补。\n\n深度头输出 128 个 logits，softmax 之后得到一个离散概率分布（f-prob）。逆深度取期望 Σ P_d·x_d，而不是取 argmax。这有两个好处：可微，渲染损失的梯度能传回每个候选的得分；能得到比候选间隔更细的连续值。分布的最大值 max_d P_d 同时也是一个置信度，后面会作为输入送给高斯头（ds8）。",
+   "analogy_zh": "像三位评委打分：测量员给出一份“各深度的匹配得分表”，摄影师描述局部外观，室内设计师给出单目直觉。主持人（U-Net）把三份材料摊在一起，还会翻看其他机位的材料（跨视角注意力），最后给出一个带信心的分布，取加权平均作为答案。",
+   "equations": [
+    {
+     "tex": "\\mathbf{P}=\\mathrm{softmax}_d\\Big(h\\big(\\mathcal{U}([\\,\\mathcal{C};\\ \\mathbf{F}_{\\text{cnn}};\\ \\mathbf{F}_{\\text{mv}};\\ \\mathbf{F}_{\\text{mono}}\\,])\\big)\\Big)\\in\\mathbb{R}^{D\\times h\\times w}",
+     "explain_zh": "[·;·] 为通道拼接；𝒞 为代价体，128 个通道；F_cnn 为 CNN 特征，128 个通道；F_mv 为多视角 Transformer 特征，128 个通道；F_mono 为单目特征，ViT-S 为 384 个通道；𝒰 为输入卷积、U-Net、输出卷积，外加 1×1 残差；h 为深度头；softmax 沿 D=128 个候选归一化。"
+    },
+    {
+     "tex": "\\hat{x}(\\mathbf{p})=\\sum_{d=0}^{D-1}P_d(\\mathbf{p})\\,x_d,\\qquad \\hat z(\\mathbf{p})=1/\\hat{x}(\\mathbf{p}),\\qquad m(\\mathbf{p})=\\max_d P_d(\\mathbf{p})",
+     "explain_zh": "x̂ 为期望逆深度，ẑ 为深度，m 为最大匹配概率。m 会被最近邻插值到全分辨率，作为高斯头的输入（encoder_depthsplat.py:216-222）。与 MVSplat 不同，m 不再直接充当不透明度。"
+    }
+   ],
+   "numbers_zh": "输入通道：small 为 768=128+128+128+384，base 为 1152，large 为 1408=128+128+128+1024（按代码计算）。U-Net：128 通道，channel_mult [1,1,1]，1 个 ResBlock/级，在 ds=4 层级做注意力，每头 32 通道，共 4 头；middle block 不含注意力（middle_block_attn 默认 False）。深度头为 128→256→128。参数（small）：U-Net 6.45M，残差投影 0.10M，深度头 0.59M。输出 x̂ 的分辨率为 64×64（small，RE10K）。",
+   "why_design_zh": "拼接后交给网络自己学权重，比手工设计置信加权更灵活；两路特征各司其职，学习也更容易（据检索，作者称双分支设计“解耦了特征匹配与单目先验”）。softmax 期望兼顾可微和亚候选精度。U-Net 中的跨视角注意力让多视角信息在深度回归阶段继续流动。没有采用的方案有：单目深度尺度对齐后融合、注意力融合、argmax 或直接回归深度。",
+   "pitfalls_zh": "（1）softmax 期望在前景和背景交界处会被“平均”。如果某像素的分布有两个峰，期望深度会落在两个表面之间，形成悬空的高斯，也就是飞点。后续工作专门处理了深度不连续的问题。（2）U-Net 的跨视角注意力没有任何位置或相机编码（代码注释 “current attention layer doesn't have positional encoding”），它不知道 token 来自哪个视角的哪个位置。（3）回归的是逆深度，不是深度；可视化和误差分析时要注意取倒数。（4）拼接顺序和通道数取决于 vit_type 和尺度，换骨干后不能直接加载旧权重。",
+   "concept_ids": [
+    "l-cnn",
+    "l-attention",
+    "f-prob",
+    "d-mvs",
+    "a-learned-mvs"
+   ],
+   "check_q_zh": "在前景物体边缘，某像素的 softmax 分布有两个峰：前景 1 m 和背景 5 m，概率各 0.5。按 DepthSplat 的做法，它的深度是多少？渲染时会发生什么？",
+   "check_a_zh": "期望逆深度为 x̂=0.5×1.0+0.5×0.2=0.6 m⁻¹，深度 ẑ≈1.67 m，既不在前景上，也不在背景上。这个像素的高斯会悬在两个表面之间，换视角时成为飞点或拖影。网络可以通过降低它的不透明度来减轻影响；但根本原因在于用期望回归多峰分布，这是 softmax 期望的固有代价。"
+  },
+  {
+   "id": "ds6",
+   "title_zh": "由粗到细（base/large）：在 2 倍分辨率上围绕粗深度再放 32 个候选，间隔减半",
+   "paper_ref": "论文方法部分“层级匹配”段与模型变体表（README 标注 small/base/large 的评测对应 Table 1）；代码 mv_unimatch.py:73-92（ViTFeaturePyramid）、99-120（各尺度通道数）、409-475（第二尺度候选）；vit_fpn.py；scripts/re10k_depthsplat_train.sh（base/large：num_scales=2，upsample_factor=2）",
+   "what_zh": "以 base 模型在 RE10K 上为例。第一尺度输出 x̂⁽⁰⁾ [BV,1,64,64]，2× 双线性上采样并 detach，得到 [BV,1,128,128]，以它为中心生成 32 个逐像素候选 [BV,32,128,128]；第二尺度代价体为 [BV,32,128,128]。拼接 [32, CNN 96, 多视角 64, 单目 384] 共 576 通道，经 U-Net（64 通道，4 级，在 ds=8 层级做注意力）得到 x̂⁽¹⁾ [BV,1,128,128]。",
+   "plain_zh": "small 模型只有一个尺度：代价体在 1/4 分辨率上一次算完。base 和 large 多加一级细化，思路与级联 MVS 相同（d-mvs、a-learned-mvs）：先在粗分辨率上用全范围的 128 个候选定个大概，再到 2 倍分辨率上，只在大概值附近放 32 个间隔更小的候选。在 RE10K 上，两个尺度分别是 1/4 和 1/2；DL3DV 和高分辨率模型是 1/8 和 1/4。\n\n第二尺度需要更高分辨率的特征。CNN 特征直接取主干中更浅的一级（96 通道）；多视角特征和单目特征用 ViTDet 的 SimpleFeaturePyramid 从第一尺度上采样得到，做法是一个步长 2 的转置卷积，通道减半，多视角为 64、单目为 ViT 通道的一半。候选范围以上采样后的粗逆深度为中心，向下 16 个、向上 15 个细间隔，细间隔是粗间隔的一半，并 clamp 在 [x_min, x_max] 内。\n\n有两个细节。第一，粗深度在上采样后被 detach，第二尺度的梯度不会通过候选位置传回第一尺度，第一尺度只由自己的渲染损失训练（ds9 中的中间监督，权重 0.9）。第二，第二尺度每个像素的候选不同，所以候选张量是逐像素的 [BV,32,h,w]，而第一尺度是所有像素共享的 [BV,128,1,1]。据检索摘要，模型变体表显示，2 尺度和更大的单目骨干都能同时改善深度和新视角合成。",
+   "analogy_zh": "像用地图找地址：先看城市地图（粗尺度）找到大致街区，再换街区地图（细尺度），只在那一片仔细找门牌号。街区地图只覆盖一小片，如果第一步街区就找错了，第二步是找不回来的。",
+   "equations": [
+    {
+     "tex": "\\Delta^{(1)}=\\frac{x_{\\max}-x_{\\min}}{(D-1)\\cdot 2},\\qquad [\\,a,b\\,]=\\big[\\max(\\hat x^{(0)}_{\\uparrow}-16\\Delta^{(1)},x_{\\min}),\\ \\min(\\hat x^{(0)}_{\\uparrow}+15\\Delta^{(1)},x_{\\max})\\big]",
+     "explain_zh": "第二尺度的候选区间（mv_unimatch.py:436-461）。Δ^(1) 为细间隔，D=128 为第一尺度候选数；x̂^(0)_↑ 为上采样并 detach 后的粗逆深度；16=32//2 与 15=32//2−1 来自代码。区间内用 linspace 取 32 个点，不被 clamp 时间隔正好等于 Δ^(1)。"
+    },
+    {
+     "tex": "x^{(1)}_d(\\mathbf p)=a(\\mathbf p)+\\frac{d}{31}\\big(b(\\mathbf p)-a(\\mathbf p)\\big),\\quad d=0,\\dots,31",
+     "explain_zh": "逐像素的 32 个细候选。a、b 随像素而变，所以代价体计算时，候选张量的形状为 [BV,32,h,w]，不再是 [BV,128,1,1]。"
+    }
+   ],
+   "numbers_zh": "RE10K：Δ^(1)≈0.00783 m⁻¹，覆盖范围约 ±0.125 m⁻¹，相当于粗尺度的 ±8 个候选。在 2 m 处，细间隔约 3.1 cm，可纠正的范围约为 1.6–2.7 m。第二尺度的通道数：CNN 96，多视角 64，单目 384（base）或 512（large），U-Net 64 通道。参数：mv_pyramid 0.07M，mono_pyramid 2.51M（base）或 4.46M（large）。small 模型没有这一级。",
+   "why_design_zh": "粗尺度用全范围、少像素，细尺度用窄范围、多像素。以较少的额外代价把深度分辨率和空间分辨率都提高一倍，这是级联 MVS 的经典做法（此类比是我们的解读）。detach 可以避免细尺度的梯度通过候选位置干扰粗尺度，训练更稳定（论文未说明原因，这是合理的解读）。没有采用的方案有：单尺度直接放更多候选（显存随 D 线性增长）；三级及以上的级联（代码支持 num_scales>2 的写法，但没有发布相应模型）。",
+   "pitfalls_zh": "（1）small 模型是单尺度，num_scales=1，README 中 small 与 base/large 的命令参数不同（upsample_factor 4 与 2）。（2）粗深度误差超过约 ±8 个粗间隔时，细尺度无法纠正，因为真值不在候选范围内。（3）RE10K 的 base/large 与 DL3DV 的 base 虽然都叫 base，内部尺度不同（1/4+1/2 与 1/8+1/4），权重不能混用。（4）第一尺度的“中间深度”只在训练时上采样到全分辨率并参与渲染监督；推理时只输出最终深度。",
+   "concept_ids": [
+    "d-mvs",
+    "a-learned-mvs",
+    "g-depth",
+    "f-image"
+   ],
+   "check_q_zh": "RE10K 的 base 模型中，如果粗尺度把 2 m 处的表面估成了 3 m，第二尺度能纠正回来吗？请用逆深度估算。",
+   "check_a_zh": "真值的逆深度为 0.5 m⁻¹，粗估计为 0.333 m⁻¹，相差 0.167 m⁻¹。第二尺度的候选只覆盖粗估计的 −16Δ 到 +15Δ，而 15×0.00783≈0.117 m⁻¹ < 0.167 m⁻¹，所以真值不在候选范围内，无法完全纠正，最多被拉到约 0.45 m⁻¹，也就是约 2.2 m。这类大错误只能靠第一尺度自身（单目特征、U-Net）来避免。"
+  },
+  {
+   "id": "ds7",
+   "title_zh": "DPT 上采样：融合 ViT 的 4 层特征、CNN 特征与多视角特征，预测全分辨率的逆深度残差",
+   "paper_ref": "论文方法部分“深度上采样”段；代码 mv_unimatch.py:171-202（upsampler 定义）、543-572（残差相加、clamp、取倒数）；dpt_head.py（DPTHead，return_feature=False；输出层零初始化 442-444）",
+   "what_zh": "输入：ViT 的 4 层特征 [BV,384,32,32]×4；CNN 多尺度特征 [64@128², 96@128², 128@64²]；多视角特征 [128@64²]；低分辨率逆深度 x̂ [BV,1,64,64]。输出：残差 r [BV,1,256,256]。最终 x=clamp(Up(x̂)+r, x_min, x_max)，深度 z=1/x，形状 [B,V,256,256]。以上为 small 模型在 RE10K 上的情况。",
+   "plain_zh": "代价体只在 1/4（或 1/8、1/2）分辨率上计算，而高斯是逐像素的，所以深度必须恢复到全分辨率。最简单的做法是双线性插值，但这样物体边缘会被抹平：边界像素的深度落在前景和背景之间，正好变成飞点。DepthSplat 用 DPT 头学习上采样（f-image、l-cnn）。\n\nDPT 的做法是：先用不同的重组层把 ViT 的 4 层特征整理成 1/2、1/4、1/8、1/16 四个尺度，分别是 4× 转置卷积、2× 转置卷积、恒等、步长 2 卷积；再用 RefineNet 融合块从低分辨率逐级往上融合，最后输出全分辨率。DepthSplat 的改动是：在 1/2 和 1/4 这些层级，把 CNN 特征、多视角特征和低分辨率深度也拼接进来，于是解码器既看到单目语义，又看到匹配特征和当前的深度估计。\n\n输出的不是深度本身，而是逆深度的残差，加在双线性上采样的结果上，再 clamp 到合法范围。输出层零初始化，所以训练开始时它严格等于双线性上采样，之后逐渐学会在边缘处做修正。这个 DPT 头是新建的，没有使用 Depth Anything V2 自带的深度头权重。",
+   "analogy_zh": "像把一张低分辨率的等高线草图放大成施工图：先机械放大（双线性），再由一位看过高清照片的绘图员（DPT 头看 ViT 和 CNN 特征）沿着真实的墙角、桌边把线条修锐。一开始他什么都不改（零初始化），慢慢学会改哪里。",
+   "equations": [
+    {
+     "tex": "x(\\mathbf p)=\\mathrm{clip}\\Big(\\mathrm{Up}_{\\times s}\\big(\\hat x\\big)(\\mathbf p)+r_\\theta\\big(\\{\\mathbf f^{(l)}\\},\\mathbf F_{\\text{cnn}},\\mathbf F_{\\text{mv}},\\hat x\\big)(\\mathbf p),\\ x_{\\min},\\ x_{\\max}\\Big),\\qquad z=1/x",
+     "explain_zh": "Up_{×s} 为双线性上采样，s 等于 upsample_factor（small 为 4，RE10K 上的 base/large 为 2，DL3DV 为 4）；r_θ 为 DPT 头预测的逆深度残差；f^(l) 为 ViT 的 4 层特征；clip 把结果限制在 [1/far, 1/near] 内；z 为最终深度。"
+    },
+    {
+     "tex": "r_\\theta\\big|_{\\text{init}}\\equiv 0\\ \\Rightarrow\\ x\\big|_{\\text{init}}=\\mathrm{Up}_{\\times s}(\\hat x)",
+     "explain_zh": "输出卷积的权重和偏置都初始化为 0（dpt_head.py:442-444），训练开始时 DPT 分支相当于不存在，不会往高斯位置里注入随机噪声。"
+    }
+   ],
+   "numbers_zh": "DPT features 通道数：small 32，base 48，large 64（深度上采样头）。输出头为 features→features/2→16→1。参数：small 2.11M，base 7.91M，large 14.03M，DL3DV base 7.98M。上采样倍数：small（RE10K）4×，base/large（RE10K）2×，DL3DV 与高分辨率 4×。",
+   "why_design_zh": "边缘处的深度质量决定了飞点的多少。学习式上采样可以借助高分辨率的图像特征和单目语义把边界修锐，这也是 DPT 在单目深度中被广泛采用的原因。在逆深度上做残差，与前面的候选空间一致，数值范围也有界。没有采用的方案有：双线性上采样（边缘糊）；RAFT 式凸组合上采样（论文未讨论）；直接在全分辨率上建代价体（显存不可接受）。",
+   "pitfalls_zh": "（1）残差是在逆深度上加的，远处物体的一个小逆深度残差，换算成深度可能是很大的变化。（2）clamp 会把超出范围的值截断在 near 或 far 上，截断处的梯度为 0。（3）边缘能否修锐，完全取决于渲染损失能否提供信号；训练中没有深度监督，边缘精度没有直接约束。（4）网络里有两个 DPT 头：一个出深度残差（本步），一个出高斯头所需的特征（ds8），参数分别计算。",
+   "concept_ids": [
+    "f-image",
+    "l-cnn",
+    "d-mono",
+    "g-depth"
+   ],
+   "check_q_zh": "为什么要把 DPT 残差分支的输出层初始化为 0？如果随机初始化，训练初期会出现什么问题？",
+   "check_a_zh": "零初始化让训练开始时的深度严格等于粗深度的双线性上采样，而粗深度已经由代价体和单目特征给出一个合理的估计，高斯位置从一开始就基本正确，渲染损失能提供有效梯度。随机初始化会在每个像素的逆深度上叠加噪声，高斯被随机推前推后，渲染结果一团糟，梯度的方向也很乱，前期训练会慢很多，甚至不稳定。这与 ResNet 最后一层 BN 零初始化是同一个思路。"
+  },
+  {
+   "id": "ds8",
+   "title_zh": "高斯头：每像素 37 个数，包括不透明度、像素内偏移、scale、四元数和 2 阶 SH（直流项加上输入颜色）",
+   "paper_ref": "论文方法部分“高斯参数预测”段；代码 encoder_depthsplat.py:88-138（feature_upsampler、gaussian_regressor、gaussian_head 及其初始化）、216-332（解码与组装）；common/gaussian_adapter.py；common/gaussians.py（build_covariance）；misc/sh_rotation.py；对照 MVSplat 的 encoder_costvolume.py:207 与 gaussian_adapter.py",
+   "what_zh": "输入：全分辨率特征 [BV,64,256,256]（由第二个 DPT 头输出）、RGB [BV,3,256,256]、深度 [BV,1,256,256]、最大匹配概率 m [BV,1,256,256]。第一段 [BV,69] 经卷积变为 [BV,64]；第二段 [BV,132] 经卷积变为 [BV,37]。按像素解码为 α(1)、δ(2)、s(3)、q(4)、SH(3×9)，再组装成世界坐标系下的 μ [3] 和 Σ [3×3]。",
+   "plain_zh": "深度定下来以后，还要为每个像素决定它的高斯长什么样（n-3dgs、r-appearance）。第二个 DPT 头（return_feature=True）把 ViT、CNN、多视角特征融合成全分辨率特征，small/base/large 分别为 64/96/128 通道。接着是一个很小的两段卷积网络：第一段看 [RGB、深度、置信度 m、特征]，第二段再把 RGB、特征、m 拼进来，最后输出 37 个通道。整个高斯头只有 0.06–0.08M 参数。\n\n37 个通道依次是：1 个不透明度，经 sigmoid；2 个像素内偏移，经 sigmoid 后减 0.5，再乘像素尺寸；3 个 scale，经 softplus(x−4) 后 clamp 到 [1e-10, 3]；4 个四元数，归一化后作为旋转；27 个 2 阶球谐系数，每个颜色通道 9 个。几处与 MVSplat 不同：（1）不透明度由网络预测，匹配概率只作为输入，MVSplat 是把最大匹配概率直接映射成不透明度；（2）scale 用绝对的世界单位，MVSplat 则乘以“深度 × 像素尺寸”；（3）SH 直流项加上输入像素颜色 RGB2SH(I)，高阶项乘 0.1·0.25^l 的衰减，SH 阶数从 MVSplat 的 4 阶降到 2 阶。\n\n初始化很讲究：最后一层中 scale 通道（第 3–5 通道）和 SH 通道（第 10 通道起）的权重和偏置都置 0。于是训练一开始，每个像素的高斯就是“颜色等于该像素、大小固定为 softplus(−4)≈0.018 个世界单位、各向同性”的小球，网络只需学习残差。这正好呼应 Ha et al. 的观察：前馈网络预测的像素级高斯参数往往接近常数，Ha et al. 干脆用解析值；DepthSplat 则以解析值为起点，让网络学偏差。区别在于，Ha et al. 的尺度与“深度/焦距”成正比，而 DepthSplat 的初始尺度与深度无关。",
+   "analogy_zh": "深度决定每颗彩色小球钉在哪里，高斯头决定小球本身：有多不透明、稍微往左还是往右挪一点、是圆的还是扁的、朝哪个方向扁、换角度看颜色怎么变。出厂设置是“和像素同色的小圆球”，网络负责逐个微调。",
+   "equations": [
+    {
+     "tex": "\\alpha=\\sigma(h_0),\\qquad \\boldsymbol\\delta=\\big(\\sigma(h_{1:2})-\\tfrac12\\big)\\odot\\big(\\tfrac1W,\\tfrac1H\\big)",
+     "explain_zh": "h 为高斯头输出的 37 维向量，下标为通道号；σ 为 sigmoid；α 为不透明度；δ 为归一化坐标下的像素内偏移，最大为半个像素；W、H 为图像宽高。"
+    },
+    {
+     "tex": "\\mathbf s=\\mathrm{clip}\\big(\\mathrm{softplus}(h_{3:5}-4),\\ 10^{-10},\\ s_{\\max}\\big),\\qquad \\mathbf q=\\frac{h_{6:9}}{\\lVert h_{6:9}\\rVert+\\epsilon}",
+     "explain_zh": "s 为三轴 scale，单位与场景的世界坐标一致，不乘深度；训练时 s_max=3，README 中 512×960 的推理命令把它改成 0.1；softplus(−4)≈0.018。q 为 xyzw 顺序的单位四元数，ε=1e-8。"
+    },
+    {
+     "tex": "\\Sigma=\\mathbf R_{\\text{c2w}}\\,\\mathbf R(\\mathbf q)\\,\\mathrm{diag}(\\mathbf s)^2\\,\\mathbf R(\\mathbf q)^\\top\\mathbf R_{\\text{c2w}}^\\top",
+     "explain_zh": "世界坐标系下的协方差（gaussian_adapter.py 与 gaussians.py 中的 build_covariance）。R(q) 为由四元数得到的旋转，它定义在相机坐标系里；R_c2w 为相机到世界的旋转。"
+    },
+    {
+     "tex": "c_{lm}=\\kappa_l\\,h^{\\text{sh}}_{lm}+[\\,l=0\\,]\\,\\frac{I(\\mathbf p)-0.5}{C_0},\\qquad \\kappa_0=1,\\ \\kappa_l=0.1\\cdot0.25^{\\,l},\\ C_0\\approx0.28209",
+     "explain_zh": "球谐系数，按代码改写。l=0,1,2 为阶数，每个颜色通道共 9 个系数；h^sh 为网络输出的 27 维 SH 部分；κ_l 为 sh_mask；[l=0] 表示只对直流项加上由输入像素颜色 I(p) 换算的 SH 值（RGB2SH）。之后再用 e3nn 的 Wigner-D 矩阵把 SH 从相机坐标系旋转到世界坐标系（misc/sh_rotation.py）。"
+    }
+   ],
+   "numbers_zh": "输出 37 通道，其中 opacity 1、offset 2、scale 3、rotation 4、SH 27。高斯头输入：第一段 69=3+1+1+64（small），第二段 132=64+3+64+1。特征上采样通道 64/96/128，参数 2.71M/9.42M/16.71M；gaussian_regressor 0.08–0.11M；gaussian_head 0.06–0.08M。s_max 训练时为 3，高分辨率推理时为 0.1。SH 阶数 2，MVSplat 为 4。",
+   "why_design_zh": "像素对齐已经把最难的位置问题交给了深度，高斯头只需做局部修饰，所以一个很小的卷积网络就够了。直流项用输入颜色初始化、scale 零初始化，让训练从一个“能渲染出东西”的状态开始。不透明度改由网络预测，可以综合匹配置信度、单目特征和颜色来决定哪些高斯该隐去，比 MVSplat 只看匹配概率更灵活（这是我们的解读，论文没有给出对应消融）。没有采用的方案有：MVSplat 式的“匹配概率即不透明度”和“随深度缩放的 scale”；每像素多个高斯；跨视角合并高斯。",
+   "pitfalls_zh": "（1）scale 是绝对世界单位，与场景尺度和分辨率耦合，换分辨率要改 gaussian_scale_max，README 中 512×960 的命令都改成了 0.1。（2）match_prob 在代码里还被整理成一个 densities 变量，但之后没有使用；真正的 opacity 来自 head 的第 0 通道，读代码时容易看错。（3）导出 .ply 时，visualization_dump 中的 scales 和 rotations 没有转到世界坐标系，代码注释写明 “This needs to be fixed”。（4）SH 在相机坐标系里预测，每个视角都要用 Wigner-D 旋转到世界坐标系；如果外参带缩放或反射，就会出错。",
+   "concept_ids": [
+    "n-3dgs",
+    "r-appearance",
+    "r-alpha",
+    "f-linalg",
+    "a-ff-3dgs"
+   ],
+   "check_q_zh": "训练刚开始时，scale 和 SH 通道的权重与偏置都是 0，一个 DepthSplat 高斯长什么样？它与 Ha et al. 解析设定的像素高斯有什么异同？",
+   "check_a_zh": "它的颜色等于该像素颜色，因为直流项等于 RGB2SH(I)，高阶项为 0；它是半径约 softplus(−4)≈0.018 个世界单位的各向同性小球，旋转不起作用；不透明度约为 sigmoid(随机初值)，在 0.5 附近；中心位于初始深度处。相同点：两者都是以像素颜色为中心的各向同性高斯。不同点：Ha et al. 的尺度随深度/焦距变化，保证投影回源图恰好覆盖一个像素，且不透明度为 1；DepthSplat 初始尺度与深度无关，远处的高斯偏小、近处偏大，要靠训练去修正，不透明度也是学出来的。"
+  },
+  {
+   "id": "ds9",
+   "title_zh": "渲染与损失：CUDA 光栅化渲染目标视角，损失为 MSE + 0.05·LPIPS，中间尺度再乘 0.9，全程没有深度监督",
+   "paper_ref": "论文方法部分“训练损失”段；代码 src/model/decoder/decoder_splatting_cuda.py、cuda_splatting.py（render_cuda）；src/loss/loss_mse.py、loss_lpips.py；src/model/model_wrapper.py:155-359（training_step）；config/experiment/re10k.yaml（lpips weight 0.05，apply_after_step 0）；config/main.yaml（intermediate_loss_weight 0.9）",
+   "what_zh": "输入：高斯集合 [B, V·H·W]，以及目标相机的外参 [B,V_tgt,4,4]、内参和 near/far。输出：渲染图 [B,V_tgt,3,H,W]。损失为一个标量：MSE(Î,I)+0.05·LPIPS(Î,I)，两尺度模型再加 0.9×(同样的损失，作用在由粗尺度深度生成的高斯上)。训练时 RE10K 每个样本有 V_tgt=4 个目标视角，DL3DV 微调时为 8 个。",
+   "plain_zh": "高斯交给可微光栅化器，也就是 pixelSplat 作者修改过的 diff-gaussian-rasterization（r-raster、a-diff-render）。每个 3D 高斯投影成屏幕上的 2D 椭圆，按深度排序后做前到后的 α 合成（r-alpha），得到目标视角的图像，背景为黑色。渲染图与真实目标帧比较，损失为 MSE 加 0.05 倍的 LPIPS（VGG 版），LPIPS 从第 0 步起就生效（l-loss）。\n\n关键在于梯度的去向。像素颜色对高斯均值可导，均值又等于“光心 + 深度 × 射线”，所以渲染误差会一路传回：深度 → DPT 上采样 → softmax 概率 → U-Net → 代价体里的匹配特征和单目 ViT（后者学习率低 100 倍）。网络从来没见过深度真值，它学会估深度，只是因为深度错了，新视角就渲染不对。这就是论文“反方向”一半的基础（ds12）。\n\n两尺度模型还有一个“中间监督”：第一尺度的深度双线性上采样到全分辨率后，也按每像素一个高斯组装起来，其余参数与最终高斯共用同一份高斯头输出，同样渲染并计算损失，权重为 0.9。这样粗尺度也能得到直接的训练信号，否则它只能通过被 detach 的候选范围间接影响结果。\n\n要注意光度损失约束不到的地方：弱纹理区域里，深度稍微错一点，渲染出来的颜色几乎一样，梯度接近 0；反光区域的颜色随视角变化，与“同一点颜色相同”的假设相矛盾。这些正是单目分支补位的地方。",
+   "analogy_zh": "网络像一个不许看尺子的学徒。每次把自己摆好的小球从另一个机位拍一张照片，和真实照片对比，哪里颜色对不上，就把那里的小球往前或往后挪一点。挪多了，他自然学会了看距离。",
+   "equations": [
+    {
+     "tex": "\\hat I(\\mathbf u)=\\sum_{k}\\mathbf c_k\\,\\alpha'_k(\\mathbf u)\\prod_{j<k}\\big(1-\\alpha'_j(\\mathbf u)\\big),\\qquad \\alpha'_k(\\mathbf u)=\\alpha_k\\exp\\!\\Big(-\\tfrac12(\\mathbf u-\\boldsymbol\\mu'_k)^\\top\\Sigma_k'^{-1}(\\mathbf u-\\boldsymbol\\mu'_k)\\Big)",
+     "explain_zh": "3DGS 的前到后 α 合成。k 为按深度排序的高斯编号；c_k 为按目标视线方向从 SH 求得的颜色；α_k 为网络预测的不透明度；μ'_k 和 Σ'_k 为投影到屏幕的 2D 均值与协方差；u 为目标像素。原版 3DGS 的实现细节（如 0.3 低通、α 上限 0.99）是否被这个修改版保留，未逐行核对。"
+    },
+    {
+     "tex": "\\mathcal L=\\big[\\mathrm{MSE}(\\hat I,I)+0.05\\,\\mathrm{LPIPS}(\\hat I,I)\\big]_{\\text{final}}+0.9\\,\\big[\\mathrm{MSE}+0.05\\,\\mathrm{LPIPS}\\big]_{\\text{coarse}}",
+     "explain_zh": "训练损失（model_wrapper.py:236-333）。I 为目标帧真值，Î 为渲染结果；final 项由最终深度生成的高斯渲染，coarse 项由第一尺度深度生成的高斯渲染，只有两尺度模型才有。若有多级中间尺度，权重为 0.9^(n−i)。损失中没有任何深度项。"
+    }
+   ],
+   "numbers_zh": "MSE 权重 1.0，LPIPS 权重 0.05（VGG），apply_after_step=0（覆盖了 config/loss/lpips.yaml 默认的 150_000）；中间尺度权重 0.9；背景为黑色 [0,0,0]。训练目标视角数：RE10K 为 4（bounded_re10k.yaml），DL3DV 微调为 8（训练脚本）。评测指标：PSNR（先 clip 到 [0,1]）、SSIM（skimage，窗口 11，高斯权重）、LPIPS（VGG），先对每个场景的目标取平均，再对场景取平均。",
+   "why_design_zh": "只用渲染损失，才能在没有深度标注的海量带位姿视频上训练，这也是“GS 作为深度预训练”的前提。LPIPS 鼓励锐利的细节。中间监督给粗尺度提供直接信号。以上设置基本继承自 pixelSplat 和 MVSplat（它们的 re10k 配置同为 MSE×1 加 LPIPS×0.05）。没有采用的方案有：加入深度监督（仓库未提供）；加入深度平滑项或多视角几何一致性项。",
+   "pitfalls_zh": "（1）中间尺度的高斯与最终高斯共用同一份外观参数（opacity、scale、SH），只是深度不同，并不是另一套独立的高斯。（2）中间尺度只在训练时存在：mv_unimatch.py 只在 self.training 为真时才把粗深度加入列表。（3）LPIPS 的配置文件默认从 150K 步才开始生效，但实验配置把它改成了 0；只看 config/loss/lpips.yaml 会误判。（4）黑背景意味着目标视野中没有被任何高斯覆盖的区域会被渲染成黑色并受到惩罚，这会促使网络放大边缘高斯的 scale。",
+   "concept_ids": [
+    "r-raster",
+    "r-alpha",
+    "l-loss",
+    "a-diff-render",
+    "v-metrics"
+   ],
+   "check_q_zh": "为什么只有渲染损失也能教会网络估计深度？请举出两类它教不会的区域，并说明 DepthSplat 用什么来弥补。",
+   "check_a_zh": "像素的高斯中心由深度决定。深度错了，这个高斯在目标视角中就会落到错误的位置，与真实颜色不一致，产生损失，梯度通过光栅化和均值传回深度，推动它往正确方向移动。教不会的区域有两类：（1）弱纹理区域，深度在一定范围内变化，渲染出来的颜色都差不多，梯度很小；（2）反光或透明区域，颜色随视角变化，光度一致的假设不成立，梯度方向甚至是错的。此外，在目标视角中被遮挡的点也收不到梯度。DepthSplat 用单目 ViT 特征提供的形状先验来弥补这些区域，这正是双分支设计的出发点。"
+  },
+  {
+   "id": "ds10",
+   "title_zh": "训练设定：AdamW，主体学习率 2e-4、ViT 学习率 2e-6，OneCycle 调度 150K 步，4 张 GH200，总 batch 32",
+   "paper_ref": "论文实现细节段与补充材料中的训练设置（经检索部分核对）；代码 config/main.yaml、config/experiment/re10k.yaml、dl3dv.yaml；scripts/re10k_depthsplat_train.sh、dl3dv_depthsplat_train.sh；src/model/model_wrapper.py:1074-1128；src/main.py:135-203；src/dataset/view_sampler/view_sampler_bounded.py、view_sampler_bounded_v2.py；README “Training”",
+   "what_zh": "输入：RE10K（或 DL3DV）的训练样本，每个样本含 context 与 target 的图像、位姿和 near/far。输出：训练好的全部权重。一步的流程为：采样 → patch shim 裁剪 → 前向（ds2–ds8）→ 渲染（ds9）→ 损失 → 梯度裁剪 → AdamW 更新 → 学习率调度。",
+   "plain_zh": "先看数据怎么采（f-optim、l-loss）。RE10K 每个样本取两张输入帧，帧间隔在 45–135 之间随机；前 30K 步从 25–45 帧线性放宽到这个范围，先易后难。目标取 4 帧，落在两张输入帧之间；以 50% 概率把整个样本做水平翻转，外参也同步镜像。DL3DV 的输入帧间隔为 20–50 帧，前 10K 步从 15–30 帧放宽；输入视角数在 2–6 之间随机，额外视角按最远点采样；视角少时，间隔按 max_views//n 缩小。\n\n再看初始化和优化。多视角部分（CNN 与 Transformer）载入 GMFlow 的 gmflow-scale1-things 权重，单目部分载入 Depth Anything V2 的权重，其余从头训练。优化器是 AdamW，weight decay 0.01，参数分两组：ViT 用 2e-6，其余用 2e-4。调度是 PyTorch 的 OneCycleLR：前 1% 的步数（150K 步时约 1.5K 步）从最大学习率的 1/25 按余弦升到最大值，之后余弦衰减到最大值的 1/(25×10⁴)。梯度裁剪阈值 0.5。\n\n最后是算力。RE10K 256×256 的 small、base、large 都在 4 张 GH200（96 GB）上训练 150K 步，每卡 batch 8，总 batch 32。README 说只要“卡数 × batch × 步数”不变，换成 4 张 4090 或 1 张 A100 的结果相差不超过 0.1 dB。DL3DV 模型分两阶段。第一阶段在 RE10K 256×448 上训练，脚本写的是 8 节点 × 4 卡 × batch 8，总 batch 256，150K 步，比 256×256 模型大了一个量级。第二阶段在 DL3DV 上训练 100K 步，8 卡，每卡 batch 1，随机 2–6 视角。高分辨率 448×768 模型在此基础上，用 RE10K 与 DL3DV 的混合数据继续训练。",
+   "analogy_zh": "像培训一个新员工。一位资深专家（ViT）只做微调，学习率低；新人部分（代价体、U-Net、高斯头）学习率高。课程由易到难：先练相邻很近的两帧，再练相隔很远的两帧。",
+   "equations": [
+    {
+     "tex": "\\eta(t)=\\begin{cases}\\eta_{\\max}\\Big[\\tfrac1{25}+\\big(1-\\tfrac1{25}\\big)\\tfrac{1-\\cos(\\pi t/T_w)}{2}\\Big], & t\\le T_w\\\\[4pt] \\eta_{\\min}+(\\eta_{\\max}-\\eta_{\\min})\\tfrac{1+\\cos\\left(\\pi\\frac{t-T_w}{T-T_w}\\right)}{2}, & t>T_w\\end{cases}",
+     "explain_zh": "OneCycleLR（anneal_strategy='cos'，PyTorch 默认 div_factor=25、final_div_factor=10⁴）。T 为总步数（max_steps+10）；T_w=0.01·T，150K 步时约 1.5K；η_max 对 ViT 组为 2e-6，对其余参数为 2e-4；η_min=η_max/(25×10⁴)。按 PyTorch 实现改写，论文未给出公式。"
+    },
+    {
+     "tex": "N_{\\text{samples}}=N_{\\text{gpu}}\\times b\\times T:\\quad 4\\times8\\times150\\text{K}=4\\times4\\times300\\text{K}=1\\times8\\times600\\text{K}=4.8\\text{M}",
+     "explain_zh": "README 给出的等价训练配置：总样本数 N_samples = 卡数 N_gpu × 每卡 batch b × 步数 T。4×GH200、4×4090、1×A100 三种配置的样本总数相同，均为 4.8M；README 称 PSNR 差异不超过 0.1 dB。"
+    }
+   ],
+   "numbers_zh": "lr：2e-4（主体），2e-6（ViT）；weight decay 0.01；OneCycle pct_start 0.01；梯度裁剪 0.5；RE10K：150K 步，4×GH200，每卡 batch 8；RE10K 输入间隔 45–135 帧（warm-up 30K 步，从 25–45 开始），每个样本 4 个目标。DL3DV：第一阶段 32 卡×batch 8，150K 步；第二阶段 8 卡×batch 1，100K 步，视角 2–6，目标 8。检索摘要称 RE10K 训练约 1 天（small）或 2 天（large），另有“8 张 GH200，约 1 天”的写法，版本不明。配置中的 warm_up_steps: 2000 没有被读取。",
+   "why_design_zh": "给预训练 ViT 设一个很低的学习率，是在“适应新任务”和“保留先验”之间折中。OneCycle 自带短 warmup 和余弦退火，对大 batch 训练比较稳。输入间隔的课程式放宽，让网络先学会小视差的匹配，再面对大视差。没有采用的方案有：冻结 ViT（论文未给出对比）；ViT 用全学习率；固定间隔采样。",
+   "pitfalls_zh": "（1）想冻结 ViT，不能把 optimizer.lr_monodepth 设为 0。model_wrapper.py 中的判断是 “if lr_monodepth > 0” 才分组，等于 0 时所有参数（包括 ViT）都会用 2e-4 训练，效果与冻结正好相反；真正冻结要给这些参数设 requires_grad=False。（2）config/main.yaml 中的 warm_up_steps 是无效字段。（3）DL3DV 第二阶段脚本引用的 checkpoint 名（…-76a0605a.pth）与 MODEL_ZOO 发布的（…-fea94f65.pth）不一致，照抄脚本会找不到文件。（4）减少 GPU 数量时，要按 README 的等式同步增加步数；只改 batch 不改步数，会少训练很多样本。",
+   "concept_ids": [
+    "f-optim",
+    "l-loss",
+    "a-ff-3dgs"
+   ],
+   "check_q_zh": "有人想做“冻结单目 ViT”的消融，于是在命令行里加了 optimizer.lr_monodepth=0。实际发生了什么？应该怎么改？",
+   "check_a_zh": "configure_optimizers 中，只有 lr_monodepth>0 时才把参数分成两组。设为 0 后走 else 分支，所有参数放在同一组，学习率都是 2e-4，ViT 反而被全速训练，与“冻结”正好相反，还可能冲掉预训练特征。正确做法是在构建模型后，把名字含 “pretrained” 的参数设为 requires_grad=False，或者在优化器里把这组参数排除掉，并确认 ViT 的前向处于 eval 模式（没有 dropout）。"
+  },
+  {
+   "id": "ds11",
+   "title_zh": "扩展到更多视角与更高分辨率：每个视角只配 2 个最近邻，12 张 512×960 输入约 0.6 s 完成重建",
+   "paper_ref": "论文 DL3DV 多视角实验（README 标注为 Table 7）与补充材料中的高分辨率结果；代码 encoder_depthsplat.py:151-170（local_mv_match、nn_matrix）；mv_transformer.py（batch_features、batch_features_camera_parameters 的 nn_matrix 分支）；ldm_unet/unet.py（跨视角自注意力）；README “Rendering Video” 命令；MODEL_ZOO（448×768，randview 2–6 与 4–10）",
+   "what_zh": "以 V=12、512×960 为例。先计算光心距离矩阵 cdist [B,12,12]，对每行 argsort 取前 3 列得到 nn_matrix [B,12,3]，即自身加 2 个邻居。之后的 cross-attention 与代价体都只用这 2 个邻居，warp 批大小为 12×2=24。U-Net 的跨视角注意力仍然覆盖全部 12 个视角。输出 12×512×960=5,898,240 个高斯。",
+   "plain_zh": "像素对齐方法扩展到更多视角时，有两处开销会膨胀：一是匹配，每个视角要和其他所有视角比较，随 V² 增长；二是高斯数量，随 V×H×W 线性增长。DepthSplat 用一个简单规则处理第一处：V>3 时，按相机光心的欧氏距离，为每个视角只选最近的 2 个视角，多视角 Transformer 的 cross-attention 和代价体都只和它们计算。于是匹配开销变成对 V 线性（a-ff-3dgs）。训练时随机 2–6 或 4–10 个视角，让网络适应不同的视角数。U-Net 中的跨视角自注意力没有被限制，仍是全视角，但它位于下采样 4 或 8 倍的层级，token 很少。\n\n第二处，高斯数量，DepthSplat 没有处理：12 张 512×960 就是约 590 万个高斯，多个视角重叠的区域会各生成一份。README 的高分辨率命令还有两个值得注意的改动：把最低分辨率设为 1/8（lowest_feature_resolution=8），降低代价体的分辨率：12 视角示例用的 small 模型只有 1/8 这一个尺度，再由 DPT 上采样 8 倍；6 视角示例用的 base 模型为 1/8 加 1/4 两个尺度；gaussian_scale_max 从 3 改为 0.1，限制高斯的最大尺寸，避免远处或边缘的高斯被拉得太大。\n\n速度方面，README 给出 12 张 512×960 输入约 0.6 s（单张 A100），相当于不到 2 fps，适合离线或交互式预览，谈不上视频实时。其中占比最大的，很可能是 ViT（每张 2448 个 token）和 1/8 分辨率上 128 个候选的代价体。按形状估算，warp 后的特征张量约有 30 亿个数，fp32 约 12 GB；这是估算，并未实测。",
+   "analogy_zh": "一个大会议室里坐着 12 个人，每人只和左右两个邻座核对笔记（局部匹配），而不是和所有人两两核对。最后主持人再在全场快速广播一次（U-Net 全视角注意力），但只念提纲（低分辨率 token）。",
+   "equations": [
+    {
+     "tex": "\\mathcal N(i)=\\underset{j\\ne i}{\\mathrm{arg\\,top}_k}\\ \\big(-\\lVert\\mathbf o_i-\\mathbf o_j\\rVert_2\\big),\\quad k=2\\ \\ (V>3)",
+     "explain_zh": "邻居选择（encoder_depthsplat.py:151-159）。o 为相机光心，即外参的平移列；只看距离，不看朝向和视锥重叠。V≤3 时 N(i) 为其余全部视角。"
+    },
+    {
+     "tex": "\\text{cost}_{\\text{match}}\\propto V\\,k\\left(\\frac{(hw)^2}{s^2}+D\\,hw\\,C\\right),\\qquad \\text{cost}_{\\text{U-Net attn}}\\propto (V\\,h'w')^2,\\qquad N_G=V\\,H\\,W",
+     "explain_zh": "粗略的复杂度，按代码结构推导。h、w 为主尺度特征图尺寸；s²=4 为窗口数；D=128 为候选数；C=128 为通道数；h'w' 为 U-Net 注意力层每个视角的 token 数，small 在 RE10K 上为 16×16，DL3DV 在 512×960 时为 16×30；N_G 为高斯数。匹配部分对 V 线性，U-Net 注意力对 V 是平方关系，但 h'w' 很小。"
+    }
+   ],
+   "numbers_zh": "local_mv_match=2。README 示例：RE10K 720p 子集，6 视角 512×960（base，gaussian_scale_max=0.1）；DL3DV，12 视角 512×960（small，upsample_factor 8，lowest 8，gaussian_scale_max=0.1），约 0.6 s（A100）。高斯数：6×256×448=688,128；12×512×960=5,898,240。ViT token 数：512×960 缩放为 504×952，每视角 36×68=2448 个。训练视角数：DL3DV 256×448 模型为 2–6，448×768 small 为 4–10，base 为 2–6（MODEL_ZOO）。",
+   "why_design_zh": "局部匹配以很小的精度代价换来线性扩展。相邻视角通常重叠最多、视差最小，匹配也最可靠（这是我们的解读）。在低分辨率上保留全视角注意力，可以让远处的视角也交换一些全局信息。没有采用的方案有：全视角两两匹配（V=12 时每个视角要匹配 11 个）；按视锥重叠或视线夹角选邻居；跨视角合并或剔除重复的高斯（留给了 FreeSplat、ReSplat 等工作）。",
+   "pitfalls_zh": "（1）只按光心距离选邻居。在环绕式相机阵列里，光心很近但朝向相反的相机会被选中，真正共视的相机反而被漏掉。（2）训练时随机的视角数上限只有 6 或 10，推理时用 12 视角属于外推，论文只给出了定性结果。（3）高斯数随视角数线性增长，而且没有去重，多视角重叠区域会有多层几乎重合的高斯。（4）README 中的高分辨率命令同时改动了多个超参（scale 上限、尺度数、上采样倍数），套用到自己的数据时要逐项核对。",
+   "concept_ids": [
+    "a-ff-3dgs",
+    "d-mvs",
+    "l-attention",
+    "g-rig",
+    "a-compression"
+   ],
+   "check_q_zh": "一个相机阵列中，参考相机旁边有两台候选：A 与它光心相距 0.3 m，但朝向相反（背对背）；B 相距 0.8 m，几乎与它同向。按 DepthSplat 的规则会选谁？后果是什么？应该怎么改？",
+   "check_a_zh": "规则只看光心距离，会优先选 A。A 与参考相机没有共视区域，把它的特征 warp 过来，要么越界得 0，要么对上毫不相关的内容，代价体几乎没有信息，深度只能靠单目分支，多视角一致性变差；B 这个真正的好邻居可能被挤出前 2 名。改进办法是按视锥重叠、光轴夹角或二者的组合打分来选邻居，在固定阵列中也可以直接预先指定邻接表。"
+  },
+  {
+   "id": "ds12",
+   "title_zh": "反方向：把高斯渲染损失当作深度的无监督预训练，再用 GT 深度微调（在 ScanNet、TartanAir、KITTI 上评测）",
+   "paper_ref": "论文“Gaussian splatting 用于深度的无监督预训练”实验，以及 ScanNet 两视角深度对比表（表号未能核对）；README Fig. 1 右半与 “Depth Prediction” 段；MODEL_ZOO “Depth Prediction”；scripts/inference_depth.sh；encoder_depthsplat.py:178-207（train_depth_only 分支）；model_wrapper.py:478-525（forward_depth_only 推理与保存深度）",
+   "what_zh": "阶段 A：在 RE10K（以及 DL3DV）上只用渲染损失训练整个 DepthSplat，得到深度分支的权重 θ_d⁰。阶段 B：以 θ_d⁰ 为初始化，在有真值的深度数据上微调深度分支；发布的模型用 ScanNet、TartanAir、VKITTI2，352×640，视角数 2–8。推理只运行深度分支，输出 [B,V,H,W] 的深度，尺度与位姿的平移尺度一致。",
+   "plain_zh": "前面 11 步讲的是“深度帮助高斯”，这一步讲“高斯帮助深度”（d-mono、d-mvs、l-loss）。ds9 说明，DepthSplat 的深度分支在训练中从来没有见过深度真值，只靠“把新视角渲染对”学会了估深度。反过来看，这就是一种自监督：只要有带位姿的多视角视频，就能训练深度网络，完全不需要深度标注。RE10K 这类视频数量多、获取便宜，而带稠密深度真值的数据（ScanNet、TartanAir、KITTI）要么采集贵，要么是合成的。\n\n论文的受控实验是这样设计的：先在 RE10K 上只用 GS 渲染损失预训练，再在 TartanAir 与 VKITTI2 的混合数据上用真值深度微调，然后在 TartanAir（域内）、ScanNet 和 KITTI（零样本）上评测。对照组有两类：随机初始化，以及用 Depth Anything、UniMatch 这类有监督预训练的权重初始化。据检索摘要，GS 预训练在各项指标上都有提升，在难度较大的 TartanAir 和 KITTI 上最明显；作者的解释是，预训练起到了正则作用，把优化引向更好的极小值。另外，在 ScanNet 两视角深度上，DepthSplat 的 Abs Rel 约为 0.04，明显低于 UniMatch 的 0.059 和 DeepV2D 的 0.057。\n\n这里的“无监督”只是指预训练阶段不用深度标签，位姿还是需要的，而且最终的深度模型仍然经过真值微调。深度的尺度由位姿决定：代价体用真实位姿做 warp，高斯要和位姿对齐才能渲染对，所以 MODEL_ZOO 说预测深度的尺度“与相机位姿平移的尺度一致”。遗憾的是，仓库只能用发布的深度权重推理（scripts/inference_depth.sh），阶段 B 的数据处理、深度损失和评测代码都没有开源。",
+   "analogy_zh": "像学开车时先在模拟器里练。模拟器（渲染损失）不会告诉你“离前车 12.3 米”，但只要你判断错距离就会“撞车”（渲染错误），练多了自然有了距离感。之后再上真车，由教练拿着测距仪（GT 深度）纠正几次，就比从零学起快得多，也更稳。",
+   "equations": [
+    {
+     "tex": "\\theta^{0}=\\arg\\min_{\\theta_d,\\theta_g}\\ \\mathbb E_{(I_{\\text{ctx}},I_{\\text{tgt}},\\mathbf E)}\\Big[\\mathcal L_{\\text{render}}\\big(\\mathcal R(\\mathcal G_{\\theta_g}(\\mathcal D_{\\theta_d}(I_{\\text{ctx}},\\mathbf E)),\\mathbf E_{\\text{tgt}}),\\ I_{\\text{tgt}}\\big)\\Big]",
+     "explain_zh": "阶段 A 的目标（按论文思路写成公式）。𝒟_θd 为深度分支，即 ds2–ds7；𝒢_θg 为高斯头，即 ds8；ℛ 为光栅化；E 为位姿；ℒ_render 为 ds9 中的 MSE+LPIPS。阶段 B 取 θ^0 中的 θ_d 作为初始化，用深度损失微调，深度损失的具体形式未开源，论文细节也未能核对。"
+    },
+    {
+     "tex": "\\mathrm{AbsRel}=\\frac1N\\sum_{\\mathbf p}\\frac{|z(\\mathbf p)-z^*(\\mathbf p)|}{z^*(\\mathbf p)},\\qquad \\delta_1=\\frac1N\\sum_{\\mathbf p}\\Big[\\max\\Big(\\tfrac{z}{z^*},\\tfrac{z^*}{z}\\Big)<1.25\\Big]",
+     "explain_zh": "常用的深度指标。z 为预测深度，z* 为真值，N 为有效像素数；AbsRel 越低越好，δ1 越高越好。论文表格常把 AbsRel 乘以 100 再报告，读数时要注意单位，例如 5.9 表示 0.059。"
+    }
+   ],
+   "numbers_zh": "ScanNet 两视角深度 Abs Rel 基线：DeMoN 0.231，DeepV2D 0.057，UniMatch 0.059。DepthSplat 约为 0.04 量级；不同检索摘要分别给出 0.044，以及“无 GS 预训练 0.045、有 GS 预训练 0.038”，可能对应不同的论文版本，未能核对。发布的深度模型：small 36M，base 111M，训练分辨率 352×640，视角数 2–8，训练数据为 ScanNet、TartanAir、VKITTI2（MODEL_ZOO）。推理示例：RE10K 2 视角或 6 视角 352×640，DL3DV 12 视角 512×960（scripts/inference_depth.sh）。",
+   "why_design_zh": "带深度真值的数据稀缺，带位姿的视频却很多；可微的高斯渲染把“位姿 + 图像”变成了深度的训练信号。与传统的自监督单目深度（通过前后帧 warp 做光度重建）相比，这里的监督来自多视角新视角渲染，并且位姿已知，没有尺度和位姿估计的耦合问题（这是我们的解读）。没有采用的方案有：直接用 Depth Anything 或 UniMatch 的有监督权重初始化再微调（作为对照，效果较差）；只用合成数据训练深度。",
+   "pitfalls_zh": "（1）“无监督”只是指预训练不用深度标签，需要位姿，最终模型也用了真值微调，不是端到端无监督的深度估计。（2）阶段 B 的代码没有开源，只能复现推理，不能复现论文里的深度实验。（3）ScanNet 的数字在不同版本之间不一致，引用时应以论文最新版为准，并注明版本。（4）深度尺度跟随位姿，给它尺度任意的 SfM 位姿，输出深度的尺度也是任意的；与公制深度比较前，需要先对齐尺度，或使用公制位姿。",
+   "concept_ids": [
+    "d-mono",
+    "d-mvs",
+    "l-loss",
+    "v-metrics",
+    "a-geo-fm"
+   ],
+   "check_q_zh": "为什么说 DepthSplat 的深度“尺度与位姿的平移一致”？这对“在 RE10K 上预训练、再在公制数据上微调”意味着什么？",
+   "check_a_zh": "代价体用输入的位姿把邻居特征 warp 到候选深度上，高斯也要按这些深度放在世界坐标里，才能在目标位姿下渲染对。如果位姿的平移整体放大 2 倍，只有深度也放大 2 倍，匹配和渲染才会同样正确，所以深度尺度是由位姿“借”来的。RE10K 的位姿来自 SLAM/SfM，各场景尺度任意，预训练学到的是“按位姿给出一致尺度的深度”，而不是绝对的公制常识。到了带公制位姿和真值深度的数据上微调时，网络不需要重新学习尺度的来源，只要位姿是公制的，输出就是公制的。这也是它能直接迁移到 ScanNet、KITTI 的原因之一。"
+  }
+ ],
+ "tensor_trace": [
+  {
+   "stage_zh": "输入（官方默认 small 配置，RE10K 测试，B=1）",
+   "tensor": "context.image / intrinsics / extrinsics / near, far",
+   "shape": "[1,2,3,256,256]；[1,2,3,3]（归一化）；[1,2,4,4]（c2w）；[1,2]，取值 0.5 / 100",
+   "note_zh": "patch shim 要求尺寸是 16 的倍数，256×256 不需要裁剪；训练时 B=8/卡，目标视角为 4。"
+  },
+  {
+   "stage_zh": "邻居矩阵",
+   "tensor": "nn_matrix",
+   "shape": "V=2 时为 None；V=12 时为 [1,12,3]",
+   "note_zh": "V>3 时按光心距离取自身加 2 个最近邻（encoder_depthsplat.py:151-159）。"
+  },
+  {
+   "stage_zh": "CNN 三级特征",
+   "tensor": "features_cnn_all_scales",
+   "shape": "[2,64,128,128]、[2,96,128,128]、[2,128,64,64]",
+   "note_zh": "BV=2。lowest_feature_resolution=4 时 layer2 的步长为 1，主尺度为 1/4（实测形状，trace.py）。"
+  },
+  {
+   "stage_zh": "多视角 Transformer 输出",
+   "tensor": "F_mv",
+   "shape": "[2,128,64,64]",
+   "note_zh": "6 层 self/cross-attention，2×2 窗口，每个窗口 32×32=1024 个 token。"
+  },
+  {
+   "stage_zh": "逆深度候选",
+   "tensor": "depth_candidates x_d",
+   "shape": "[2,128,1,1]，在 [0.01, 2.0] 上 linspace",
+   "note_zh": "第一尺度所有像素共用同一组候选；base 的第二尺度为逐像素 [2,32,128,128]。"
+  },
+  {
+   "stage_zh": "warp 后的邻居特征",
+   "tensor": "warped_tgt_features",
+   "shape": "[2,128(C),128(D),64,64]",
+   "note_zh": "批维 = BV×邻居数 = 2×1；约 1.34 亿个数，fp32 约 537 MB（按形状估算）。"
+  },
+  {
+   "stage_zh": "代价体",
+   "tensor": "cost_volume 𝒞",
+   "shape": "[2,128,64,64]",
+   "note_zh": "点积 /√128 后对邻居取平均，D=128 作为通道。"
+  },
+  {
+   "stage_zh": "单目 ViT 中间层",
+   "tensor": "mono_intermediate_features",
+   "shape": "输入 [2,3,252,252] → 4×[2,324,384] → 4×[2,384,32,32]",
+   "note_zh": "ViT-S 取第 2、5、8、11 层，18×18 个 token，插值到 1/8；最后一层再上采样到 [2,384,64,64] 参与拼接。"
+  },
+  {
+   "stage_zh": "拼接后送入 U-Net",
+   "tensor": "concat → regressor",
+   "shape": "[2,768,64,64] → [2,128,64,64]",
+   "note_zh": "768=128（代价体）+128（CNN）+128（MV）+384（单目）；base 为 1152。U-Net 在 16×16 层做跨视角注意力，序列长度为 2×256。"
+  },
+  {
+   "stage_zh": "深度头与 softmax",
+   "tensor": "match_prob P, x̂",
+   "shape": "P：[2,128,64,64]；x̂：[2,1,64,64]",
+   "note_zh": "x̂=Σ P_d x_d；m=max_d P_d，最近邻上采样后为 [2,1,256,256]。"
+  },
+  {
+   "stage_zh": "DPT 深度上采样",
+   "tensor": "residual r → depth z",
+   "shape": "r：[2,1,256,256]；z：[1,2,256,256]（单位同位姿）",
+   "note_zh": "x=clamp(Up×4(x̂)+r, 0.01, 2.0)，z=1/x。"
+  },
+  {
+   "stage_zh": "高斯特征上采样",
+   "tensor": "features",
+   "shape": "[2,64,256,256]",
+   "note_zh": "第二个 DPT 头（return_feature=True）；base 为 96 通道，large 为 128 通道。"
+  },
+  {
+   "stage_zh": "高斯头",
+   "tensor": "gaussian_regressor → gaussian_head",
+   "shape": "[2,69,256,256] → [2,64,256,256]；[2,132,256,256] → [2,37,256,256]",
+   "note_zh": "69=3+1+1+64；132=64+3+64+1；37=1+2+3+4+27。"
+  },
+  {
+   "stage_zh": "高斯集合",
+   "tensor": "Gaussians(means, covariances, harmonics, opacities)",
+   "shape": "[1,131072,3]、[1,131072,3,3]、[1,131072,3,9]、[1,131072]",
+   "note_zh": "131072=2×256×256，每像素 1 个；协方差与 SH 已转到世界坐标系。"
+  },
+  {
+   "stage_zh": "渲染输出",
+   "tensor": "output.color",
+   "shape": "[1,3,3,256,256]（RE10K 评测时每个场景 3 个目标）",
+   "note_zh": "训练时为 [8,4,3,256,256]；PSNR、SSIM、LPIPS 先对 3 个目标取平均，再对场景取平均。"
+  }
+ ],
+ "reading_experiments": [
+  {
+   "item": "RE10K 主表（README 标注 Table 1；2 视角，256×256）",
+   "how_to_read_zh": "三列分别是 PSNR、SSIM、LPIPS，同时看参数量和耗时两列。DepthSplat 27.47/0.889/0.114，MVSplat 26.39/0.869/0.128，pixelSplat 25.89/0.858/0.142。+1.08 dB 相当于 MSE 降到约 0.78 倍。DepthSplat 这一行对应的是 354M 参数、0.080 s 的大模型，MVSplat 是 12M、0.044 s。评测索引与 pixelSplat、MVSplat 逐字节相同，所以这一栏的横向比较是公平的。",
+   "takeaway_zh": "在相同协议下，DepthSplat 的质量确实领先。但这个领先是“多 30 倍参数、慢约 2 倍”换来的，比较中没有控制模型规模。README 还提醒，camera-ready 版重训后，数字可能与论文略有出入。"
+  },
+  {
+   "item": "模型变体表（S/B/L 骨干 × 1 尺度/2 尺度）",
+   "how_to_read_zh": "按两个维度读：同一骨干下 1 尺度与 2 尺度的差别，以及同一尺度数下 S、B、L 的差别。同时看深度指标和 PSNR 是否同向变化。据检索摘要，这两个维度都“同时改善深度和新视角合成”；大模型为 354M、0.080 s。S 和 B 的逐项数字未能核对。",
+   "takeaway_zh": "这张表支持了论文的中心论点：深度越好，渲染越好，两者同向变化。它也说明，大部分增益可以通过加大单目骨干获得，这就把“成本”问题摆到了台面上。"
+  },
+  {
+   "item": "DL3DV 多视角表（README 标注 Table 7；2/4/6 视角，256×448）",
+   "how_to_read_zh": "PSNR：2 视角 19.31 对 17.54，4 视角 23.12 对 21.63，6 视角 24.19 对 22.93；6 视角 SSIM/LPIPS 为 0.823/0.147 对 0.775/0.193。领先幅度随视角增多而缩小：1.77 → 1.49 → 1.26 dB。还要看评测索引：输入取前 50 帧中的几帧，目标是全部 50 帧，其中包括输入帧本身，6 视角时占 12%。",
+   "takeaway_zh": "视角越少，单目先验越有用，这一趋势符合论文的动机。绝对分数被“目标里含输入帧”抬高了，不能与其他协议下的 DL3DV 分数直接比较。这些数字来自检索摘要，对应的论文版本未能确认。"
+  },
+  {
+   "item": "零样本泛化表（README 标注 Table 8；RE10K → ACID / DL3DV）",
+   "how_to_read_zh": "先看评测设定：DL3DV 零样本输入为第 0 帧和第 9 帧，目标为第 1、3、5、7 帧，基线很短。检索摘要给出 DL3DV 上 DepthSplat 27.66、MVSplat 24.14，ACID 数值未得到。",
+   "takeaway_zh": "短基线加插值的设定对所有方法都相对容易，差距主要反映深度的鲁棒性。单目先验来自大规模多样数据，对跨域泛化有利，这一点符合预期。但数字未能与原表核对，引用时要谨慎。"
+  },
+  {
+   "item": "分支消融（完整、去单目、去代价体）",
+   "how_to_read_zh": "完整模型 8.46/26.84/0.878/0.122（Abs Rel/PSNR/SSIM/LPIPS）；去掉单目 12.25/26.04/0.864/0.134；去掉代价体 11.34/23.24/0.766/0.184。注意消融用的完整模型只有 26.84，低于主表的 27.47，说明消融用的是较小的配置。",
+   "takeaway_zh": "两路都不可少，而且作用不同。去掉代价体后深度指标（11.34）反而比去掉单目（12.25）稍好，PSNR 却暴跌 3.6 dB，说明新视角合成要的是多视角一致，而不只是单视角看起来合理的深度。这是全文最有说服力的一张表。"
+  },
+  {
+   "item": "单目骨干消融（DA-V2、DA-V1、DINOv2、MiDaS、ConvNeXt-T）",
+   "how_to_read_zh": "PSNR 依次为 26.84、26.76、26.76、26.46、26.11。DINOv2（自监督，没有深度训练）与 DA-V1 持平，只比 DA-V2 低 0.08 dB；ConvNeXt-T 低 0.73 dB。",
+   "takeaway_zh": "收益主要来自“大规模预训练的 ViT 表征”，深度任务的专门训练只锦上添花。实际使用时，任何强大的视觉基础模型都可以当作单目分支，这对未来换用 DINOv3 或 VGGT 等骨干有指导意义。"
+  },
+  {
+   "item": "ScanNet 两视角深度表",
+   "how_to_read_zh": "Abs Rel 通常乘以 100 报告：DeMoN 23.1，DeepV2D 5.7，UniMatch 5.9，与 UniMatch 论文一致。DepthSplat 约为 4，检索摘要中有 4.4，也有 4.5（无 GS 预训练）与 3.8（有 GS 预训练），可能对应不同版本。",
+   "takeaway_zh": "在经典的两视角深度基准上，“单目 + 多视角”比纯多视角的 UniMatch 明显更好，说明 DepthSplat 的深度分支本身就是一个有竞争力的多视角深度模型，而不只是 GS 的附属。具体数值以论文最新版为准。"
+  },
+  {
+   "item": "GS 无监督预训练实验（TartanAir 域内；ScanNet、KITTI 零样本）",
+   "how_to_read_zh": "看三组初始化：随机、Depth Anything/UniMatch 有监督权重、RE10K 上的 GS 渲染预训练。它们都在 TartanAir+VKITTI2 上以相同设置微调。据检索摘要，GS 预训练在所有指标上最好，TartanAir 与 KITTI 上最明显。",
+   "takeaway_zh": "“只用渲染损失”能学到可迁移的深度知识，这是论文标题中“连接”的另一半证据。由于代码没有开源、数值未能核对，这一结论目前只能作为定性参考。"
+  },
+  {
+   "item": "速度与规模（README：12 视角 512×960 约 0.6 s；模型变体表：大模型 2 视角约 0.080 s）",
+   "how_to_read_zh": "区分“重建”（编码器前向）和“渲染”（光栅化）。benchmarker 分开计时：编码器按场景计，解码器按视角计。0.6 s 指重建；12×512×960 约 590 万个高斯的渲染另计。",
+   "takeaway_zh": "DepthSplat 的重建是“秒级以内”，适合交互式应用，但不是视频实时。瓶颈在 ViT 和高分辨率代价体，想用于 3D 临场，需要换小模型、降分辨率，并跨帧复用特征。"
+  }
+ ],
+ "tradeoffs": [
+  {
+   "choice_zh": "并联一个大型单目 ViT 分支（DA-V2），而不是只做多视角匹配",
+   "gain_zh": "弱纹理、反光、遮挡、单视角可见区域的深度更好；RE10K +1.08 dB，DL3DV 2 视角 +1.77 dB；跨域泛化更好",
+   "cost_zh": "参数从 12M 增到 38M（S）至 354M（L），其中 ViT 占 57%–86%；推理变慢，大模型约为 MVSplat 的 1.8 倍；构建依赖 torch.hub"
+  },
+  {
+   "choice_zh": "用通道拼接融合两路特征，而不是做显式尺度对齐或注意力融合",
+   "gain_zh": "实现简单，网络自己学逐像素的信任权重；据检索摘要，效果优于更复杂的方案",
+   "cost_zh": "可解释性差，无法直接读出“这里信了哪一路”；单目与多视角冲突时没有显式的仲裁机制"
+  },
+  {
+   "choice_zh": "逆深度均匀 128 个候选 + softmax 期望 + 可选的第二尺度",
+   "gain_zh": "可微，精度可以细于候选间隔；近处采样密；第二尺度以较小代价把深度分辨率提高一倍",
+   "cost_zh": "near/far 按数据集写死；远处间隔很粗（10 m 处约 1.6 m）；多峰分布取期望会产生飞点；粗尺度的大错误细尺度救不回来"
+  },
+  {
+   "choice_zh": "每像素一个高斯，不做跨视角合并",
+   "gain_zh": "结构简单，与深度一一对应；渲染时可以复用任意多次",
+   "cost_zh": "高斯数等于 V×H×W，12×512×960 时约 590 万个；重叠区域冗余，对存储、传输和渲染都不友好（ReSplat 后来把数量压到 1/16）"
+  },
+  {
+   "choice_zh": "只用渲染损失训练，不用深度监督",
+   "gain_zh": "可以使用海量无深度标注的带位姿视频；同一个过程就是深度的无监督预训练",
+   "cost_zh": "弱纹理、反光区域的深度缺乏约束，只能依赖单目先验；深度边缘的精度没有直接监督"
+  },
+  {
+   "choice_zh": "ViT 以 2e-6 微调，而不是冻结或全速训练",
+   "gain_zh": "既保留预训练先验，又能适应任务",
+   "cost_zh": "训练时 ViT 仍要反向传播，显存与耗时都大；而且配置接口有陷阱：lr_monodepth=0 会让 ViT 全速训练"
+  },
+  {
+   "choice_zh": "V>3 时只与 2 个最近邻匹配",
+   "gain_zh": "匹配开销对视角数线性，使 12 视角高分辨率可行",
+   "cost_zh": "只看光心距离，环绕阵列中可能选错邻居；远处视角只能通过低分辨率的 U-Net 注意力间接交流"
+  },
+  {
+   "choice_zh": "scale 取绝对世界单位（softplus 加上限），SH 直流项用输入颜色初始化",
+   "gain_zh": "初始即可渲染，训练稳定；颜色直接继承像素",
+   "cost_zh": "高斯大小与场景尺度、分辨率耦合，换分辨率需手调 gaussian_scale_max（3 改为 0.1）；位姿尺度变化时需重新训练或调参"
+  }
+ ],
+ "faq": [
+  {
+   "q_zh": "DepthSplat 和 MVSplat 到底差在哪？是不是“MVSplat + Depth Anything”就完事了？",
+   "a_zh": "主干确实继承自 MVSplat：CNN、多视角 Transformer、逆深度代价体、softmax 深度，再到每像素一个高斯。但改动不止加了一个单目分支，还有：（1）两尺度由粗到细，用于 base/large；（2）用 DPT 头做学习式上采样，而不是双线性；（3）U-Net 中加入跨视角自注意力；（4）不透明度由网络预测，MVSplat 是用匹配概率映射；（5）scale 用绝对世界单位，不再乘深度；（6）SH 从 4 阶降到 2 阶，直流项用输入颜色初始化；（7）near 从 1 改为 0.5。论文的消融只量化了其中的“单目分支”和“骨干种类”。"
+  },
+  {
+   "q_zh": "单目 ViT 是冻结的吗？",
+   "a_zh": "不是。代码把名字含 “pretrained” 的 ViT 参数单独分组，学习率 2e-6，其余参数 2e-4，两组一起训练，论文实现细节中的写法也一致。一些二手综述写成“frozen ViT”，是错的。另外要注意：把 lr_monodepth 设为 0 并不会冻结 ViT，反而会让它用 2e-4 全速训练（见 ds10）。"
+  },
+  {
+   "q_zh": "为什么用单目模型的“特征”，而不直接用它输出的深度图？",
+   "a_zh": "单目深度只是相对深度，尺度未知，而且逐视角不一致，直接用需要先和位姿尺度对齐，对齐本身就容易出错。特征里除了深度线索，还有边界、语义和置信度等信息，交给后续网络，可以逐像素地决定怎么和代价体结合。据检索摘要，作者在附录中比较过“先对齐单目深度尺度再融合”，效果不如拼接特征。"
+  },
+  {
+   "q_zh": "“无监督深度预训练”是说 DepthSplat 不需要任何标注就能估深度吗？",
+   "a_zh": "不是。预训练阶段不需要深度标签，但需要相机位姿，RE10K 的位姿来自 SLAM/SfM；而且论文的深度模型最后都用真值深度微调过（ScanNet、TartanAir、VKITTI2 等）。论文的主张是：用渲染损失在大量带位姿视频上预训练，比随机初始化，甚至比用 Depth Anything、UniMatch 的有监督权重初始化，微调后的效果更好。"
+  },
+  {
+   "q_zh": "输出的深度是米吗？",
+   "a_zh": "深度的尺度跟随位姿的平移尺度。位姿是公制的，深度就是公制；RE10K 的位姿尺度是任意的，深度也是任意尺度。MODEL_ZOO 的原话是 “The scale of the predicted depth is aligned with the scale of camera pose's translation”。另外，这里的深度是 z-depth，不是沿射线的距离。"
+  },
+  {
+   "q_zh": "为什么 RE10K 上 DepthSplat 能比 MVSplat 高 1 dB，而 DL3DV 2 视角时能高 1.8 dB？",
+   "a_zh": "DL3DV 的 2 视角设定基线更大，输入取前 50 帧的第 0 帧和第 49 帧，场景也更复杂，代价体的匹配更容易失败，单目先验能补的地方更多。视角增加到 4、6 时，匹配信息变多，领先幅度缩小到 1.5 和 1.3 dB。这与“单目先验在匹配不足时最有用”的解释一致。"
+  },
+  {
+   "q_zh": "改配置文件里的 num_depth_candidates 或 costvolume_unet_* 为什么没有任何效果？",
+   "a_zh": "这些字段是从 MVSplat 的配置继承来的，DepthSplat 的代码根本没有读取。MultiViewUniMatch 只接收 num_scales、upsample_factor、lowest_feature_resolution、vit_type、unet_channels 等少数参数，候选数 128 是它构造函数的默认值，注意力窗口数也写死为 [2]。要改候选数，需要改代码并重新训练。"
+  },
+  {
+   "q_zh": "每个像素一个高斯，12 张 512×960 就是近 600 万个高斯，会不会很浪费？",
+   "a_zh": "会。多个视角看到同一个表面时，每个视角都会在那里放一层高斯，存储、传输和渲染开销都随视角数线性增长。DepthSplat 没有做去重或合并。后续工作专门解决这个问题：FreeSplat 做跨视角融合，ReSplat 把高斯数量压到 1/16 并做循环细化，LGTM 用带纹理的少量高斯支持 4K。"
+  },
+  {
+   "q_zh": "这篇和站内的 Quark、Ha et al. 是什么关系？",
+   "a_zh": "三者都是已标定、前馈的新视角合成，但取舍不同。Quark 为每个目标视角生成分层深度图，再混合原始像素，单帧画质高，每多一个观看视角就要多算一遍。Ha et al. 用外部立体深度加 TSDF 做几何，强调视角和时间一致，像素级高斯的参数是解析给定的。DepthSplat 学习一个强的深度前端，输出可复用的显式高斯，但不管时间一致性。它的深度分支可以作为 Ha et al. 那种系统的深度前端的候选。"
+  },
+  {
+   "q_zh": "我想在自己的多相机数据上用 DepthSplat，最需要注意什么？",
+   "a_zh": "（1）相机约定：内参按宽高归一化，外参为 OpenCV 的 camera-to-world。（2）near/far 按场景实际范围设定，训练默认是 0.5/100。（3）视角多于 3 个时，检查按光心距离选出的邻居是否真的共视。（4）分辨率变化时，检查 gaussian_scale_max，README 的高分辨率命令用的是 0.1。（5）图像尺寸会被中心裁剪到 16 或 64 的倍数，内参也会随之修正。（6）位姿尺度与 scale 上限耦合，公制位姿下的高斯尺寸需要另行确认。"
+  },
+  {
+   "q_zh": "为什么说 DepthSplat 的评测“偏乐观”？",
+   "a_zh": "RE10K 与 DL3DV 的评测都是插值：目标帧位于输入帧之间。RE10K 的索引中有 3% 的目标帧就是输入帧本身。DL3DV 的 2/4/6 视角索引把前 50 帧全部作为目标，其中 4% 和 12% 是输入帧。这些帧几乎等于复制输入，会抬高所有方法的分数。外推、环绕、远离输入的视角都没有测，而这恰恰是 3D 临场中头显移动时最常遇到的情况。"
+  }
+ ],
+ "exercises": [
+  {
+   "title_zh": "动手算：逆深度候选的间隔与 near/far 的影响",
+   "level": "入门",
+   "task_zh": "用 Python 写一个小函数，按 mv_unimatch.py:419-435 的规则生成 D=128 个逆深度候选。（a）对 RE10K（near 0.5，far 100）和 DL3DV（near 0.5，far 200）分别计算 1 m、2 m、5 m、10 m、30 m 处相邻候选对应的深度间隔。（b）把 near 改为 0.3 或 1.0，重复计算。（c）模拟 base 模型的第二尺度：粗估计为 2.0 m 时，求 32 个细候选覆盖的深度范围，以及 2 m 处的细间隔。",
+   "expected_zh": "RE10K 下，间隔在 1 m 处约 1.6 cm，2 m 处约 6.3 cm，10 m 处约 1.57 m，30 m 处超过 14 m。near 越小，所有距离上的间隔越大。第二尺度在 2 m 附近覆盖约 1.62–2.67 m，细间隔约 3.1 cm。你应该能写出一段结论：固定候选数时，near/far 的取值是在近处范围与各处精度之间做权衡。",
+   "hint_zh": "逆深度 x=1/z，对应的深度间隔约为 Δx·z²。第二尺度的细间隔 Δ1=(x_max−x_min)/127/2，范围是 [x̂−16Δ1, x̂+15Δ1]。",
+   "concept_ids": [
+    "g-depth",
+    "d-mvs"
+   ]
+  },
+  {
+   "title_zh": "读官方资源：统计评测索引中“目标帧就是输入帧”的比例",
+   "level": "入门",
+   "task_zh": "git clone --depth 1 https://github.com/cvg/depthsplat ，读取 assets/ 下的 evaluation_index_re10k.json、dl3dv_start_0_distance_50_ctx_{2,4,6}v_video_0_50.json、dl3dv_start_0_distance_10_ctx_2v_tgt_4v.json。对每个文件统计：有效场景数、每个场景的输入帧与目标帧数量、输入帧间隔的分布，以及目标帧中与输入帧重合的比例。再比较 pixelSplat 或 MVSplat 仓库中的 evaluation_index_re10k.json 与 DepthSplat 的是否相同（可以用 md5sum）。",
+   "expected_zh": "RE10K：6474 个有效场景（共 7194 个键），每个场景 2 个输入、3 个目标，输入间隔 45–136 帧（中位数 58），3.0% 的目标与输入重合；三个仓库中的这个文件 md5 相同。DL3DV：140 个场景，目标为 0–49 全部帧，2/4/6 视角时重合比例分别为 4%、8%、12%。零样本索引的输入为 [0, 9]，目标为 [1, 3, 5, 7]，没有重合。",
+   "hint_zh": "json.load 之后先过滤掉值为 None 的场景。重合比例 = Σ|target ∩ context| / Σ|target|。用 hashlib.md5 或命令行 md5sum 比较文件。",
+   "concept_ids": [
+    "v-metrics"
+   ]
+  },
+  {
+   "title_zh": "不要 GPU：实例化官方模型，打印每一步的张量形状和参数量",
+   "level": "进阶",
+   "task_zh": "在一个虚拟环境中安装 torch（CPU 可用）、einops、jaxtyping、dacite、e3nn。另外 clone facebookresearch/dinov2，把 torch.hub.load 替换为 torch.hub.load(本地dinov2目录, name, source='local', pretrained=False)。对 pytorch_lightning、lpips 等与编码器无关的依赖，可以用空模块代替。用 src/model/encoder/encoder_depthsplat.py 里的 EncoderDepthSplat 分别构建 small（vits，num_scales=1，upsample_factor=4，lowest_feature_resolution=4）、base（vitb，2，2，4）、large（vitl，2，2，4）三种配置。统计总参数量和各子模块参数量；再在 backbone、transformer、regressor、depth_head、upsampler、feature_upsampler、gaussian_head 上注册 forward hook，用随机图像（1×2×3×256×256，相机沿 x 平移 0.1）跑一次前向，打印形状。",
+   "expected_zh": "总参数量约为 38.4M、120.8M、354.3M，其中 ViT 为 22.1M、86.6M、304.4M；深度分支单独为 35.5M 和 111.2M，与 MODEL_ZOO 深度模型的 36M、111M 吻合，但与 GS 模型标称的 37M、117M、360M 不完全一致。small 的形状应与本导读 tensor_trace 一致：regressor 输入 768 通道，gaussian_head 输出 37 通道，高斯数 131072。base 会多出第二尺度：warp 输出 [2,64,32,128,128]，regressor[1] 输入 576 通道。",
+   "hint_zh": "EncoderDepthSplatCfg 是 dataclass，可以用 dacite.from_dict 从字典构建，字段照抄 config/model/encoder/depthsplat.yaml。按名称统计参数：sum(p.numel() for n,p in m.named_parameters() if 'pretrained' in n)。CPU 上一次前向需要几秒。",
+   "concept_ids": [
+    "l-cnn",
+    "l-attention",
+    "d-mvs",
+    "n-3dgs"
+   ]
+  },
+  {
+   "title_zh": "跑官方评测，并做一个推理期的“单目失效”诊断",
+   "level": "进阶",
+   "task_zh": "按 README 下载 RE10K 测试集（pixelSplat 提供的 360p 版本）和 depthsplat-gs-small-re10k-256x256-view2-cfeab6b1.pth。先运行 README 中 small 模型的评测命令，加上 dataset.test_chunk_interval=10，得到 PSNR、SSIM、LPIPS 和 benchmark.json 中的编码器耗时。然后在 mv_unimatch.py 中构建 concat 之前，把 features_mono 乘以 0（只在推理时做），重新评测，并用 test.save_depth=true 保存深度图，比较白墙、地板等区域的深度与渲染结果。",
+   "expected_zh": "原始模型的分数应接近论文和 README 中 small 模型的水平，因为只抽取了 1/10 的场景，会有波动。把单目特征置零后，分数会明显下降，但这不等于论文中的“去掉单目分支”消融，因为网络没有针对缺失输入重新训练，下降幅度通常更大。深度图中弱纹理区域会出现明显的噪声、空洞或断层，边缘处的飞点也会增多。",
+   "hint_zh": "修改前先备份文件。只在 self.training 为 False 时置零，例如写成 if not self.training: features_mono = features_mono * 0。features_list_mono 是一个列表，base 模型要对每个尺度都置零。评测时 batch 必须为 1。",
+   "concept_ids": [
+    "d-mono",
+    "d-mvs",
+    "v-metrics"
+   ]
+  },
+  {
+   "title_zh": "改进邻居选择：按视锥重叠选邻居，并在 DL3DV 多视角上比较",
+   "level": "挑战",
+   "task_zh": "在 encoder_depthsplat.py:151-159 中，把按光心距离 cdist 选邻居，替换为按“光轴夹角 + 光心距离”加权的打分，或者用深度范围内的视锥重叠率打分。使用 depthsplat-gs-base-dl3dv-256x448-randview2-6 权重，在 DL3DV 6 视角索引上评测原版与改版（不需要重训）。再人为构造一个“环绕”场景：从 DL3DV 中挑轨迹呈弧形的场景，或者把输入视角换成两两相对的帧，观察邻居选择对 PSNR 和深度图的影响。另外尝试 local_mv_match=1、2、3、5。",
+   "expected_zh": "在 DL3DV 前向拍摄的序列上，按距离和按重叠选出的邻居大多相同，分数差别很小。在环绕或相对的视角配置下，按重叠选邻居应该更稳，深度图的断层更少。local_mv_match 增大时，分数略升，但耗时和显存线性增长；由于模型只在 k=2 下训练过，k 过大时甚至可能变差。",
+   "hint_zh": "nn_matrix 的第 0 列必须是视角自身，形状为 [B,V,k+1]。光轴方向取外参旋转矩阵的第 3 列。视锥重叠可以粗略估计：在 near 到 far 之间撒点，投影到另一相机，统计落在图像内的比例。",
+   "concept_ids": [
+    "g-rig",
+    "g-pinhole",
+    "d-mvs",
+    "n-generalizable"
+   ]
+  },
+  {
+   "title_zh": "在自己的相机阵列上用渲染损失做深度自适应（设计与小规模实现）",
+   "level": "挑战",
+   "task_zh": "设计一个实验：在一个固定多相机阵列上，拍摄的是静止的人或室内场景，也可以用公开的多视角数据代替，例如 DyNeRF 的单一时刻。只用渲染损失微调 DepthSplat small：每步随机选 2–4 个相机作为输入，把其余相机作为渲染目标。比较微调前后在留出相机上的 PSNR，以及深度与传感器深度或 COLMAP 稠密深度之间的误差。需要处理的问题：把位姿换成公制并相应设定 near/far（例如 0.3–5 m），检查 gaussian_scale_max，把内参转换成归一化形式。",
+   "expected_zh": "少量迭代（几千步）后，留出视角的 PSNR 应该上升，深度在该阵列的典型距离上也更准，这是论文“GS 作为深度预训练”思路的一个小型复现。可能遇到的问题有：训练集中视角太少会过拟合；near/far 或 scale 上限设置不当，训练一开始就发散。要写清楚哪些提升来自“域适配”，哪些来自“看过测试相机”。",
+   "hint_zh": "DyNeRF 的 poses_bounds.npy 是 LLFF 格式，要把轴约定转换为 OpenCV 的 camera-to-world。先把学习率降到 2e-5 或 2e-7 两档试跑。评测时一定要留出若干从不作为输入或目标的相机，避免泄漏。",
+   "concept_ids": [
+    "l-loss",
+    "g-rig",
+    "d-mono",
+    "n-3dgs"
+   ]
+  }
+ ],
+ "glossary": [
+  {
+   "term_en": "Feed-forward 3D Gaussian Splatting",
+   "term_zh": "前馈式 3D 高斯溅射",
+   "def_zh": "网络一次前向直接从输入图像预测出 3D 高斯，不做逐场景优化。代表工作有 pixelSplat、MVSplat 和 DepthSplat。"
+  },
+  {
+   "term_en": "Pixel-aligned Gaussians",
+   "term_zh": "像素对齐高斯",
+   "def_zh": "每个输入像素对应一个高斯，中心位于该像素的视线上、预测深度处。几何问题因此化为逐像素的深度估计。"
+  },
+  {
+   "term_en": "Cost volume",
+   "term_zh": "代价体",
+   "def_zh": "对每个像素、每个候选深度，计算参考特征与 warp 过来的邻居特征的相似度，得到形状为 [D,h,w] 的张量。DepthSplat 用点积相关，并对邻居取平均。"
+  },
+  {
+   "term_en": "Plane sweep",
+   "term_zh": "平面扫描",
+   "def_zh": "依次假设一组深度平面，把其他视角的图像或特征重投影到参考视角，比较一致性。它是代价体的构造方式。"
+  },
+  {
+   "term_en": "Inverse-depth sampling",
+   "term_zh": "逆深度采样",
+   "def_zh": "在 [1/far, 1/near] 上均匀取候选，近处密、远处疏，与视差误差的分布一致。DepthSplat 在 RE10K 上的取值为 [0.01, 2.0] m⁻¹，共 128 个。"
+  },
+  {
+   "term_en": "Softmax depth regression",
+   "term_zh": "softmax 深度回归",
+   "def_zh": "网络对 D 个候选输出 logits，softmax 后对候选逆深度取期望。可微，精度可以细于候选间隔，但遇到多峰分布会取到两个表面之间的值。"
+  },
+  {
+   "term_en": "Matching probability / confidence",
+   "term_zh": "匹配概率与置信度",
+   "def_zh": "softmax 分布的最大值 max_d P_d。MVSplat 把它映射为不透明度；DepthSplat 只把它作为高斯头的一个输入通道。"
+  },
+  {
+   "term_en": "Multi-view Transformer",
+   "term_zh": "多视角 Transformer",
+   "def_zh": "来自 UniMatch/GMFlow 的 6 层 Transformer，每层先做视角内的 self-attention，再做跨视角的 cross-attention，在 2×2 窗口内计算，负责让匹配特征“看到”其他视角。"
+  },
+  {
+   "term_en": "Swin-style shifted window attention",
+   "term_zh": "Swin 式平移窗口注意力",
+   "def_zh": "把特征图切成若干窗口，只在窗口内做注意力，奇数层把窗口平移半个窗口宽，使信息能跨窗口流动，从而降低计算量。"
+  },
+  {
+   "term_en": "Monocular depth foundation model",
+   "term_zh": "单目深度基础模型",
+   "def_zh": "在大规模数据上训练、只用单张图估计相对深度的模型，例如 Depth Anything V2。DepthSplat 只借用它的 ViT 编码器特征。"
+  },
+  {
+   "term_en": "Depth Anything V2",
+   "term_zh": "Depth Anything V2",
+   "def_zh": "单目深度模型，编码器为 DINOv2 结构的 ViT（S/B/L），解码器为 DPT。DepthSplat 用它的 ViT 权重初始化单目分支，并以 2e-6 的学习率微调。"
+  },
+  {
+   "term_en": "DINOv2 ViT (patch 14)",
+   "term_zh": "DINOv2 视觉 Transformer",
+   "def_zh": "自监督预训练的 ViT，patch 为 14×14，所以输入要缩放到 14 的倍数。单目骨干消融中，它的效果与 Depth Anything V1 持平。"
+  },
+  {
+   "term_en": "DPT head",
+   "term_zh": "DPT 解码头",
+   "def_zh": "Dense Prediction Transformer 的解码器：把 ViT 的多层特征重组到多个尺度，再用 RefineNet 块逐级融合到全分辨率。DepthSplat 用两个 DPT 头，一个输出深度残差，一个输出高斯头所需的特征。"
+  },
+  {
+   "term_en": "Coarse-to-fine / 2-scale matching",
+   "term_zh": "由粗到细（两尺度匹配）",
+   "def_zh": "base/large 模型先在低分辨率上用 128 个全范围候选估计深度，再在 2 倍分辨率上围绕粗估计放 32 个、间隔减半的候选细化。"
+  },
+  {
+   "term_en": "Local multi-view matching (local_mv_match)",
+   "term_zh": "局部多视角匹配",
+   "def_zh": "输入多于 3 个视角时，每个视角只与光心最近的 2 个视角做 cross-attention 和代价体，使匹配开销对视角数线性。"
+  },
+  {
+   "term_en": "Cross-view self-attention (in U-Net)",
+   "term_zh": "U-Net 中的跨视角自注意力",
+   "def_zh": "在深度回归 U-Net 的低分辨率层，把所有视角的 token 拼成一个序列做自注意力，让各视角的深度估计交换全局信息；这一层没有位置编码。"
+  },
+  {
+   "term_en": "Gaussian head",
+   "term_zh": "高斯头",
+   "def_zh": "两段 3×3 卷积组成的小网络，逐像素输出 37 个通道：不透明度 1、像素内偏移 2、scale 3、四元数 4、2 阶 SH 27。"
+  },
+  {
+   "term_en": "Spherical harmonics (SH) color",
+   "term_zh": "球谐颜色",
+   "def_zh": "用球谐系数表示随视角变化的颜色。DepthSplat 用 2 阶，每个颜色通道 9 个系数，直流项加上输入像素颜色，高阶项乘以衰减系数 0.1·0.25^l。"
+  },
+  {
+   "term_en": "Rendering loss",
+   "term_zh": "渲染损失",
+   "def_zh": "把高斯渲染到目标视角后与真实图像比较的损失。DepthSplat 使用 MSE + 0.05·LPIPS，两尺度模型再加 0.9 倍的中间尺度项。"
+  },
+  {
+   "term_en": "Unsupervised depth pre-training via GS",
+   "term_zh": "高斯渲染式深度无监督预训练",
+   "def_zh": "只用渲染损失在带位姿、无深度标注的视频上训练深度网络，再用真值深度微调。“无监督”指不需要深度标签，位姿仍然需要。"
+  },
+  {
+   "term_en": "Differential learning rate",
+   "term_zh": "分组学习率",
+   "def_zh": "对预训练骨干和新模块使用不同的学习率。DepthSplat 中 ViT 为 2e-6，其余为 2e-4；把 lr_monodepth 设为 0 反而会取消分组。"
+  },
+  {
+   "term_en": "OneCycleLR",
+   "term_zh": "单周期学习率调度",
+   "def_zh": "PyTorch 的学习率调度器：先从最大值的 1/25 升到最大值，DepthSplat 用前 1% 的步数完成，再余弦衰减到最大值的 1/(25×10⁴)。"
+  },
+  {
+   "term_en": "Patch shim",
+   "term_zh": "patch 裁剪垫片",
+   "def_zh": "数据进入网络前的中心裁剪，使图像尺寸成为 patch_size 的整数倍（RE10K 为 16，DL3DV 为 64），同时修正焦距。DL3DV 的 270×480 由此变为 256×448。"
+  },
+  {
+   "term_en": "near / far",
+   "term_zh": "近/远深度界",
+   "def_zh": "逆深度候选的范围，按数据集写死：RE10K 为 0.5/100，DL3DV 为 0.5/200。超出范围的深度会被截断。"
+  },
+  {
+   "term_en": "Interpolation evaluation protocol",
+   "term_zh": "插值式评测协议",
+   "def_zh": "目标视角位于输入视角之间的评测设定。RE10K 沿用 pixelSplat 的索引；DL3DV 索引的目标里还包含输入帧本身。"
+  },
+  {
+   "term_en": "RealEstate10K (RE10K)",
+   "term_zh": "RealEstate10K 数据集",
+   "def_zh": "网上房产视频的大规模数据集，位姿由 SLAM/SfM 求得，尺度任意。它是前馈 NVS 的主要基准，也是 DepthSplat 深度预训练所用的“无标注”数据。"
+  },
+  {
+   "term_en": "DL3DV-10K",
+   "term_zh": "DL3DV 数据集",
+   "def_zh": "大规模日常场景视频数据集，带 COLMAP 位姿。DepthSplat 用其中 140 个 benchmark 场景评测多视角设定，训练时剔除这些场景。"
+  },
+  {
+   "term_en": "Abs Rel / δ1",
+   "term_zh": "绝对相对误差 / 阈值精度",
+   "def_zh": "深度评测指标。Abs Rel 为 |z−z*|/z* 的均值；δ1 为 max(z/z*, z*/z)<1.25 的像素比例。论文表格中 Abs Rel 常乘以 100 报告。"
+  },
+  {
+   "term_en": "Flying pixels",
+   "term_zh": "飞点",
+   "def_zh": "物体边缘处的深度落在前景与背景之间，对应的高斯悬在空中，换视角时成为散点或拖影。softmax 期望与双线性上采样都会加重这个问题。"
+  }
+ ],
+ "fixes": [],
+ "diagram": {
+  "nodes": [
+   {
+    "id": "in",
+    "col": 0,
+    "row": 1,
+    "t": "输入图像+位姿",
+    "s": "默认 2×256×256",
+    "k": "ds1"
+   },
+   {
+    "id": "nn",
+    "col": 0,
+    "row": 0,
+    "t": "最近邻选择",
+    "s": "V>3 时每视角配 2 个",
+    "k": "ds11"
+   },
+   {
+    "id": "mv",
+    "col": 1,
+    "row": 0,
+    "t": "多视角特征",
+    "s": "CNN+6层Transformer",
+    "k": "ds2"
+   },
+   {
+    "id": "mono",
+    "col": 1,
+    "row": 2,
+    "t": "单目特征",
+    "s": "DA-V2 ViT，4 层",
+    "k": "ds4"
+   },
+   {
+    "id": "cv",
+    "col": 2,
+    "row": 0,
+    "t": "代价体",
+    "s": "128 个逆深度候选",
+    "k": "ds3",
+    "data": true
+   },
+   {
+    "id": "fuse",
+    "col": 3,
+    "row": 1,
+    "t": "拼接+U-Net",
+    "s": "softmax 求深度期望",
+    "k": "ds5"
+   },
+   {
+    "id": "c2f",
+    "col": 3,
+    "row": 0,
+    "t": "第二尺度细化",
+    "s": "32 候选，间隔减半",
+    "k": "ds6"
+   },
+   {
+    "id": "up",
+    "col": 4,
+    "row": 1,
+    "t": "DPT 上采样",
+    "s": "全分辨率逆深度残差",
+    "k": "ds7"
+   },
+   {
+    "id": "dep",
+    "col": 4,
+    "row": 2,
+    "t": "逐视角深度",
+    "s": "可单独作深度模型",
+    "k": "ds12",
+    "data": true
+   },
+   {
+    "id": "head",
+    "col": 5,
+    "row": 1,
+    "t": "高斯头",
+    "s": "每像素 37 个参数",
+    "k": "ds8"
+   },
+   {
+    "id": "ren",
+    "col": 5,
+    "row": 2,
+    "t": "光栅化渲染",
+    "s": "MSE+0.05·LPIPS",
+    "k": "ds9"
+   }
+  ],
+  "edges": [
+   [
+    "in",
+    "mv"
+   ],
+   [
+    "nn",
+    "mv"
+   ],
+   [
+    "in",
+    "mono"
+   ],
+   [
+    "mv",
+    "cv"
+   ],
+   [
+    "cv",
+    "fuse"
+   ],
+   [
+    "mono",
+    "fuse"
+   ],
+   [
+    "fuse",
+    "c2f"
+   ],
+   [
+    "c2f",
+    "up"
+   ],
+   [
+    "fuse",
+    "up"
+   ],
+   [
+    "up",
+    "dep"
+   ],
+   [
+    "up",
+    "head"
+   ],
+   [
+    "head",
+    "ren"
+   ]
+  ],
+  "out_from": "ren",
+  "out": "新视角图像（RE10K 256×256）",
+  "loop": {
+   "nodes": [
+    "head",
+    "ren"
+   ],
+   "label": "只用渲染损失训练",
+   "k": "ds10",
+   "note": "主体 lr 2e-4，ViT 2e-6"
+  }
+ }
+}

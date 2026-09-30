@@ -49,6 +49,22 @@
     section("cases", "案例：Quark 与 Ha 如何使用", cases);
     function anchorName(a) { return a === "quark" ? "Quark" : "Ha et al."; }
 
+    // The other deep reads: their walkthrough steps that build on this concept, labelled with the paper.
+    var more = steps.filter(function (k) { return !/^walk-(quark|ha)-/.test(k) && hasX(k); });
+    if (more.length) {
+      var byPaper = [], seen = {};
+      more.forEach(function (k) {
+        var paper = str(XREF[k].m).split(" · ")[1] || "";
+        if (!seen[paper]) { seen[paper] = []; byPaper.push(paper); }
+        seen[paper].push(k);
+      });
+      section("cases-more", "更多精读中的用法", [el("ul", { class: "refs wide-kind" }, byPaper.map(function (paper) {
+        var links = [];
+        seen[paper].forEach(function (k, i) { if (i) links.push(el("br")); links.push(xlink(k, XREF[k].n + " " + XREF[k].t)); });
+        return el("li", null, [el("span", { class: "kind", text: paper }), el("div", null, links)]);
+      }))]);
+    }
+
     if (arr(c.self_check).length) {
       section("self-check", "自测", [el("ol", { class: "quiz" }, arr(c.self_check).map(function (q) {
         return el("li", null, [el("p", null, rich(q.q_zh)), el("details", null, [el("summary", { text: "答案" }), el("p", null, rich(q.a_zh))])]);

@@ -1,0 +1,313 @@
+{
+ "citation": {
+  "title": "pixelSplat: 3D Gaussian Splats from Image Pairs for Scalable Generalizable 3D Reconstruction",
+  "authors": "David Charatan, Sizhe Lester Li, Andrea Tagliasacchi, Vincent Sitzmann",
+  "affiliations": "MIT（Charatan、Li、Sitzmann）；Simon Fraser University 与 University of Toronto（Tagliasacchi）",
+  "venue": "IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) 2024，Oral，Best Paper Runner-Up；论文集 pp. 19457–19467（IEEE Xplore 文档号 10655681，DOI 未能独立核对）。arXiv 2312.12337：v1 2023-12-19，v2 2023-12-21，v3 2024-04-02，v4 2024-04-04。v1/v2 的 Table 1 中 RE10K 为 25.89 dB（MVSplat、DepthSplat 等后续论文引用的是这一版），v3/v4 即 camera-ready 版更新为 26.09 dB",
+  "year": 2024,
+  "url": "https://arxiv.org/abs/2312.12337",
+  "project_page": "https://dcharatan.github.io/pixelsplat",
+  "code_status": "官方代码 https://github.com/dcharatan/pixelsplat ，MIT 许可证。包含训练与评测代码、全部实验和消融配置（config/experiment/）、固定评测索引（assets/evaluation_index_{re10k,acid}.json）、论文图表脚本（src/paper/）。预训练权重（含消融模型和旧版模型）、切成约 100 MB chunk 的预处理 RE10K/ACID 通过 Google Drive 和 MIT 服务器发布。截至 2026-09，最近一次提交是 2025-01-13（README 更新）。当前代码对应 camera-ready 版本：修了若干 bug，并把 epipolar transformer 里的“逐图自注意力+卷积”改成只用逐图自注意力后重训，RE10K 从 25.89 dB 升到 26.09 dB；原始版本在 commit 787a8896。渲染依赖作者修改的 diff-gaussian-rasterization（requirements.txt）。README 标明训练需要单卡 80 GB（A100 或 H100）。"
+ },
+ "tldr_zh": "pixelSplat 是最早的一批前馈式（feed-forward）3D Gaussian Splatting 方法之一：输入两张带相机位姿的图像，一次前向就预测出一组像素对齐的 3D 高斯（每像素 3 个，两视角 256×256 共 393,216 个），再用 3DGS 光栅化器以约 2 ms 渲染任意新视角。真实数据的 SfM 位姿只确定到尺度，单张图推不出场景有多远；为此它用 epipolar transformer 沿极线做跨视角注意力，并把每个极线采样点三角化出的深度做位置编码后送进注意力，让网络直接拿到当前场景尺度下的深度。直接回归高斯位置容易陷入局部极小，它改为沿每条射线预测 32 个视差桶上的离散深度分布，从中采样高斯位置，并把被采样桶的概率当作高斯不透明度，梯度就能经由不透明度回传到分布上。在 RE10K 和 ACID 两视角宽基线基准上，arXiv 初版报告 25.89 / 28.14 dB（camera-ready 版与当前代码为 26.09 / 28.27 dB），超过 Du et al.、GPNR 和 pixelNeRF，渲染快约 650 倍，推理显存 3.0 GB。局限同样明显：只接收两张图，分辨率只有 256×256，不补两张图都看不到的区域，编码器每个场景约 0.1 s，而且评测全部是两输入帧之间的内插。",
+ "problem_setting_zh": "输入：同一静态场景的两张 RGB 图（context views）、按宽高归一化的内参，以及 OpenCV 约定的 camera-to-world 外参。RE10K 与 ACID 的位姿来自 SfM，只确定到一个任意尺度。输出：一组 3D 高斯（均值、3×3 协方差、球谐颜色（配置 4 阶、实际只渲染到 3 阶）、不透明度），可以从任意相机光栅化；训练和评测时渲染目标视角的 RGB。隐含假设：两图重叠足够（评测索引要求两视角互相投影的重叠率 ≥60%）；目标视角落在两张输入帧之间；网络不补两张图都没看到的区域。代码里的数据设定：原始帧 360×640，LANCZOS 缩放后中心裁剪为 256×256；两 context 光心距离缩放为 1；near/far 按“基线诱导的像素视差”确定（768 px 与 0.5 px），数据集本身不提供。训练：每个样本 2 个 context 加 4 个 target，context 间隔在前 150k 步从 25 帧线性增加到 45 帧，之后固定为 45 帧。评测：使用固定索引，RE10K 有 6474 个有效测试场景，每场景 3 个 target，context 间隔 45–136 帧（中位数 58）；ACID 有 1595 个场景，每场景 3 个 target。报告 PSNR、SSIM、LPIPS，以及编码时间、单视角渲染时间和训练、推理显存。这一设定和站内的 Quark、Ha et al. 很不一样：它只看两张图，不处理动态场景，也不考虑时间一致性和固定相机阵列。它更接近“从少量照片快速重建静态场景”这类用途（本导读的概括）。",
+ "pipeline_zh": [
+  {
+   "stage": "0. 数据预处理与尺度归一（src/dataset/dataset_re10k.py、shims/crop_shim.py、shims/bounds_shim.py）",
+   "detail": "原始帧必须是 360×640。先用 LANCZOS 缩放到 256×455，再中心裁剪为 256×256，同时把归一化焦距乘以 455/256。两个 context 相机的光心距离被缩放为 1（make_baseline_1）；基线小于 1e-3 或视场角大于 100° 的样本直接跳过。near/far 由 bounds shim 按视差定义：z = B·f / d，d_near = 3.0×min(H,W) = 768 px，d_far = 0.5 px，因此 far/near = 1536。训练时以 50% 概率做水平翻转，外参同步镜像。图像边长要能被 16 整除（patch shim：4×4 注意力 patch × 4 倍下采样）。"
+  },
+  {
+   "stage": "1. 逐图像编码（backbone_dino.py、backbone_resnet.py）",
+   "detail": "每张图分别送入 DINO 预训练的 ResNet-50 和 ViT-B/8。ResNet 取 conv1 与 layer1–3 的输出，各用 1×1 卷积投到 512 维，双线性上采样到 256×256 后相加。ViT 的 32×32 个 patch token（768 维）经两层 MLP 变成 512 维，再按 8×8 像素块复制回全分辨率；CLS token 经另一个 MLP 后广播到全图。三路相加得到 B×2×512×256×256，再经 ReLU 和 Linear 投到 128 维。这一步没有任何跨视角信息。"
+  },
+  {
+   "stage": "2. 极线采样与三角化深度编码（epipolar_sampler.py、geometry/epipolar_lines.py）",
+   "detail": "特征先用 4×4、步长 4 的卷积下采样到 64×64，每个视角 4096 条射线。对视角 A 的每条射线，把它在 near 和 far 处的点投影到视角 B，线段截到图像边界内，然后在图像空间均匀取 32 个点，用 grid_sample 双线性采样 B 的特征；和 B 不重叠的射线，其样本置零。每个样本对应的射线与查询射线做最小二乘求交，得到沿查询射线的距离，截到 [near, far]，换成相对视差（0 = near，1 = far），再经 10 个 octave 的正弦编码（20 维）和线性层变成 128 维，加到样本特征上，作为注意力的 key/value（论文公式把采样特征与深度编码写成拼接 ⊕，代码是经线性层后相加）。"
+  },
+  {
+   "stage": "3. Epipolar transformer（2 层，epipolar_transformer.py、image_self_attention.py）",
+   "detail": "每层先做 pre-LN 交叉注意力：query 是 A 的像素特征，key/value 是它在 B 上的 32 个极线样本；4 个头，每头 128 维；带残差。然后用逐图自注意力代替前馈层：把 64×64 特征图按 4×4 切成 16×16 = 256 个 token（128 维，加 10 octave 的 2D 位置编码），过一个 2 层、4 头的 Transformer，再用转置卷积还原到 64×64。camera-ready 版把原来的“自注意力+卷积”改成了只用自注意力。多于 2 个视角时，其他视角的样本取并集，并加上随机置换的视角嵌入。Transformer 代码来自 SRT 的开源实现。"
+  },
+  {
+   "stage": "4. 上采样与高分辨率跳连（epipolar_transformer.py:152-157、encoder_epipolar.py:138-141）",
+   "detail": "用 4×4、步长 4 的转置卷积回到 256×256，再加一个两层 7×7 卷积（128→256→128，GELU）的残差精修。最后加上直接作用在 RGB 上的 7×7 卷积（3→128）加 ReLU 作为跳连，补回高频。注意：全分辨率的骨干特征进入 epipolar transformer 时已被压缩到 64×64，之后没有再加回；像素级细节只能来自这条 RGB 跳连和上采样。"
+  },
+  {
+   "stage": "5. 沿射线的深度分布与采样（depth_predictor_monocular.py、misc/discrete_probability_distribution.py）",
+   "detail": "ReLU+Linear 把每像素 128 维特征映射成 64 维：32 个 logits 经 softmax 得到概率 φ，32 个值经 sigmoid 得到桶内偏移 δ∈(0,1)。桶在相对视差上均匀分布：ρ = (z+δ_z)/32，0 对应 near，1 对应 far，再换算成深度（沿单位射线的距离）。按 φ 有放回地抽 3 个桶（每像素 3 个高斯）；每个高斯的不透明度等于被抽中桶的概率 φ_z，再除以 3。训练和官方测试都走这条随机采样路径（model_wrapper.py:163-168，deterministic=False）。"
+  },
+  {
+   "stage": "6. 高斯参数（common/gaussian_adapter.py、encoder_epipolar.py:153-173）",
+   "detail": "另一个 ReLU+Linear 输出 84 维：2 维经 sigmoid 作为像素内偏移（±0.5 像素，用来移动射线）；3 维尺度映射为 0.5+14.5·sigmoid，再乘以深度和 0.1·(1/f_x+1/f_y)，折合到源图约为 0.1–3 像素的标准差；4 维四元数做归一化；75 维球谐（配置为 4 阶，每通道 25 个系数），l 阶系数固定乘以 0.1·0.25^l；但 requirements.txt 指定的作者修改版光栅化器只计算到 3 阶，第 16–24 号系数（共 27 个通道）既不参与渲染也得不到梯度，颜色为 SH 求值加 0.5 后截断为非负。协方差 RSSᵀRᵀ 与球谐都先在相机系预测，再旋转到世界系（球谐用 e3nn 的 Wigner-D 矩阵）。均值 = 相机光心 + 单位射线方向 × 深度。同一像素的 3 个高斯共用尺度系数、旋转和球谐，只有深度与不透明度不同。每个场景共 2×65536×3 = 393,216 个高斯。"
+  },
+  {
+   "stage": "7. 渲染与损失（model/decoder/cuda_splatting.py、loss/）",
+   "detail": "两个视角的高斯直接合并，一次送入作者修改的 diff-gaussian-rasterization。直接传入 3D 协方差，按 1/near 缩放场景以避免数值问题，背景为黑色；训练时每个样本渲染 4 个目标视角。损失 = MSE + 0.05·LPIPS(VGG)，LPIPS 从第 150,000 步才开始计入。没有深度监督，几何完全靠渲染损失间接学到。"
+  }
+ ],
+ "key_design_choices_zh": [
+  {
+   "choice": "输出一组像素对齐的 3D 高斯，用光栅化渲染，而不是沿射线采样的条件 NeRF 或 light field transformer",
+   "rationale": "高斯可以一次光栅化出整张图。训练时能渲染完整的 256×256 目标图，从而使用 LPIPS 这类整图损失；推理时每个视角约 2 ms。表示是显式的 3D，可以导出、查看和编辑。像素对齐意味着每个高斯挂在某个像素的射线上，网络只需决定“沿射线多远”和“长什么样”，不必在整个 3D 空间里搜索。",
+   "alternatives_rejected": "pixelNeRF 式条件 NeRF（每条射线要查询大量采样点）；GPNR、Du et al. 的 light field transformer（每条目标射线都要跑一次注意力，渲染一张图需 1–13 s）。按 Table 1 说明，这些方法训练时只能采样少量射线，若按 256×256 整图外推，训练显存要数百到数千 GB。"
+  },
+  {
+   "choice": "用 epipolar transformer 加三角化深度的位置编码来确定逐场景尺度",
+   "rationale": "SfM 位姿只确定到尺度，单张图无法知道场景有多远，也就无法预测与位姿一致的深度。在另一视角的极线上找到对应点，就等于完成了三角化。把每个极线样本的三角化深度编码进 key/value，网络一旦找到对应，就能直接取到该对应在当前场景尺度下的深度。消融（检索摘要中的数值）：去掉 epipolar 编码器后出现重影和运动模糊，PSNR 降到 19.89 dB；只去掉深度编码为 24.97 dB，约掉 1 dB（完整模型 26.09 dB）。",
+   "alternatives_rejected": "单目深度（尺度不确定）；逐视角独立编码（No Epipolar Encoder 消融）；只给注意力图像特征（No Depth Encoding 消融）。平面扫描代价体是后来 MVSplat 选择的路线，本文没有采用。"
+  },
+  {
+   "choice": "沿射线预测离散深度分布并采样，把被采样桶的概率当作不透明度（作者称之为受 VAE 启发的重参数化）",
+   "rationale": "高斯是局部支撑的：放错位置的高斯只能从附近像素得到梯度，要移动到正确深度，往往得穿过损失更高的区域，直接回归均值很容易卡在局部极小。改为预测分布后，每个候选深度都有机会被采样到。落在正确深度的高斯会被梯度推高不透明度，也就推高了该桶的概率；落在错误深度的桶概率被压低。概率质量因此逐渐流向正确深度，不需要让某个高斯一步步“走”过去。",
+   "alternatives_rejected": "直接回归一个深度（No Probabilistic Sampling 消融，代码中桶数设为 1、每像素 1 个高斯，不透明度恒为 1；PSNR 24.62 dB）；把 32 个桶全部渲染成高斯（数量增加到约 10 倍，论文未讨论，这是合理的解读）；后来 MVSplat 改为对代价体做 softmax 期望深度、不再采样。"
+  },
+  {
+   "choice": "深度桶在视差（逆深度）上均匀分布，near/far 用基线诱导的像素视差定义，并加上可微的桶内偏移",
+   "rationale": "视差均匀使近处分辨率高、远处分辨率低，符合立体测量的误差特性。按视差定义 near/far 后，不同尺度的场景共享同一套桶。Algorithm 1 里的 b_z+δ_z 让深度在桶内连续，并且可以求导。",
+   "alternatives_rejected": "按深度线性均匀划分的桶（far/near = 1536 时，第一个桶就要覆盖 near 到约 49·near）；每个数据集固定 near/far（MVSplat 后来用固定的 near=1、far=100，并关闭了基线归一化）。"
+  },
+  {
+   "choice": "逐图编码用 DINO 预训练的 ResNet-50 加 ViT-B/8，并对 RGB 加一个全分辨率 7×7 卷积跳连",
+   "rationale": "自监督预训练的特征更适合找跨视角对应，ViT 还提供全局上下文和一个 CLS 全局 token。高斯颜色直接由这些特征解码，epipolar 分支又工作在 64×64 上，所以需要一条全分辨率的 RGB 跳连补回细节（跳连的动机是本导读的解读）。",
+   "alternatives_rejected": "从头训练的 CNN：代码默认 encoder 配置里的 ResNet-50 使用 InstanceNorm、不加载预训练，实验配置都换成了 DINO；单一骨干。"
+  },
+  {
+   "choice": "训练课程：context 间隔前 150k 步从 25 帧增到 45 帧；前 150k 步只用 MSE，之后加入 0.05·LPIPS",
+   "rationale": "先在小基线上学会找对应，再逐步加大基线（论文未给出理由，这是合理的解读）；感知损失放到后期加入。配置中 min_gap 等于 max_gap，即任一时刻的间隔是确定的，README 说明这是为了复现一个 view sampler bug 造成的原始训练行为。",
+   "alternatives_rejected": "从一开始就用 45 帧间隔；从第 0 步就加入 LPIPS（MVSplat、DepthSplat 的配置后来都改为从第 0 步开始）。"
+  }
+ ],
+ "training_zh": "数据：RE10K 和 ACID 各训一个模型。作者把两个数据集切成约 100 MB 的 .torch chunk；原始帧须为 360×640，经 LANCZOS 缩放、中心裁剪后为 256×256。每个样本 2 个 context 加 4 个 target。target 在两个 context 之间随机抽取，可能与 context 重合（min_distance_to_context_views=0）。context 间隔在 warm_up_steps=150,000 内从 25 帧线性增加到 45 帧，之后固定为 45 帧。增强只有 50% 概率的水平翻转。优化器 Adam，学习率 1.5e-4，前 2000 步线性 warm-up，之后恒定、不衰减；梯度裁剪 0.5。每 GPU batch 7，训练 300,001 步。README 说单卡需要 80 GB 显存（A100 或 H100），也支持多卡。损失为 MSE（权重 1.0）加 LPIPS-VGG（权重 0.05，从第 150,000 步开始）；没有深度损失，也没有其他几何监督。“Depth Reg.”变体从一个已训练的检查点（wandb://ommu30n8）继续训练到 350,001 步，即论文所说的 50,000 步微调，额外加入权重 0.25 的边缘感知二阶平滑项：作用于渲染出的深度图，按真值图像的颜色差分做指数加权（sigma_image=12）。代码把 near/far 取了对数作为截断和归一化范围，深度本身却没有取对数（loss_depth.py:35-38），看起来是实现上的不一致。3 视角变体使用 batch 3，配置写的是 warm-up 后 context 间隔 90–384 帧；但加入该配置的 2024-03 提交（7b8f503）重新引入了 view sampler 把 min_gap 当 max_gap 用的 bug，直到 2024-09（dea327d）才修复，所以发布的 3 视角模型实际训练间隔可能固定为下限（未核实）。随机种子为 111123 加上 GPU rank。检索到的论文片段和代码中都没有总训练时长；以上超参数以代码配置为准，检索到的正文片段（300,000 步、batch 7、约 80 GB、150,000 步后加入 0.05 LPIPS）与之一致。",
+ "system_perf": [
+  {
+   "item": "编码时间（论文 Table 1，2 视角，256×256）",
+   "value": "0.102 s；Du et al. 0.016 s；pixelNeRF 0.005 s；GPNR 没有编码器（N/A）。计时所用 GPU 型号未能核对"
+  },
+  {
+   "item": "渲染时间（每个目标视角）",
+   "value": "0.002 s；Du et al. 1.309 s，pixelNeRF 5.294 s，GPNR 13.340 s。MVSplat 论文 Table 1 中的 AttnRend（即 Du et al.）1.325 s、pixelNeRF 5.299 s 是编码加渲染的合计（其表注写明 Running time includes both encoder and render；1.325 = 0.016 + 1.309，5.299 = 0.005 + 5.294），并不冲突；MVSplat 正文另给出 pixelSplat 单视角渲染 0.0025 s。论文称比次快的基线快约 650 倍（1.309/0.002 ≈ 654），摘要称快 2.5 个数量级"
+  },
+  {
+   "item": "显存（论文 Table 1）",
+   "value": "推理 3.002 GB，训练 14.4 GB（单个场景、256×256 条射线）。Du et al. 推理 19.604 GB、训练 314.3 GB；GPNR 推理 19.441 GB、训练 3789.9 GB；pixelNeRF 推理 3.962 GB、训练 436.7 GB。表注说明，基线的训练显存是把较小的射线批次外推到 256×256 条射线得到的，并非实测。推理显存上 pixelSplat 只比 pixelNeRF 少约 1 GB"
+  },
+  {
+   "item": "参数量",
+   "value": "MVSplat 论文 Table 1 给出 pixelSplat 为 125.4M（MVSplat 12.0M、AttnRend 125.1M、pixelNeRF 28.2M、GPNR 9.6M）。按官方代码逐项统计，camera-ready 结构合计约 119.0M：DINO ViT-B/8 85.81M、DINO ResNet-50（去掉 fc）23.51M、1×1 投影 0.95M、token MLP 1.97M、骨干以外 6.74M（其中 epipolar transformer 6.64M）。原版代码（commit 787a8896）在 2 层 epipolar transformer 里各多一个 ConvFeedForward（两层 7×7 卷积，128→256→128，每层 3.21M），加回后正好是 125.40M：MVSplat 引用的 125.4M 对应原版结构。另外，ResNet-50 的 layer4（14.96M）随 torch.hub 模型一起加载，但前向只用到 layer3，这部分参数从不起作用，真正参与计算的约 104M"
+  },
+  {
+   "item": "每个场景的高斯数与体积",
+   "value": "2 视角 × 256×256 × 3 = 393,216 个。每个高斯约 86 个 float32 参数（均值 3、尺度 3、四元数 4、SH 75、不透明度 1），整场景约 135 MB（本导读推算）；其中 27 个 4 阶 SH 通道不参与渲染，只存有效参数约 59 个 float、约 93 MB。同样设置下 1080p 两视角约为 1244 万个高斯"
+  },
+  {
+   "item": "训练硬件",
+   "value": "单卡 80 GB（A100/H100），batch 7，300k 步；总训练时长未报告"
+  },
+  {
+   "item": "计时与显存的测法（代码）",
+   "value": "src/misc/benchmarker.py 用 time.time() 前后相减，未显式调用 torch.cuda.synchronize；解码时间按目标视角数平均；显存取整个测试过程中 torch.cuda.memory_stats 的 allocated 峰值（含模型权重）"
+  },
+  {
+   "item": "分辨率与视角数",
+   "value": "只在 256×256 上训练和评测。默认 2 视角；camera-ready 新增 3 视角配置，README 提醒视角更多时需要大量显存"
+  }
+ ],
+ "results_zh": [
+  {
+   "dataset": "RealEstate10K（6474 个测试场景 × 3 个目标，256×256）",
+   "finding": "arXiv 初版 Table 1：pixelSplat 25.89 / 0.858 / 0.142（PSNR/SSIM/LPIPS）；Du et al. 24.78 / 0.820 / 0.213，GPNR 24.11 / 0.793 / 0.255，pixelNeRF 20.43 / 0.589 / 0.550（基线的 SSIM/LPIPS 据 MVSplat 论文 Table 1 转引，MVSplat 正文说明这些数字直接取自 pixelSplat 论文）。比最强基线高 1.11 dB，MSE 约为其 0.77 倍；LPIPS 的改善（0.213→0.142）比 PSNR 更明显。camera-ready 版（arXiv v3/v4 与当前代码）为 26.09 / 0.863 / 0.136。读数时要记住：所有目标帧都在两张输入帧之间，其中 3.0%（583/19422）就是输入帧本身。"
+  },
+  {
+   "dataset": "ACID（1595 个测试场景 × 3 个目标）",
+   "finding": "arXiv 初版 pixelSplat 28.14 / 0.839 / 0.150，camera-ready 版 28.27 / 0.843 / 0.146；Du et al. 26.88 / 0.799 / 0.218，GPNR 25.28 / 0.764 / 0.332，pixelNeRF 20.97 / 0.547 / 0.533（据 MVSplat 论文 Table 1 转引），领先 Du et al. 1.26 dB。ACID 是沿海岸线的航拍视频，以大片自然景观为主，PSNR 绝对值更高主要反映场景统计特性不同，不能和 RE10K 直接比较。"
+  },
+  {
+   "dataset": "效率（Table 1）",
+   "finding": "编码 0.102 s 加渲染 0.002 s，推理显存 3.0 GB，训练显存 14.4 GB。基线里渲染最快的 Du et al. 每张图 1.309 s。优势几乎全部来自“先重建显式高斯、再光栅化”：编码只做一次，之后每个视角只需 2 ms。如果只渲染一张图，端到端约 0.104 s，Du et al. 为 1.325 s，差距约 13 倍，而不是 650 倍。"
+  },
+  {
+   "dataset": "定性结果与 3D 表示",
+   "finding": "论文展示了可导出的高斯点云，强调表示可解释、可编辑，并给出 epipolar attention 权重的可视化（src/paper/generate_attention_figure.py），显示注意力能落在正确的对应位置。不过 pixelSplat 自己的 README 在介绍 MVSplat 时承认后者的高斯点云“much cleaner”；MVSplat 论文 Fig. 4 称 pixelSplat 的高斯含大量漂浮点，并指出 pixelSplat 要额外做 50,000 步带深度正则的微调才能得到合理的几何（都是定性描述，没有几何指标）。"
+  },
+  {
+   "dataset": "他人重测：跨数据集泛化（MVSplat 论文 Table 2）",
+   "finding": "MVSplat 作者用 pixelSplat 发布的 RE10K 模型零样本测试：ACID 上 27.64 / 0.830 / 0.160（MVSplat 28.15 / 0.841 / 0.147），DTU 上 12.89 / 0.382 / 0.560（MVSplat 13.94）；DTU 3 视角时 pixelSplat 为 12.52，比 2 视角还低。这些不是 pixelSplat 论文的数字；DTU 上两者的绝对质量都很低，DTU 评测还用了数据集给定的深度范围。"
+  },
+  {
+   "dataset": "作为基准的影响（本地核对）",
+   "finding": "pixelSplat 发布的 RE10K 评测索引后来被 MVSplat、DepthSplat、FreeSplat（evaluation_index_re10k_2views.json）和 LVSM 原样使用，本地 md5 完全一致（feb78919…）。LVSM 的 decoder-only 模型在同一索引上报告 29.67 dB（README），比 pixelSplat camera-ready 版高约 3.6 dB。"
+  }
+ ],
+ "ablations_zh": [
+  "消融只在 RE10K 上做（论文消融表）。下面的数值来自搜索引擎对 arXiv 最新版 HTML 的摘要，未能打开原文逐行核对；摘要中完整模型一行为 26.09 / 0.863 / 0.136，与 camera-ready 版 Table 1 相同，说明消融随 camera-ready 一起重训。代码中的对应配置：re10k_ablation_no_epipolar_transformer.yaml（use_epipolar_transformer=false）、re10k_ablation_no_depth_encoding.yaml（num_octaves=0）、re10k_ablation_no_probabilistic_sampling.yaml（num_monocular_samples=1、gaussians_per_pixel=1）、re10k_depth_loss.yaml；消融模型的权重随预训练权重一起发布。",
+  "No Epipolar Encoder：19.89 / 0.639 / 0.295，比完整模型低约 6.2 dB。每个视角独立编码，没有跨视角信息；定性上出现重影和运动模糊，说明深度预测错误。这是支持“尺度歧义必须靠跨视角信息解决”的主要证据。注意在代码里，这个变体的全分辨率骨干特征直接进入预测头，与完整模型的数据通路并不相同。",
+  "No Depth Encoding：24.97 / 0.830 / 0.158，约低 1.1 dB。epipolar attention 只接收图像特征，不接收三角化深度的位置编码。作者据此认为，编码器不只是在找对应，还在利用三角化得到的、带场景尺度的深度来消除尺度歧义。",
+  "No Probabilistic Sampling：24.62 / 0.828 / 0.171，约低 1.5 dB。代码中桶数设为 1、每像素 1 个高斯，这时 softmax 只有一个元素，不透明度恒为 1，深度完全由 sigmoid 偏移在 [near, far] 的视差范围内直接回归。论文的结论是：epipolar 编码器和概率采样都是高质量新视角合成所必需的。这个变体同时去掉了分布、多样本和可学习的不透明度，无法区分是哪一项起作用。",
+  "Plus Depth Regularization：25.94 / 0.862 / 0.137，渲染指标与完整模型基本持平、略低。论文称这是 50,000 步边缘感知 total variation 正则的微调；代码 re10k_depth_loss.yaml 从一个检查点续训到 350,001 步，加入权重 0.25 的二阶平滑项。MVSplat 论文称 pixelSplat 需要这 50,000 步额外微调才能得到合理的几何，可见它的用途是改善导出的几何，而不是提高渲染指标。",
+  "没有做的消融：桶数（32）、每像素高斯数（3）、极线采样数（32）的敏感性；DINO 预训练的作用；球谐阶数（配置为 4 阶，实际只渲染到 3 阶）；性能随基线变化的曲线；多次训练或多次抽样的方差。"
+ ],
+ "limitations_stated_zh": [
+  "不对未观测区域做生成式建模：两张图都看不到的部分无法补全。作者把与扩散模型结合列为未来工作（README 列出的 latentSplat 即沿这个方向）。",
+  "不对两个视角预测的高斯做融合或去重，只是把各视角的高斯取并集输出。同一表面因此会有两套高斯（见下文“精读发现”中的后果分析）。",
+  "扩展到很多参考视角时，epipolar attention 的显存开销过高。README 也提示 3 视角配置需要大量显存。",
+  "依赖已知相机位姿。作者把去掉对位姿的依赖、以便在更大规模数据上训练列为未来工作。",
+  "方法的出发点是尺度歧义：SfM 位姿只确定到尺度，单张图恢复不了尺度。这也意味着方法依赖两视角之间有足够的视差和重叠，评测索引因此要求重叠率 ≥60%。"
+ ],
+ "limitations_unstated_zh": [
+  "评测只测内插，而且混入了输入帧本身。用官方 assets/evaluation_index_re10k.json 统计：6474 个有效场景 × 3 个目标，全部落在两个 context 帧之间（相对位置均值 0.503）；其中 583 个（3.0%，涉及 575 个场景）恰好就是某个 context 帧。ACID 为 135/4785（2.8%）。生成器 src/evaluation/evaluation_index_generator.py 在 [left, right] 闭区间内抽目标，所以会抽到端点。外推视角（观看者走出两台相机之间的连线）从未评测过，而 MVSplat、DepthSplat、FreeSplat、LVSM 沿用的是同一份索引（md5 一致），这个偏向也一起被继承了。",
+  "测试时的输出是随机的。model_wrapper.py:163-168 的 test_step 以 deterministic=False 调用编码器，每个像素按分布随机抽 3 个深度，所以同一输入跑两次会得到不同的高斯和图像；可复现只靠全局种子 111123（加 GPU rank，src/main.py:106）。本地用官方编码器（随机权重、CPU）以相同输入连续调用两次，得到的高斯均值确实不同。代码里的 deterministic 分支只取 top-1 桶，但不透明度仍除以 gaussians_per_pixel=3（encoder_epipolar.py:150,170），单个高斯的 α 不超过 1/3，不能直接当作“确定性推理”。论文没有报告多次抽样的方差。对视频或远程临场来说，这意味着即使场景不动，逐帧重跑编码器也会产生抽样噪声带来的闪烁。",
+  "效率对比的口径不完全对等。Table 1 的表注说明，基线的训练显存是把少量射线的批次外推到 256×256 条射线得到的，GPNR 的 3789.9 GB 并非实测；基线实际是按射线批次训练的。计时代码用 time.time() 前后相减，没有显式的 cuda synchronize，GPU 型号也没能核对。更关键的是，“快 650 倍”只比较单视角渲染；如果只合成一张新视角，编码加渲染约 0.104 s，只比 Du et al. 的 1.325 s（编码 0.016 s + 渲染 1.309 s）快一个数量级，在 256×256 下相当于约 10 fps。",
+  "深度离散化很粗，精细深度主要靠桶内回归。32 个桶在“两视角基线诱导的像素视差”上从 768 px 均匀排到 0.5 px，每个桶约宽 24 px 视差（本导读按代码推算）。如果场景的视差只有几十像素，只有最后几个桶有意义，真正决定深度精度的是 sigmoid 偏移 δ。而 δ 本身就是直接回归的，也有局部性问题，只是被限制在一个桶内。只看论文的概率深度叙述，容易以为分布本身提供了精细深度（这是本导读的解读）。",
+  "作者承认高斯只是按视角取并集、不做融合，但没有分析它的代价。同一块表面会从两个视角各生成一套高斯（每像素 3 个），合计 393,216 个，全部一次光栅化。两套高斯的深度不一致时，会出现双层表面和漂浮点；pixelSplat 自己的 README 承认 MVSplat 的点云“much cleaner”，MVSplat 论文 Fig. 4 也指出 pixelSplat 的高斯有大量漂浮点。站内的 Ha et al. 正是因为这类 Z-fighting 和飞点，才选择逐视角分开渲染再由网络融合。高斯数量随视角数和分辨率线性增长：1080p 两视角约 1244 万个，每场景约 135 MB 参数（推算）。",
+  "代码、补充材料与论文正文之间的若干出入。（1）Algorithm 1 写的是 α = φ_z；代码还要除以每像素高斯数 3，这一点补充材料有说明（α = φ_z/3，使一条射线上 3 个高斯的不透明度之和约为 1），只读正文的算法框容易漏掉。（2）球谐配置为 4 阶（每通道 25 个系数），但 requirements.txt 指定的作者修改版 diff-gaussian-rasterization 中，computeColorFromSH 的前向和反向都只算到 3 阶，第 16–24 号系数共 27 个输出通道既不影响渲染也收不到梯度；高阶系数还被常驻地乘以 0.1·0.25^l。（3）camera-ready 改了 epipolar transformer 的结构并重训，当前代码和权重对应 26.09 dB，而 MVSplat、DepthSplat 等后续论文表格用的是原版的 25.89 dB，LVSM 用的是 26.09 dB，跨论文比较时容易差出 0.2 dB。原版每层多一个两层 7×7 卷积的前馈块，共多 6.42M 参数；MVSplat 引用的 125.4M 正是原版结构的参数量，camera-ready 结构约 119.0M。（4）“深度”在代码里是沿单位射线的距离，不是相机坐标 z。（5）全分辨率骨干特征被 4×4 步长卷积压到 64×64 后没有再加回，像素级细节只靠一条 7×7 的 RGB 卷积跳连。（6）论文的 epipolar attention 公式把采样特征与深度编码写成拼接（⊕），代码是把编码经线性层后与特征相加。（7）DINO ResNet-50 的 layer4（约 14.96M 参数）随 torch.hub 模型加载，但前向只用到 layer3，这部分参数从不起作用。",
+  "数据与分辨率的隐含限制。训练和评测只在 256×256 的中心裁剪上进行（从 256×455 裁掉约 44% 的宽度），视场角大于 100° 或基线小于 1e-3 的样本被丢弃。场景都是静态的房产视频和航拍视频，没有人物，也没有近距离的非刚体运动。DINO ViT-B/8 的 token 数随分辨率平方增长，高分辨率下的代价论文没有讨论。MVSplat 用 pixelSplat 发布的 RE10K 模型零样本测 ACID 与 DTU，分别为 27.64 dB 与 12.89 dB（MVSplat 为 28.15 与 13.94），说明 pixelSplat 在分布外场景上相对较弱。",
+  "对 3D 临场而言，这是逐场景、逐帧的前馈重建，没有任何时间状态，也不处理动态内容。每帧都要跑一次约 0.1 s 的编码器；输入固定为 2 张图，无法利用阵列中其余相机；输出的高斯若直接传输，每帧约 135 MB，远大于传两张 JPEG。near/far 按基线和像素视差推定，在已标定的固定阵列上可以换成真实的公制范围，但论文没有讨论这种用法。"
+ ],
+ "lineage": {
+  "predecessors": [
+   {
+    "title": "pixelNeRF: Neural Radiance Fields from One or Few Images",
+    "year": 2021,
+    "url": "https://arxiv.org/abs/2012.02190",
+    "note_zh": "基线之一（RE10K 20.43 dB）。“像素对齐特征”这个思路来自它。pixelSplat 保留了像素对齐，但把输出从需要逐射线查询的条件 NeRF 换成了显式高斯，渲染从约 5 s 降到 2 ms。"
+   },
+   {
+    "title": "Generalizable Patch-Based Neural Rendering (GPNR)",
+    "year": 2022,
+    "url": "https://arxiv.org/abs/2207.10662",
+    "note_zh": "基线之一（RE10K 24.11 dB），属于沿极线取 patch 送入 Transformer 回归颜色的 light field transformer 路线，渲染一张图约 13 s。Quark 也把它作为基线（RFF 25.42 dB，约 25 s）。"
+   },
+   {
+    "title": "Learning to Render Novel Views from Wide-Baseline Stereo Pairs（Du et al.，AttnRend）",
+    "year": 2023,
+    "url": "https://arxiv.org/abs/2304.08463",
+    "note_zh": "CVPR 2023，同为 Sitzmann 组的工作，是本文最强的基线（RE10K 24.78 dB）。pixelSplat 在同样的 RE10K、ACID 宽基线两视角设定上与它比较（代码的评测配置中两个数据集都有它的结果帧）。它把 epipolar transformer 与 light field 渲染结合，可以看作 pixelSplat 极线编码器的前身；区别在于它逐射线解码，渲染一张图 1.309 s。官方代码 github.com/yilundu/cross_attention_renderer。"
+   },
+   {
+    "title": "3D Gaussian Splatting for Real-Time Radiance Field Rendering",
+    "year": 2023,
+    "url": "https://arxiv.org/abs/2308.04079",
+    "note_zh": "提供表示与可微光栅化器。原版 3DGS 需要逐场景优化，并依赖 SfM 点初始化和致密化来避开局部极小；pixelSplat 用网络一次性预测高斯，并用概率深度加重参数化替代了这些优化技巧。它使用的是作者修改的光栅化器，可以直接传入 3D 协方差。"
+   },
+   {
+    "title": "IBRNet: Learning Multi-View Image-Based Rendering",
+    "year": 2021,
+    "url": "https://arxiv.org/abs/2102.13090",
+    "note_zh": "站内另一篇精读论文。可泛化 IBR 的代表，沿射线采样、跨视角聚合特征、再用 ray transformer 解码，每条射线都要单独计算。pixelSplat 的基线里没有它，是否在参考文献中引用未能核对；两者的关系是同一问题上“逐射线渲染”与“先重建显式表示”两条路线。"
+   },
+   {
+    "title": "Efficient Neural Radiance Fields for Interactive Free-viewpoint Video (ENeRF)",
+    "year": 2022,
+    "url": "https://arxiv.org/abs/2112.01517",
+    "note_zh": "站内另一篇精读论文。它用代价体估计深度，再在深度附近少量采样来加速可泛化 NeRF。pixelSplat 没有与它比较（是否引用未能核对）。两者都靠跨视角匹配定深度，但 ENeRF 仍是逐射线体渲染，pixelSplat 输出的是可以直接光栅化的高斯。"
+   },
+   {
+    "title": "Scene Representation Transformer: Geometry-Free Novel View Synthesis Through Set-Latent Scene Representations",
+    "year": 2022,
+    "url": "https://arxiv.org/abs/2111.13152",
+    "note_zh": "pixelSplat 的 Transformer 模块代码直接取自 SRT 的开源实现（src/model/transformer/ 文件头注明来自 stelzner/srt）。SRT 代表无几何的路线；pixelSplat 把同样的注意力模块限制在极线上，引入了显式几何。"
+   },
+   {
+    "title": "Stereo Magnification: Learning View Synthesis using Multiplane Images",
+    "year": 2018,
+    "url": "https://arxiv.org/abs/1805.09817",
+    "note_zh": "RealEstate10K 数据集的出处，这是 pixelSplat 的主要训练和评测数据。RE10K 的相机来自 SfM，尺度任意，这正是本文“尺度歧义”问题的来源。"
+   },
+   {
+    "title": "GPS-Gaussian: Generalizable Pixel-wise 3D Gaussian Splatting for Real-time Human Novel View Synthesis",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2312.02155",
+    "note_zh": "站内另一篇精读论文，与本文同期（arXiv 2023-12，同为 CVPR 2024），同样预测像素级高斯。差别在于：GPS-Gaussian 面向人体，先对立体对做校正、迭代估计视差，并用合成人体数据的真值视差监督（代码 train_stage2.py：flow_loss + 0.8·L1 + 0.2·SSIM）；pixelSplat 面向一般场景，没有深度监督，只靠渲染损失和概率深度学几何。"
+   },
+   {
+    "title": "Splatter Image: Ultra-Fast Single-View 3D Reconstruction",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2312.13150",
+    "note_zh": "同期工作（arXiv 2023-12，CVPR 2024），从单张图为每个像素预测高斯，主要针对物体级数据。与 pixelSplat 同属“像素对齐高斯”，但没有第二个视角，也就不涉及尺度歧义和极线匹配。"
+   }
+  ],
+  "successors": [
+   {
+    "title": "MVSplat: Efficient 3D Gaussian Splatting from Sparse Multi-View Images",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2403.14627",
+    "note_zh": "站内另一篇精读论文，ECCV 2024 Oral。README 称代码“largely based on pixelSplat”，数据与评测索引完全沿用。它把 epipolar transformer 加概率采样换成平面扫描代价体（128 个深度候选）加 softmax 期望深度，每像素只放 1 个高斯，不再随机采样。参数量为 12.0M，pixelSplat 为 125.4M（原版结构，camera-ready 约 119.0M）；推理快 2 倍以上，约 22 fps；点云更干净，跨数据集泛化更好。"
+   },
+   {
+    "title": "latentSplat: Autoencoding Variational Gaussians for Fast Generalizable 3D Reconstruction",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2403.16292",
+    "note_zh": "ECCV 2024。pixelSplat README 列出的后续工作：在 pixelSplat 基础上预测带语义的变分高斯，渲染成 2D 特征后再由生成式解码器出图，针对的是本文“不补未观测区域”的局限。"
+   },
+   {
+    "title": "GS-LRM: Large Reconstruction Model for 3D Gaussian Splatting",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2404.19702",
+    "note_zh": "ECCV 2024。同样为每个像素预测高斯，但用大 Transformer 对所有视角的全部 patch 做全局注意力，不再显式使用极线约束和概率深度，2–4 张图在 A100 上约 0.23 s。LVSM 报告它在 RE10K 上为 28.10 dB，比 pixelSplat 高 2 dB 以上，说明扩大模型和数据规模可以替代一部分几何归纳偏置。"
+   },
+   {
+    "title": "FreeSplat: Generalizable 3D Gaussian Splatting Towards Free-View Synthesis of Indoor Scenes",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2405.17958",
+    "note_zh": "站内另一篇精读论文，NeurIPS 2024。README 称代码“largely based on pixelSplat”，RE10K 两视角实验使用与 pixelSplat 完全相同的评测索引。它瞄准本文只能处理两视角、高斯直接叠加的问题：面向长序列室内场景，用相邻视角间的自适应代价体估深度，并用 Pixel-wise Triplet Fusion 去掉重叠区域的冗余高斯。其主页摘要批评此前方法因骨干过重，基本局限在立体对之间的窄范围内插。"
+   },
+   {
+    "title": "MVSplat360: Feed-Forward 360 Scene Synthesis from Sparse Views",
+    "year": 2024,
+    "url": "https://arxiv.org/abs/2411.04924",
+    "note_zh": "NeurIPS 2024。README 说明它与 DepthSplat “share the same code base from pixelSplat”。它在前馈高斯之上接入视频扩散模型，实现大场景 360° 合成，属于作者在结论中设想的“与扩散模型结合”这一方向。"
+   },
+   {
+    "title": "DepthSplat: Connecting Gaussian Splatting and Depth",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2410.13862",
+    "note_zh": "站内另一篇精读论文，CVPR 2025。在 RE10K 上“primarily follow pixelSplat and MVSplat”，评测索引与 pixelSplat 相同。它用单目深度先验（Depth Anything V2）加多视角代价体来估深度（128 个候选），每像素 1 个高斯，不透明度由网络头直接预测，支持最多 12 个视角。"
+   },
+   {
+    "title": "LVSM: A Large View Synthesis Model with Minimal 3D Inductive Bias",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2410.17242",
+    "note_zh": "站内另一篇精读论文，ICLR 2025 Oral。它使用 pixelSplat 预处理的 RE10K 和 pixelSplat 的评测索引（README 明说，本地 md5 一致），但完全放弃显式 3D 表示：decoder-only 模型在同一索引上达到 29.67 dB，比 pixelSplat camera-ready 版高约 3.6 dB。代价是每个新视角都要跑一次大 Transformer，不能像高斯那样一次重建、多次渲染。"
+   },
+   {
+    "title": "No Pose, No Problem: Surprisingly Simple 3D Gaussian Splats from Sparse Unposed Images (NoPoSplat)",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2410.24207",
+    "note_zh": "ICLR 2025 Oral。README 称相机约定与 pixelSplat 相同，并在致谢中列出 pixelSplat、DUSt3R、CroCo。它回应了本文结论里的未来工作“去掉对相机位姿的依赖”：推理时不需要位姿，只用光度损失训练。"
+   },
+   {
+    "title": "HiSplat: Hierarchical 3D Gaussian Splatting for Generalizable Sparse-View Reconstruction",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2410.06245",
+    "note_zh": "ICLR 2025（arXiv 2024-10）。pixelSplat README 列出的后续工作，用由粗到细的分层高斯处理同一问题，README 称其结果优于 pixelSplat 和 MVSplat。"
+   },
+   {
+    "title": "ReSplat: Learning Recurrent Gaussian Splatting",
+    "year": 2026,
+    "url": "https://arxiv.org/abs/2510.08575",
+    "note_zh": "arXiv 2025-10，据其 README 为 ECCV 2026 Spotlight，Haofei Xu 等。README 称代码建立在 pixelSplat、MVSplat、DepthSplat 等项目之上。它先在下采样空间预测紧凑的高斯（README 称比逐像素方法少 16 倍），再把渲染误差作为无梯度的反馈信号，由共享权重的循环模块预测逐高斯的参数更新。它同时回应了像素对齐高斯数量随像素数增长、以及一次前向后无法自我修正这两个问题，思路与 Quark 的 render-and-refine 相近。"
+   },
+   {
+    "title": "PanSplat: 4K Panorama Synthesis with Feed-Forward Gaussian Splatting",
+    "year": 2025,
+    "url": "https://arxiv.org/abs/2412.12096",
+    "note_zh": "CVPR 2025。README 致谢 pixelSplat 与 MVSplat 的开源代码；MVSplat README 介绍它把 MVSplat 扩展到最高 4K 分辨率，使用分层球面代价体和两步延迟反向传播来节省显存。它针对的是本文分辨率只有 256×256 的局限，说明这条代码谱系可以推到高分辨率，但需要专门的显存技巧。"
+   },
+   {
+    "title": "Tele360: Real-Time Feed-Forward Human Reconstruction from Sparse Unposed Cameras",
+    "year": 2026,
+    "url": "https://arxiv.org/abs/2609.15032",
+    "note_zh": "面向远程临场的前馈人体高斯重建（4–6 台未标定 2K 相机，RTX 5090 上超过 25 FPS，H.265 推流）。是否引用本文未核对；把它列在这里，是因为它代表了像素对齐高斯路线在临场系统中的落地形态：多相机、实时、带传输链路，这些正是 pixelSplat 没有涉及的部分。"
+   }
+  ]
+ },
+ "takeaways_for_telepresence_zh": [
+  "“一次重建、多次渲染”是 pixelSplat 最值得借鉴的一点。编码约 0.1 s，之后每个视角只需约 2 ms，双目头显或多名观看者只需多渲染几次。Quark 的表示与目标视角绑定，每个视角都要重跑网络；Ha et al. 每个视角要重做一次 splat、TSDF 和融合。对多观看者的临场系统，这类视角无关的显式表示在渲染端的扩展性最好。",
+  "尺度问题在固定阵列上可以直接绕过。pixelSplat 用 epipolar transformer 来推断 SfM 的任意尺度；远程临场用的是标定好的公制阵列，基线和深度范围已知，near/far 可以直接取真实工作距离（例如 0.5–3 m）。这时跨视角模块的职责只剩下“找对应”，MVSplat、DepthSplat 那样的代价体更高效，DepthSplat 已经支持最多 12 个视角。",
+  "概率深度加随机采样不适合直接用于视频。官方测试就是随机抽样，同一帧跑两次结果都不同，逐帧运行必然带来抽样闪烁。做临场系统时应当改用期望深度或 top-k 确定性采样（注意代码的 deterministic 分支还需要修正不透明度），并加入跨帧的深度或高斯状态，参考 Ha et al. 的时间滤波与回灌，以及 NSTM、Fuse-and-Refine 的记忆机制。",
+  "两视角、256×256 离临场需求很远。按代码推算，1080p 两视角就有约 1244 万个高斯，每帧参数约 4.3 GB（float32），DINO ViT-B/8 的计算量也随分辨率平方增长。更现实的做法是在低分辨率上预测几何，颜色则从全分辨率输入取（Quark 的 IBR 混合、LGTM 的纹理化高斯），或者把高斯数量与像素数解耦。",
+  "不要传输高斯，传输图像。每帧 393,216 个高斯约 135 MB（float32），而两张 256×256 的 JPEG 只有几十 KB。在当前形态下，更合理的架构是把相机图像压缩后传到接收端，在接收端运行编码器并渲染。若要在发送端重建，需要 GS-SCNet、D-FCGS 这类高斯压缩方案。",
+  "评测要换成临场自己的协议。pixelSplat 的 RE10K 索引只测两帧之间的内插，其中 3% 的目标就是输入帧，而且场景都是静态房产。临场需要测的是：阵列外的视点（头部移动到相机之外）、人物的脸和手、遮挡区域、时间稳定性，以及端到端延迟。直接照搬 RE10K 上的 dB 数，会高估系统在真实场景中的表现。",
+  "“用概率当不透明度”这个技巧本身值得保留。凡是需要在离散候选中做可微选择的地方，比如深度层、多平面的层分配、分段模型的面片归属，都可以借用它：让被选中候选的渲染权重等于它的概率，梯度就能通过权重回传。一般而言它比 REINFORCE 这类得分函数估计的方差更低，也比把所有候选都渲染一遍更省（这是一般经验，本文没有做这种对比实验）。"
+ ]
+}

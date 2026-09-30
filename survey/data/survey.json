@@ -1803,7 +1803,7 @@
      "url": "https://arxiv.org/abs/2312.02155",
      "subtopic": "Human-centric Real-time Generalizable Rendering",
      "summary_zh": "在相邻相机对上学习立体深度，在源视图上回归高斯参数图并反投影渲染。在大规模人体扫描数据上训练，无需逐人优化。",
-     "key_numbers": "2K 分辨率实时渲染；Tele360 在其 6 视图 2K 设置下测得约 300 ms/帧、PSNR 22.40",
+     "key_numbers": "2K 分辨率实时渲染；Tele360 的 DNA-Rendering 对比（2048×2048 评测）中，因 6 视角下立体校正可能失败而改用 8 视角，约 300 ms/帧、PSNR 22.40（ActorsHQ 上 23.62）",
      "tier": "milestone",
      "relevance_zh": "实时人体前馈 GS 的奠基工作，也是 Ha et al. 的直接基线（GPSG，Ha et al. 报告其约 143 ms）。它逐帧独立，并依赖小基线相机对。"
     },
@@ -1923,7 +1923,7 @@
      "url": "https://arxiv.org/abs/2609.15032",
      "subtopic": "Human-centric Real-time Generalizable Rendering",
      "summary_zh": "由稀疏感知多视图 Transformer（只对前景 token 化）、全 Transformer 高斯解码器和可微 Levenberg-Marquardt 相机细化层组成，从视觉几何基础模型蒸馏而来。预测的 Gaussian 图经视频编码流式传输到远端设备渲染。",
-     "key_numbers": "4–6 台 4096×3000@30Hz 未标定相机；6 视图 2K 每帧 35.36 ms（RTX 5090，大于 25 FPS）；H.265/NVENC 加 WebRTC，约 100 Mbit/s；DNA-Rendering 上 PSNR 32.15，GPS-Gaussian 为 22.40；作者承认逐帧处理、不强制时序一致",
+     "key_numbers": "4–6 台 4096×3000@30Hz 未标定相机；6 视图 2K 每帧 35.36 ms（RTX 5090，大于 25 FPS）；H.265/NVENC 加 WebRTC，约 100 Mbit/s；DNA-Rendering 上 PSNR 32.15，GPS-Gaussian 为 22.40（8 视角）；作者承认逐帧处理、不强制时序一致",
      "tier": "important",
      "relevance_zh": "截至 2026 年 9 月最完整的 360° 前馈 telepresence 系统，免标定、2K、实时、可流式。它明确的短板（逐帧闪烁、无视角相关建模）正好是 Ha et al. 和 Quark 各自关注的问题。"
     },
@@ -3839,7 +3839,7 @@
      "summary_zh": "第一个从稀疏未标定 RGB 流实时前馈重建动态人体的系统。稀疏感知的多视图 Transformer 联合估计相机位姿和逐帧高斯，用可微 LM 层精修位姿，并从视觉几何基础模型迁移先验。高斯图用 split-byte 方式打包进 H.265 码流，传到笔记本或平板上显示。",
      "key_numbers": "6 视图 2K 约 35 ms（RTX 5090），>25 FPS；约 100 Mbps（80 Mbps 时 PSNR 30.57 dB）；端到端 MacBook 约 500 ms，iPad 约 650 ms",
      "tier": "important",
-     "relevance_zh": "2026 年学术系统的前沿。作者明确承认逐帧处理、没有时序聚合会导致闪烁，端到端时延也远超对话预算；这两点正是 Ha et al. 的时序一致方法和系统优化可以切入的地方。"
+     "relevance_zh": "2026 年学术系统的前沿。作者明确承认逐帧处理、没有时序聚合会导致闪烁，并说明系统以端到端时延（约 500–650 ms）换稳态吞吐，这一时延远超对话预算；这两点正是 Ha et al. 的时序一致方法和系统优化可以切入的地方。"
     },
     {
      "title": "Universal Facial Encoding of Codec Avatars from VR Headsets",

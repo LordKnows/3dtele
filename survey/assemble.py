@@ -85,7 +85,8 @@ def main() -> int:
         out["classics"] = [{**p, "theme": p["themes"][0], "status": "unverified"} for p in merge_classics(sweeps)]
 
     out["guided"] = []
-    for k in ("quark", "ha"):
+    registry = load(LEARN.parent / "site" / "papers.json")
+    for k in (x["key"] for x in registry["papers"]):
         g, src = pick(f"verify_{k}.json", f"guide_{k}.json")
         if g:
             g["anchor"] = k

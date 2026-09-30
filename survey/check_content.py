@@ -73,6 +73,10 @@ WHITELIST = [
      r"|^把 Quark（\d+ 步）和 Ha et al\.（\d+ 步）逐步拆开，每一步链接到所需的基础概念。$"
      r"|^8 个模块、40 个概念：直觉、公式、例子、易错点，以及在两篇锚点论文中的位置。$"
      r"|^8 个阶段：每阶段的概念、论文、课程、动手项目和检查题，最后复现两篇锚点论文。$"),
+    ("survey figures corrected after the Tele360 deep read was checked: Tele360 ran GPS-Gaussian with 8 views, not 6", [
+        "2K 分辨率实时渲染；Tele360 在其 6 视图 2K 设置下测得约 300 ms/帧、PSNR 22.40",
+        "4–6 台 4096×3000@30Hz 未标定相机；6 视图 2K 每帧 35.36 ms（RTX 5090，大于 25 FPS）；H.265/NVENC 加 WebRTC，约 100 Mbit/s；DNA-Rendering 上 PSNR 32.15，GPS-Gaussian 为 22.40；作者承认逐帧处理、不强制时序一致",
+    ]),
     ("old page descriptions and ledes about the old page structure; rewritten for the new pages (P3 reviews them)", [
         "全站按“入门学习 / 领域调研 / 研究”三部分组织。左侧（手机上为顶部）导航栏可随时切换页面，每页底部有上一页 / 下一页。",
         "全站概览、执行摘要、内容导航与调研方法。", "调研流程、核查方式与使用注意事项（位于概览页底部）。",
