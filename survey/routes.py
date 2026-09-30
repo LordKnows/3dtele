@@ -585,7 +585,7 @@ def papers_routes(ctx, xref):
     groups.append({"h": "对照、调研摘要与论文库", "items": key_items(["anchor-all", "anchor-cmp", "summary", "papers"], xref)})
     index = route("works/papers/index.html", "works", "works/papers/index.html", ctx["section_title"]["anchors"],
                   page("anchors", ctx["section_title"]["anchors"], [TOC(groups)], sub="Papers", meta=[f"{len(keys)} 篇精读"],
-                       lede=f"{len(keys)} 篇论文的研究视角精读：精确数字、设计选择、局限与谱系，按技术路线分成四组；另有十篇的对照表、"
+                       lede=f"{len(keys)} 篇论文的研究视角精读：精确数字、设计选择、局限与谱系，按技术路线分成四组；另有 {len(keys)} 篇的对照表、"
                             "Quark 与 Ha et al. 的两两对比、调研摘要和可筛选的论文库。想从零读懂一篇论文，先看 Walkthrough 里对应的导读长文。"),
                   [["Works", ""], ["Papers", ""]], ctx["page_desc"]["anchors"])
     out = []
